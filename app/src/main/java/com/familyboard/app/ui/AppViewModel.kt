@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
 
 /** 온보딩 게이팅용 사용자 상태 */
@@ -129,13 +131,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val actor = e.createdBy
         val targets = notifyTargets.filter { it != actor }.distinct()
         if (targets.isEmpty()) return
-        val whenText = if (e.allDay) "하루 종일" else e.startTime
-        val body = listOfNotNull(
-            e.startDateIso.ifBlank { null },
-            whenText.ifBlank { null },
-            "등록: ${Family.nameOf(actor)}",
-        ).joinToString(" · ")
-        runCatching { NotifyApi.notify(actor, targets, "새 일정: ${e.title}", body) }
+        val body = "${Family.nameOf(actor)}님이 새 일정을 등록했어요 🙂\n${eventWhenText(e)}"
+        runCatching { NotifyApi.notify(actor, targets, e.title, body) }
     }
     fun updateEvent(event: CalendarEvent) = viewModelScope.launch { board.upsertEvent(event) }
     fun deleteEvent(id: String) = viewModelScope.launch { board.deleteEvent(id) }
@@ -207,5 +204,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             append("❤️ 사랑해요 엄마~")
         }
         runCatching { NotifyApi.notify(childMemberId, listOf("eunseon"), "조르기", body) }
+    }
+}
+
+private val KR_DOW = listOf("월", "화", "수", "목", "금", "토", "일")
+
+private fun krDate(d: LocalDate): String =
+    "${d.monthValue}월 ${d.dayOfMonth}일 (${KR_DOW[d.dayOfWeek.value - 1]})"
+
+private fun krTime(hhmm: String): String {
+    val t = runCatching { LocalTime.parse(hhmm) }.getOrNull() ?: return ""
+    val ampm = if (t.hour < 12) "오전" else "오후"
+    val h = if (t.hour % 12 == 0) 12 else t.hour % 12
+    return "$ampm $h:%02d".format(t.minute)
+}
+
+/** 알림용 친근한 일시 표기 ("8월 10일 (월) 오후 6:00" / 하루 종일 / 여러 날 ~) */
+private fun eventWhenText(e: CalendarEvent): String {
+    val d1 = runCatching { LocalDate.parse(e.startDateIso) }.getOrNull() ?: return ""
+    val d2 = runCatching { LocalDate.parse(e.endDateIso.ifBlank { e.startDateIso }) }.getOrNull() ?: d1
+    return when {
+        d2 != d1 -> "${krDate(d1)} ~ ${krDate(d2)}"
+        e.allDay -> "${krDate(d1)} · 하루 종일"
+        e.startTime.isNotBlank() -> "${krDate(d1)} ${krTime(e.startTime)}"
+        else -> krDate(d1)
     }
 }
