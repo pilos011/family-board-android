@@ -1,10 +1,13 @@
 package com.familyboard.app.ui.bucket
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -253,6 +256,10 @@ private fun BucketRow(item: ListItem, onToggle: (Boolean) -> Unit, onMustDo: () 
             color = if (item.checked) Ink.copy(alpha = 0.4f) else Ink,
             textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
         )
+        BucketIcons.of(item.icon)?.let { iv ->
+            Icon(iv, null, tint = Purple, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.size(8.dp))
+        }
         MustDoChip(on = item.mustDo, onClick = onMustDo)
     }
 }
@@ -286,6 +293,7 @@ fun BucketAddScreen(
     var title by remember { mutableStateOf(editing?.text ?: "") }
     var description by remember { mutableStateOf(editing?.description ?: "") }
     var photoUrls by remember { mutableStateOf(editing?.photoUrls ?: emptyList<String>()) }
+    var icon by remember { mutableStateOf(editing?.icon ?: "") }
 
     fun save() {
         if (title.isBlank()) return
@@ -299,6 +307,7 @@ fun BucketAddScreen(
             description = description.trim(),
             photoUrls = photoUrls,
             progress = editing?.progress ?: emptyList(),
+            icon = icon,
         )
         if (editing != null) vm.updateItem(item) else vm.addItem(item)
         onBack()
@@ -334,6 +343,37 @@ fun BucketAddScreen(
                 supportingText = { Text("${description.length}/500") },
             )
             PhotoPickerRow(photoUrls = photoUrls, onChange = { photoUrls = it })
+
+            Text("아이콘 꾸미기 (선택)", fontWeight = FontWeight.SemiBold, color = Ink.copy(alpha = 0.6f))
+            IconPicker(selected = icon, onSelect = { icon = if (icon == it) "" else it })
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun IconPicker(selected: String, onSelect: (String) -> Unit) {
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BucketIcons.all.forEach { (key, iv) ->
+            val on = key == selected
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if (on) Purple else Color(0xFFF1F3F5))
+                    .border(
+                        width = if (on) 0.dp else 1.dp,
+                        color = Color(0xFFE0E0E0),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onSelect(key) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(iv, key, tint = if (on) Color.White else Ink.copy(alpha = 0.7f),
+                    modifier = Modifier.size(22.dp))
+            }
         }
     }
 }
@@ -352,6 +392,8 @@ fun BucketViewScreen(
     val items by vm.bucketItems.collectAsStateWithLifecycle()
     val item = remember(items, itemId) { items.firstOrNull { it.id == itemId } }
     var note by remember { mutableStateOf("") }
+    var editIndex by remember { mutableStateOf(-1) }
+    var editText by remember { mutableStateOf("") }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -378,6 +420,10 @@ fun BucketViewScreen(
             Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(20.dp).fillMaxWidth(),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                BucketIcons.of(item.icon)?.let { iv ->
+                    Icon(iv, null, tint = Purple, modifier = Modifier.size(26.dp))
+                    Spacer(Modifier.size(8.dp))
+                }
                 Text(
                     item.text, style = MaterialTheme.typography.headlineMedium, color = Ink,
                     textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
@@ -424,14 +470,33 @@ fun BucketViewScreen(
             if (item.progress.isEmpty()) {
                 Text("아직 기록이 없어요.", color = Ink.copy(alpha = 0.4f))
             } else {
-                item.progress.reversed().forEach { p ->
+                for (i in item.progress.indices.reversed()) {
+                    val p = item.progress[i]
                     Column(
                         Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF1F3F5)).padding(14.dp),
+                            .background(Color(0xFFF1F3F5)).padding(start = 14.dp, top = 10.dp, end = 6.dp, bottom = 10.dp),
                     ) {
                         Text(p.text, color = Ink)
                         Spacer(Modifier.height(4.dp))
-                        Text("${Family.nameOf(p.by)} · ${p.dateIso}", fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${Family.nameOf(p.by)} · ${p.dateIso}",
+                                fontSize = 11.sp, color = Ink.copy(alpha = 0.5f),
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { editIndex = i; editText = p.text }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Edit, "이력 수정", tint = Ink.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                            }
+                            IconButton(
+                                onClick = {
+                                    val next = item.progress.toMutableList().also { it.removeAt(i) }
+                                    vm.updateItem(item.copy(progress = next))
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(Icons.Default.Delete, "이력 삭제", tint = Ink.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -446,5 +511,29 @@ fun BucketViewScreen(
                 }
             }
         }
+    }
+
+    if (editIndex >= 0 && item != null && editIndex < item.progress.size) {
+        AlertDialog(
+            onDismissRequest = { editIndex = -1 },
+            title = { Text("진행 이력 수정") },
+            text = {
+                OutlinedTextField(
+                    value = editText, onValueChange = { editText = it },
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), minLines = 2,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (editText.isNotBlank()) {
+                        val next = item.progress.toMutableList()
+                        next[editIndex] = next[editIndex].copy(text = editText.trim())
+                        vm.updateItem(item.copy(progress = next))
+                    }
+                    editIndex = -1
+                }) { Text("저장") }
+            },
+            dismissButton = { TextButton(onClick = { editIndex = -1 }) { Text("취소") } },
+        )
     }
 }

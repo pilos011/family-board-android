@@ -32,6 +32,7 @@ data class ListItem(
     val description: String = "",  // 버킷 상세 내용
     val photoUrls: List<String> = emptyList(), // 버킷 첨부 사진
     val progress: List<ProgressNote> = emptyList(), // 버킷 진행 이력(카드 메모)
+    val icon: String = "",         // 버킷 꾸미기 아이콘 키 (BucketIcons)
 )
 
 /** 버킷 진행 이력 메모 */
