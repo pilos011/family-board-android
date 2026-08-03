@@ -97,6 +97,8 @@ private fun AllowanceSection(
     val settleAmount = checkedItems.sumOf { it.amount }
     // 현재 사용자가 부모(선일/은선)면 [정산], 자녀(준영/준호)면 [조르기]
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
+    // 부모는 두 자녀 섹션 모두, 자녀는 본인 섹션만 추가/수정/삭제 가능
+    val canEdit = isParent || currentMemberId == memberId
     var titleInput by remember { mutableStateOf("") }
     var amountInput by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<ListItem?>(null) }
@@ -177,6 +179,7 @@ private fun AllowanceSection(
             items(items, key = { it.id }) { itm ->
                 ItemRow(
                     item = itm,
+                    canEdit = canEdit,
                     onToggle = { vm.toggleItem(itm.id, it) },
                     onEdit = { editing = itm },
                     onDelete = { vm.deleteItem(itm.id) },
@@ -184,23 +187,25 @@ private fun AllowanceSection(
             }
         }
 
-        // 추가 입력 (컴팩트 높이)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CompactField(
-                value = titleInput, onValueChange = { titleInput = it },
-                placeholder = "항목 (예: 점심값)",
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.size(6.dp))
-            CompactField(
-                value = amountInput,
-                onValueChange = { amountInput = it.filter { c -> c.isDigit() }.take(9) },
-                placeholder = "금액",
-                modifier = Modifier.width(110.dp),
-                keyboardType = KeyboardType.Number,
-            )
-            IconButton(onClick = { add() }) {
-                Icon(Icons.Default.Add, "추가", tint = MaterialTheme.colorScheme.primary)
+        // 추가 입력 (컴팩트 높이) — 편집 권한이 있는 섹션에서만
+        if (canEdit) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CompactField(
+                    value = titleInput, onValueChange = { titleInput = it },
+                    placeholder = "항목 (예: 점심값)",
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.size(6.dp))
+                CompactField(
+                    value = amountInput,
+                    onValueChange = { amountInput = it.filter { c -> c.isDigit() }.take(9) },
+                    placeholder = "금액",
+                    modifier = Modifier.width(110.dp),
+                    keyboardType = KeyboardType.Number,
+                )
+                IconButton(onClick = { add() }) {
+                    Icon(Icons.Default.Add, "추가", tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
@@ -258,13 +263,20 @@ private fun AllowanceSection(
 }
 
 @Composable
-private fun ItemRow(item: ListItem, onToggle: (Boolean) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun ItemRow(
+    item: ListItem,
+    canEdit: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onEdit() }
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .then(if (canEdit) Modifier.clickable { onEdit() } else Modifier)
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(checked = item.checked, onCheckedChange = onToggle)
+        Checkbox(checked = item.checked, onCheckedChange = onToggle, enabled = canEdit)
         Text(
             item.text.ifBlank { "(제목 없음)" },
             modifier = Modifier.weight(1f),
@@ -280,7 +292,7 @@ private fun ItemRow(item: ListItem, onToggle: (Boolean) -> Unit, onEdit: () -> U
             color = if (item.checked) Ink.copy(alpha = 0.4f) else Ink,
         )
         // 정산 완료(체크)된 항목은 금액 오른쪽에 삭제 아이콘. 미완료는 자리만 확보해 정렬 유지.
-        if (item.checked) {
+        if (item.checked && canEdit) {
             IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
                 Icon(Icons.Default.Delete, "삭제", tint = Color(0xFFE03131))
             }
