@@ -199,13 +199,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun nudgeAllowance(childMemberId: String, childName: String, items: List<ListItem>) = viewModelScope.launch {
         if (items.isEmpty()) return@launch
         val total = items.sumOf { it.amount }
-        val detail = items.joinToString(", ") {
-            "${it.text.ifBlank { "항목" }} %,d원".format(it.amount)
-        }
         val body = buildString {
             append("${childName}에게서 용돈 정산 요청이 왔습니다.\n")
-            append("내역 : $detail\n")
-            append("합계 : %,d원\n".format(total))
+            items.forEach {
+                append("\t\t${it.text.ifBlank { "항목" }} %,d원\n".format(it.amount))
+            }
+            append("\t\t---------------\n")
+            append("\t\t합계 : %,d원\n".format(total))
+            append("\n")
             append("❤️ 사랑해요 엄마~")
         }
         runCatching { NotifyApi.notify(childMemberId, listOf("eunseon"), "조르기", body) }
