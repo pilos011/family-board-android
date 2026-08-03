@@ -11,6 +11,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +49,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -63,7 +67,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -90,8 +96,10 @@ import com.familyboard.app.data.model.CalendarEvent
 import com.familyboard.app.notif.UpdateChecker
 import com.familyboard.app.ui.AppViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlin.math.abs
 
 private val Sunday = Color(0xFFE03131)
 private val Saturday = Color(0xFF1C7ED6)
@@ -122,6 +130,8 @@ fun CalendarScreen(
     val scope = rememberCoroutineScope()
     var showUpdate by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
+    var showYearPicker by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(month) { vm.ensureHolidays(month) }
 
@@ -144,6 +154,8 @@ fun CalendarScreen(
                 onSearch = onSearch,
                 updateAvailable = updateInfo != null,
                 onUpdate = { showUpdate = true },
+                onYearClick = { showYearPicker = true },
+                onMonthClick = { showMonthPicker = true },
             )
             WeekdayHeader()
             MonthGrid(
@@ -223,6 +235,84 @@ fun CalendarScreen(
             dismissButton = { TextButton(enabled = !downloading, onClick = { showUpdate = false }) { Text("나중에") } },
         )
     }
+
+    if (showYearPicker) {
+        YearPickerDialog(
+            current = month.year,
+            onPick = { month = month.withYear(it); showYearPicker = false },
+            onDismiss = { showYearPicker = false },
+        )
+    }
+    if (showMonthPicker) {
+        MonthPickerDialog(
+            current = month.monthValue,
+            onPick = { month = month.withMonth(it); showMonthPicker = false },
+            onDismiss = { showMonthPicker = false },
+        )
+    }
+}
+
+@Composable
+private fun YearPickerDialog(current: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+    val years = remember(current) { (current - 60..current + 20).toList() }
+    val listState = rememberLazyListState()
+    LaunchedEffect(Unit) {
+        val i = years.indexOf(current)
+        if (i >= 0) listState.scrollToItem((i - 3).coerceAtLeast(0))
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = Color.White) {
+            Column(Modifier.padding(vertical = 12.dp).width(220.dp)) {
+                Text("연도 선택", Modifier.padding(start = 20.dp, bottom = 8.dp),
+                    fontWeight = FontWeight.Bold, color = Ink)
+                LazyColumn(state = listState, modifier = Modifier.height(320.dp)) {
+                    items(years) { y ->
+                        val on = y == current
+                        Text(
+                            "${y}년",
+                            Modifier.fillMaxWidth().clickable { onPick(y) }
+                                .background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
+                                .padding(vertical = 12.dp),
+                            textAlign = TextAlign.Center,
+                            color = if (on) MaterialTheme.colorScheme.primary else Ink,
+                            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 16.sp,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthPickerDialog(current: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(20.dp), color = Color.White) {
+            Column(Modifier.padding(16.dp).width(280.dp)) {
+                Text("월 선택", Modifier.padding(bottom = 12.dp), fontWeight = FontWeight.Bold, color = Ink)
+                for (row in 0..3) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (col in 0..2) {
+                            val m = row * 3 + col + 1
+                            val on = m == current
+                            Box(
+                                Modifier.weight(1f).padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+                                    .clickable { onPick(m) }
+                                    .padding(vertical = 14.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("${m}월", color = if (on) Color.White else Ink,
+                                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -234,15 +324,27 @@ private fun MonthHeader(
     onSearch: () -> Unit,
     updateAvailable: Boolean,
     onUpdate: () -> Unit,
+    onYearClick: () -> Unit,
+    onMonthClick: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "${month.year}년 ${month.monthValue}월",
+            "${month.year}년",
             style = MaterialTheme.typography.headlineMedium,
             color = Ink,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onYearClick() }
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            "${month.monthValue}월",
+            style = MaterialTheme.typography.headlineMedium,
+            color = Ink,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onMonthClick() }
+                .padding(horizontal = 4.dp, vertical = 2.dp),
         )
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onSearch) { Icon(Icons.Default.Search, "일정 검색", tint = Ink) }
@@ -310,6 +412,7 @@ private fun MonthGrid(
     var dragCurrent by remember { mutableStateOf<Int?>(null) }
     // 드래그로 정한 기간(상대 인덱스 s..e). 손을 떼면 바로 추가하지 않고 확인 버튼을 띄운다.
     var pendingRange by remember(gridStart) { mutableStateOf<Pair<Int, Int>?>(null) }
+    val haptic = LocalHapticFeedback.current
 
     fun cellAt(off: Offset): Int {
         if (size.width == 0 || size.height == 0) return 0
@@ -336,45 +439,68 @@ private fun MonthGrid(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val startIdx = cellAt(down.position)
-                        dragAnchor = startIdx
-                        dragCurrent = startIdx
-                        var dragged = false
-                        var twoFinger = false
-                        var panDx = 0f
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val pressed = event.changes.filter { it.pressed }
-                            if (pressed.isEmpty()) break
-                            if (pressed.size >= 2 && !twoFinger) {
-                                // 두 손가락 감지 → 월 이동 모드로 전환(범위 선택 취소)
-                                twoFinger = true
-                                dragAnchor = null; dragCurrent = null; panDx = 0f
+                        val slop = viewConfiguration.touchSlop
+
+                        // 1) 롱프레스 타임아웃 안에 이동/해제 여부로 동작 판정
+                        val phase = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull { it.id == down.id }
+                                if (ch == null || !ch.pressed) return@withTimeoutOrNull "tap"
+                                val dx = ch.position.x - down.position.x
+                                val dy = ch.position.y - down.position.y
+                                if (abs(dx) > slop || abs(dy) > slop) return@withTimeoutOrNull "swipe"
                             }
-                            if (twoFinger) {
-                                val c = pressed.first()
-                                panDx += c.position.x - c.previousPosition.x
-                                event.changes.forEach { it.consume() }
-                            } else {
-                                val change = event.changes.firstOrNull() ?: break
-                                val idx = cellAt(change.position)
-                                if (idx != startIdx) { dragged = true; change.consume() }
-                                dragCurrent = idx
-                            }
+                            @Suppress("UNREACHABLE_CODE") "swipe"
                         }
-                        if (twoFinger) {
-                            dragAnchor = null; dragCurrent = null
-                            val threshold = (if (size.width > 0) size.width else 1000) * 0.12f
-                            when {
-                                panDx <= -threshold -> onNextMonth()
-                                panDx >= threshold -> onPrevMonth()
+
+                        when (phase) {
+                            // 롱프레스(움직임 없이 유지) → 여러 날 선택 모드
+                            null -> {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                dragAnchor = startIdx
+                                dragCurrent = startIdx
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                    dragCurrent = cellAt(ch.position)
+                                    ch.consume()
+                                    if (!ch.pressed) break
+                                }
+                                val a = dragAnchor; val b = dragCurrent
+                                dragAnchor = null; dragCurrent = null
+                                if (a != null && b != null) {
+                                    val s = minOf(a, b); val e = maxOf(a, b)
+                                    if (s == e) { pendingRange = null; onSelect(gridStart.plusDays(s.toLong())) }
+                                    else pendingRange = s to e   // 바로 추가하지 않고 확인 버튼 표시
+                                }
                             }
-                        } else {
-                            val a = dragAnchor; val b = dragCurrent
-                            dragAnchor = null; dragCurrent = null
-                            if (a != null && b != null) {
-                                val s = minOf(a, b); val e = maxOf(a, b)
-                                if (!dragged || s == e) { pendingRange = null; onSelect(gridStart.plusDays(s.toLong())) }
-                                else pendingRange = s to e   // 바로 추가하지 않고 확인 버튼 표시
+                            // 빠른 탭 → 그날 선택
+                            "tap" -> {
+                                pendingRange = null
+                                onSelect(gridStart.plusDays(startIdx.toLong()))
+                            }
+                            // 스와이프 → 방향 판정으로 월 이동 (좌/위=이전은 아래 참고)
+                            else -> {
+                                var lastPos = down.position
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                                    lastPos = ch.position
+                                    ch.consume()
+                                    if (!ch.pressed) break
+                                }
+                                val dx = lastPos.x - down.position.x
+                                val dy = lastPos.y - down.position.y
+                                val thX = (if (size.width > 0) size.width else 1000) * 0.12f
+                                val thY = (if (size.height > 0) size.height else 1000) * 0.10f
+                                if (abs(dx) >= abs(dy)) {
+                                    // 왼쪽으로 밀기=다음 달, 오른쪽=이전 달
+                                    if (dx <= -thX) onNextMonth() else if (dx >= thX) onPrevMonth()
+                                } else {
+                                    // 위로 밀기=이전 달, 아래로=다음 달
+                                    if (dy <= -thY) onPrevMonth() else if (dy >= thY) onNextMonth()
+                                }
                             }
                         }
                     }
