@@ -88,7 +88,7 @@ private fun MainScaffold(vm: AppViewModel) {
                         selected = route == Routes.CALENDAR,
                         onClick = { nav.navigateTab(Routes.CALENDAR) },
                         icon = { Icon(Icons.Default.CalendarMonth, null) },
-                        label = { Text("캘린더") },
+                        label = { Text("가족 달력") },
                     )
                     NavigationBarItem(
                         selected = route == Routes.LISTS,

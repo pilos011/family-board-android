@@ -462,7 +462,7 @@ private fun EventLabel(dayEvent: DayEvent, dayOfWeek: Int) {
             .padding(bottom = 2.dp, start = if (roundLeft) 1.dp else 0.dp, end = if (roundRight) 1.dp else 0.dp)
             .clip(shape)
             .background(Family.colorOfIds(e.memberIds))
-            .height(14.dp)
+            .height(17.dp)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -471,10 +471,10 @@ private fun EventLabel(dayEvent: DayEvent, dayOfWeek: Int) {
             Text(
                 e.title,
                 color = Color.White,
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
