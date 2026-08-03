@@ -2,9 +2,11 @@ package com.familyboard.app.ui.allowance
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -24,10 +27,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,8 +45,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -82,9 +90,12 @@ private fun AllowanceSection(
 ) {
     val items by itemsFlow.collectAsStateWithLifecycle()
     val outstanding = items.filter { !it.checked }.sumOf { it.amount }
+    val checkedItems = items.filter { it.checked }
+    val settleAmount = checkedItems.sumOf { it.amount }
     var titleInput by remember { mutableStateOf("") }
     var amountInput by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<ListItem?>(null) }
+    var showSettle by remember { mutableStateOf(false) }
 
     fun add() {
         val amt = amountInput.filter { it.isDigit() }.toLongOrNull() ?: 0L
@@ -109,6 +120,13 @@ private fun AllowanceSection(
             }
             Spacer(Modifier.size(10.dp))
             Text(name, style = MaterialTheme.typography.titleLarge, color = Ink)
+            Spacer(Modifier.size(10.dp))
+            FilledTonalButton(
+                onClick = { showSettle = true },
+                enabled = checkedItems.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                modifier = Modifier.height(34.dp),
+            ) { Text("정산", fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {
                 Text("정산 요청", fontSize = 12.sp, color = Ink.copy(alpha = 0.5f))
@@ -136,27 +154,46 @@ private fun AllowanceSection(
             }
         }
 
-        // 추가 입력
+        // 추가 입력 (컴팩트 높이)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            CompactField(
                 value = titleInput, onValueChange = { titleInput = it },
-                placeholder = { Text("항목 (예: 점심값)") },
-                modifier = Modifier.weight(1f), singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                placeholder = "항목 (예: 점심값)",
+                modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.size(6.dp))
-            OutlinedTextField(
+            CompactField(
                 value = amountInput,
                 onValueChange = { amountInput = it.filter { c -> c.isDigit() }.take(9) },
-                placeholder = { Text("금액") },
-                modifier = Modifier.width(110.dp), singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                shape = RoundedCornerShape(12.dp),
+                placeholder = "금액",
+                modifier = Modifier.width(110.dp),
+                keyboardType = KeyboardType.Number,
             )
             IconButton(onClick = { add() }) {
                 Icon(Icons.Default.Add, "추가", tint = MaterialTheme.colorScheme.primary)
             }
         }
+    }
+
+    if (showSettle) {
+        AlertDialog(
+            onDismissRequest = { showSettle = false },
+            title = { Text("용돈 정산") },
+            text = {
+                Text(
+                    "$name 에게 정산 알림을 보낼까요?\n\n" +
+                        "· 금액: ${formatWon(settleAmount)}\n" +
+                        "· 체크된 ${checkedItems.size}개 항목은 목록에서 삭제됩니다.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.settleAllowance(memberId, checkedItems)
+                    showSettle = false
+                }) { Text("보내기") }
+            },
+            dismissButton = { TextButton(onClick = { showSettle = false }) { Text("취소") } },
+        )
     }
 
     editing?.let { item ->
@@ -238,6 +275,50 @@ private fun EditDialog(
                 }
                 TextButton(onClick = onDismiss) { Text("취소") }
             }
+        },
+    )
+}
+
+/** 기본 OutlinedTextField(56dp)보다 약 25% 낮은(42dp) 컴팩트 입력 필드. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun CompactField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.height(42.dp),
+        singleLine = true,
+        textStyle = LocalTextStyle.current.copy(color = Ink, fontSize = 15.sp),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        interactionSource = interaction,
+        decorationBox = { inner ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = value,
+                innerTextField = inner,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interaction,
+                placeholder = { Text(placeholder, fontSize = 15.sp, color = Ink.copy(alpha = 0.4f)) },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                container = {
+                    OutlinedTextFieldDefaults.ContainerBox(
+                        enabled = true,
+                        isError = false,
+                        interactionSource = interaction,
+                        colors = OutlinedTextFieldDefaults.colors(),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                },
+            )
         },
     )
 }

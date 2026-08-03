@@ -168,4 +168,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { board.setChecked(id, checked) }
     fun deleteItem(id: String) = viewModelScope.launch { board.deleteItem(id) }
+
+    /**
+     * 용돈 정산: 체크된 항목들을 대상 아이에게 완료 알림으로 보내고 목록에서 삭제.
+     * 메시지 예) "엄마의 용돈 정산 15,000원이 완료 되었습니다. 확인해보세요."
+     */
+    fun settleAllowance(targetMemberId: String, items: List<ListItem>) = viewModelScope.launch {
+        if (items.isEmpty()) return@launch
+        val actor = currentMemberId.value.orEmpty()
+        val amount = items.sumOf { it.amount }
+        val parent = when (actor) {
+            "eunseon" -> "엄마"
+            "seonil" -> "아빠"
+            else -> Family.nameOf(actor)
+        }
+        val msg = "${parent}의 용돈 정산 %,d원이 완료 되었습니다. 확인해보세요.".format(amount)
+        runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
+        items.forEach { board.deleteItem(it.id) }
+    }
 }
