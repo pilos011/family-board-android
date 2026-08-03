@@ -186,4 +186,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
         items.forEach { board.deleteItem(it.id) }
     }
+
+    /** 여러 항목의 체크 상태를 한 번에 설정(전체 체크/해제). */
+    fun setCheckedAll(items: List<ListItem>, checked: Boolean) = viewModelScope.launch {
+        items.forEach { if (it.checked != checked) board.setChecked(it.id, checked) }
+    }
+
+    /**
+     * 용돈 조르기: 자녀(준영/준호)가 엄마(은선)에게 체크한 항목의 정산을 조른다.
+     * 항목은 삭제하지 않는다. 알림 제목 "조르기".
+     */
+    fun nudgeAllowance(childMemberId: String, childName: String, items: List<ListItem>) = viewModelScope.launch {
+        if (items.isEmpty()) return@launch
+        val total = items.sumOf { it.amount }
+        val detail = items.joinToString(", ") {
+            "${it.text.ifBlank { "항목" }} %,d원".format(it.amount)
+        }
+        val body = buildString {
+            append("${childName}에게서 용돈 정산 요청이 왔습니다.\n")
+            append("내역 : $detail\n")
+            append("합계 : %,d원\n".format(total))
+            append("❤️ 사랑해요 엄마~")
+        }
+        runCatching { NotifyApi.notify(childMemberId, listOf("eunseon"), "조르기", body) }
+    }
 }

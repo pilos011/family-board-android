@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
@@ -64,15 +65,16 @@ private val Ink = Color(0xFF2B2B2E)
 
 @Composable
 fun AllowanceScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
+    val me by vm.currentMemberId.collectAsStateWithLifecycle()
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         AllowanceSection(
-            vm = vm, name = "준영", memberId = "junyoung",
+            vm = vm, name = "준영", memberId = "junyoung", currentMemberId = me,
             boardKey = AllowanceBoards.JUNYOUNG, itemsFlow = vm.allowanceJunyoung,
             modifier = Modifier.weight(1f),
         )
         Divider(thickness = 8.dp, color = MaterialTheme.colorScheme.background)
         AllowanceSection(
-            vm = vm, name = "준호", memberId = "junho",
+            vm = vm, name = "준호", memberId = "junho", currentMemberId = me,
             boardKey = AllowanceBoards.JUNHO, itemsFlow = vm.allowanceJunho,
             modifier = Modifier.weight(1f),
         )
@@ -84,6 +86,7 @@ private fun AllowanceSection(
     vm: AppViewModel,
     name: String,
     memberId: String,
+    currentMemberId: String?,
     boardKey: String,
     itemsFlow: StateFlow<List<ListItem>>,
     modifier: Modifier = Modifier,
@@ -92,10 +95,13 @@ private fun AllowanceSection(
     val outstanding = items.filter { !it.checked }.sumOf { it.amount }
     val checkedItems = items.filter { it.checked }
     val settleAmount = checkedItems.sumOf { it.amount }
+    // 현재 사용자가 부모(선일/은선)면 [정산], 자녀(준영/준호)면 [조르기]
+    val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     var titleInput by remember { mutableStateOf("") }
     var amountInput by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<ListItem?>(null) }
     var showSettle by remember { mutableStateOf(false) }
+    var showNudge by remember { mutableStateOf(false) }
 
     fun add() {
         val amt = amountInput.filter { it.isDigit() }.toLongOrNull() ?: 0L
@@ -121,15 +127,38 @@ private fun AllowanceSection(
             Spacer(Modifier.size(10.dp))
             Text(name, style = MaterialTheme.typography.titleLarge, color = Ink)
             Spacer(Modifier.size(10.dp))
-            FilledTonalButton(
-                onClick = { showSettle = true },
-                enabled = checkedItems.isNotEmpty(),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
-                modifier = Modifier.height(34.dp),
-            ) { Text("정산", fontWeight = FontWeight.SemiBold) }
+            if (isParent) {
+                FilledTonalButton(
+                    onClick = { showSettle = true },
+                    enabled = checkedItems.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    modifier = Modifier.height(34.dp),
+                ) { Text("정산", fontWeight = FontWeight.SemiBold) }
+            } else {
+                // 전체 체크 토글: 모두 체크돼 있으면 해제, 아니면 전체 체크
+                val allChecked = items.isNotEmpty() && items.all { it.checked }
+                IconButton(
+                    onClick = { vm.setCheckedAll(items, !allChecked) },
+                    enabled = items.isNotEmpty(),
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(
+                        Icons.Default.DoneAll,
+                        if (allChecked) "전체 해제" else "전체 체크",
+                        tint = if (allChecked) MaterialTheme.colorScheme.primary else Ink.copy(alpha = 0.55f),
+                    )
+                }
+                Spacer(Modifier.size(6.dp))
+                FilledTonalButton(
+                    onClick = { showNudge = true },
+                    enabled = checkedItems.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    modifier = Modifier.height(34.dp),
+                ) { Text("조르기", fontWeight = FontWeight.SemiBold) }
+            }
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {
-                Text("정산 요청", fontSize = 12.sp, color = Ink.copy(alpha = 0.5f))
+                Text("정산 대기 잔액", fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
                 Text(formatWon(outstanding), fontWeight = FontWeight.Bold, fontSize = 20.sp,
                     color = MaterialTheme.colorScheme.primary)
             }
@@ -193,6 +222,27 @@ private fun AllowanceSection(
                 }) { Text("보내기") }
             },
             dismissButton = { TextButton(onClick = { showSettle = false }) { Text("취소") } },
+        )
+    }
+
+    if (showNudge) {
+        AlertDialog(
+            onDismissRequest = { showNudge = false },
+            title = { Text("조르기") },
+            text = {
+                Text(
+                    "엄마에게 정산 누적금액 정산을 조릅니다.\n\n" +
+                        "· 금액: ${formatWon(settleAmount)}\n" +
+                        "· 체크한 ${checkedItems.size}개 항목 (삭제되지 않아요)",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.nudgeAllowance(memberId, name, checkedItems)
+                    showNudge = false
+                }) { Text("조르기") }
+            },
+            dismissButton = { TextButton(onClick = { showNudge = false }) { Text("취소") } },
         )
     }
 
