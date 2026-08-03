@@ -52,6 +52,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
+            // 여러 줄 본문(내역/합계 등)이 펼쳐서 모두 보이도록 BigText 스타일 적용
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .apply { contentPi?.let { setContentIntent(it) } }
