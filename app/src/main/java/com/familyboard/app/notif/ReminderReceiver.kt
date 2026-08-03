@@ -21,6 +21,9 @@ class ReminderReceiver : BroadcastReceiver() {
         val text = intent.getStringExtra("text") ?: "가족보드 일정"
         val notifId = intent.getIntExtra("notifId", title.hashCode())
 
+        // 반복 일정이면 다음 회차 알림을 이어서 예약
+        ReminderScheduler.eventFromIntent(intent)?.let { ReminderScheduler.rescheduleNext(context, it) }
+
         ReminderScheduler.ensureChannel(context)
 
         val openIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)

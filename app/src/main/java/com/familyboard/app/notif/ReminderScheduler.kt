@@ -9,17 +9,17 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.familyboard.app.data.Family
+import com.familyboard.app.data.RecurrenceExpander
 import com.familyboard.app.data.model.CalendarEvent
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 
 /**
- * 일정 미리 알림을 AlarmManager 로 예약/취소한다. (시간 기반 → 앱이 꺼져 있어도 동작)
- * "나에게 해당되는(태깅됐거나 모두) + 알림이 설정된" 일정만 예약한다.
- * 프로세스 생존 동안 예약 상태를 기억해 삭제된 일정은 취소한다.
- * (기기 재부팅 시 재예약은 후속 과제: BOOT_COMPLETED 리시버 필요)
+ * 일정 미리 알림을 AlarmManager 로 예약/취소. (시간 기반 → 앱이 꺼져 있어도 동작)
+ * 반복 일정은 "다음 회차"의 알림을 예약하고, 알림이 울리면 ReminderReceiver 가 그 다음 회차를 이어서 예약한다.
  */
 object ReminderScheduler {
     const val CHANNEL_ID = "event_reminders"
@@ -44,16 +44,16 @@ object ReminderScheduler {
         val relevant = events.filter { it.reminder != "none" && isForMe(it, currentMemberId) }
         val newIds = relevant.map { it.id }.toSet()
         (scheduled - newIds).forEach { cancel(context, it) }
-        relevant.forEach { schedule(context, it) }
+        relevant.forEach { scheduleFrom(context, it, System.currentTimeMillis()) }
         scheduled.clear(); scheduled.addAll(newIds)
     }
 
     private fun isForMe(e: CalendarEvent, mid: String?): Boolean =
         e.memberIds.contains(Family.ALL_ID) || (mid != null && e.memberIds.contains(mid))
 
-    private fun schedule(context: Context, e: CalendarEvent) {
-        val triggerAt = triggerMillis(e) ?: return
-        if (triggerAt <= System.currentTimeMillis()) return
+    /** fromMillis 이후 가장 이른 알림 시각으로 예약 (없으면 미예약). 반복 회차 지원. */
+    fun scheduleFrom(context: Context, e: CalendarEvent, fromMillis: Long) {
+        val triggerAt = nextReminderTrigger(e, fromMillis) ?: return
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = pendingIntent(context, e)
         try {
@@ -62,7 +62,7 @@ object ReminderScheduler {
             } else {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
             }
-            Log.i(TAG, "예약: ${e.title} @ $triggerAt")
+            Log.i(TAG, "예약: ${e.title} @ $triggerAt (repeat=${e.repeat})")
         } catch (se: SecurityException) {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
         }
@@ -70,25 +70,67 @@ object ReminderScheduler {
 
     private fun cancel(context: Context, eventId: String) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        am.cancel(pendingIntent(context, eventId, null))
+        am.cancel(pendingIntentById(context, eventId))
     }
 
-    private fun pendingIntent(context: Context, e: CalendarEvent): PendingIntent =
-        pendingIntent(context, e.id, e)
+    /** 알림 발화 후, 다음 회차를 이어서 예약 (반복 일정용). */
+    fun rescheduleNext(context: Context, e: CalendarEvent) {
+        if (e.repeat.isBlank()) return
+        scheduleFrom(context, e, System.currentTimeMillis() + 60_000)
+    }
 
-    private fun pendingIntent(context: Context, eventId: String, e: CalendarEvent?): PendingIntent {
+    private fun pendingIntent(context: Context, e: CalendarEvent): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            action = ACTION
+            data = android.net.Uri.parse("familyboard://reminder/${e.id}")
+            putExtra("notifId", e.id.hashCode())
+            putExtra("title", e.title.ifBlank { "일정" })
+            putExtra("text", contentText(e))
+            // 다음 회차 재예약용 필드
+            putExtra("eid", e.id)
+            putExtra("sdate", e.startDateIso)
+            putExtra("edate", e.endDateIso)
+            putExtra("allday", e.allDay)
+            putExtra("stime", e.startTime)
+            putExtra("etime", e.endTime)
+            putExtra("repeat", e.repeat)
+            putExtra("lunar", e.lunar)
+            putExtra("reminder", e.reminder)
+            putExtra("exdates", e.exdates.joinToString(","))
+        }
+        return PendingIntent.getBroadcast(context, e.id.hashCode(), intent, flags())
+    }
+
+    private fun pendingIntentById(context: Context, eventId: String): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ACTION
             data = android.net.Uri.parse("familyboard://reminder/$eventId")
-            putExtra("notifId", eventId.hashCode())
-            if (e != null) {
-                putExtra("title", e.title.ifBlank { "일정" })
-                putExtra("text", contentText(e))
-            }
         }
-        var flags = PendingIntent.FLAG_UPDATE_CURRENT
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getBroadcast(context, eventId.hashCode(), intent, flags)
+        return PendingIntent.getBroadcast(context, eventId.hashCode(), intent, flags())
+    }
+
+    private fun flags(): Int {
+        var f = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) f = f or PendingIntent.FLAG_IMMUTABLE
+        return f
+    }
+
+    /** 인텐트 extras 로부터 재예약에 필요한 최소 CalendarEvent 복원 */
+    fun eventFromIntent(intent: Intent): CalendarEvent? {
+        val eid = intent.getStringExtra("eid") ?: return null
+        return CalendarEvent(
+            id = eid,
+            title = intent.getStringExtra("title") ?: "",
+            startDateIso = intent.getStringExtra("sdate") ?: "",
+            endDateIso = intent.getStringExtra("edate") ?: "",
+            allDay = intent.getBooleanExtra("allday", false),
+            startTime = intent.getStringExtra("stime") ?: "",
+            endTime = intent.getStringExtra("etime") ?: "",
+            repeat = intent.getStringExtra("repeat") ?: "",
+            lunar = intent.getBooleanExtra("lunar", false),
+            reminder = intent.getStringExtra("reminder") ?: "none",
+            exdates = (intent.getStringExtra("exdates") ?: "").split(",").filter { it.isNotBlank() },
+        )
     }
 
     private fun contentText(e: CalendarEvent): String {
@@ -96,18 +138,35 @@ object ReminderScheduler {
         return listOfNotNull("가족보드 일정", time.ifBlank { null }).joinToString(" · ")
     }
 
-    private fun triggerMillis(e: CalendarEvent): Long? {
+    private fun nextReminderTrigger(e: CalendarEvent, fromMillis: Long): Long? {
         val zone = ZoneId.systemDefault()
         val reminder = e.reminder
+        if (reminder == "none") return null
         return try {
             if (reminder.startsWith("custom:")) {
                 val date = LocalDate.parse(reminder.removePrefix("custom:"))
-                val time = eventTime(e)
-                LocalDateTime.of(date, time).atZone(zone).toInstant().toEpochMilli()
-            } else {
+                val t = LocalDateTime.of(date, eventTime(e)).atZone(zone).toInstant().toEpochMilli()
+                if (t > fromMillis) t else null
+            } else if (e.repeat.isBlank()) {
                 val date = LocalDate.parse(e.startDateIso)
-                val base = LocalDateTime.of(date, eventTime(e))
-                base.minusMinutes(offsetMinutes(reminder)).atZone(zone).toInstant().toEpochMilli()
+                val t = LocalDateTime.of(date, eventTime(e)).minusMinutes(offsetMinutes(reminder))
+                    .atZone(zone).toInstant().toEpochMilli()
+                if (t > fromMillis) t else null
+            } else {
+                // 반복: fromDate 부근부터 400일 창에서 발생일(회차 시작)을 모아 가장 이른 미래 알림 선택
+                val fromDate = Instant.ofEpochMilli(fromMillis).atZone(zone).toLocalDate().minusDays(3)
+                val map = RecurrenceExpander.expand(listOf(e), fromDate, fromDate.plusDays(400))
+                val occStarts = map.entries
+                    .filter { entry -> entry.value.any { it.spanStart } }
+                    .map { LocalDate.parse(it.key) }
+                    .sorted()
+                val time = eventTime(e)
+                val offset = offsetMinutes(reminder)
+                for (occ in occStarts) {
+                    val t = LocalDateTime.of(occ, time).minusMinutes(offset).atZone(zone).toInstant().toEpochMilli()
+                    if (t > fromMillis) return t
+                }
+                null
             }
         } catch (t: Throwable) {
             Log.w(TAG, "트리거 계산 실패: ${e.title}", t); null
@@ -119,14 +178,8 @@ object ReminderScheduler {
         else runCatching { LocalTime.parse(e.startTime) }.getOrDefault(LocalTime.of(9, 0))
 
     private fun offsetMinutes(reminder: String): Long = when (reminder) {
-        "atTime" -> 0
-        "5m" -> 5
-        "15m" -> 15
-        "30m" -> 30
-        "1h" -> 60
-        "2h" -> 120
-        "1d" -> 1440
-        "2d" -> 2880
+        "atTime" -> 0; "5m" -> 5; "15m" -> 15; "30m" -> 30
+        "1h" -> 60; "2h" -> 120; "1d" -> 1440; "2d" -> 2880
         else -> 0
     }
 

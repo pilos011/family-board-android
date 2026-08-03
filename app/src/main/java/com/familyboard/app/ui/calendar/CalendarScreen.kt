@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.familyboard.app.data.DayEvent
 import com.familyboard.app.data.Family
 import com.familyboard.app.data.LunarCalendar
 import com.familyboard.app.data.RecurrenceExpander
@@ -94,7 +95,7 @@ fun CalendarScreen(
     vm: AppViewModel,
     modifier: Modifier = Modifier,
     onAddEvent: (LocalDate, LocalDate) -> Unit,
-    onEditEvent: (String) -> Unit,
+    onViewEvent: (String, String) -> Unit,
     onSearch: () -> Unit,
 ) {
     var month by remember { mutableStateOf(YearMonth.now()) }
@@ -155,11 +156,9 @@ fun CalendarScreen(
             DaySheet(
                 date = selected,
                 holidayName = holidays[selected.toString()],
-                events = eventsByDate[selected.toString()].orEmpty(),
+                events = eventsByDate[selected.toString()].orEmpty().map { it.event },
                 onAdd = { sheetOpen = false; onAddEvent(selected, selected) },
-                onEdit = { id -> sheetOpen = false; onEditEvent(id) },
-                onDeleteAll = { id -> vm.deleteEvent(id) },
-                onExcludeOccurrence = { ev -> vm.excludeOccurrence(ev, selected.toString()) },
+                onView = { id -> sheetOpen = false; onViewEvent(id, selected.toString()) },
             )
         }
     }
@@ -213,7 +212,7 @@ private fun MonthGrid(
     selected: LocalDate,
     today: LocalDate,
     gridStart: LocalDate,
-    eventsByDate: Map<String, List<CalendarEvent>>,
+    eventsByDate: Map<String, List<DayEvent>>,
     holidays: Map<String, String>,
     modifier: Modifier = Modifier,
     onSelect: (LocalDate) -> Unit,
@@ -276,7 +275,7 @@ private fun MonthGrid(
                         isSelected = date == selected,
                         inDragRange = idx in dragLo..dragHi,
                         dayOfWeek = d,
-                        events = eventsByDate[date.toString()].orEmpty(),
+                        dayEvents = eventsByDate[date.toString()].orEmpty(),
                         holidayName = holidays[date.toString()],
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
@@ -294,7 +293,7 @@ private fun DayCell(
     isSelected: Boolean,
     inDragRange: Boolean,
     dayOfWeek: Int,
-    events: List<CalendarEvent>,
+    dayEvents: List<DayEvent>,
     holidayName: String?,
     modifier: Modifier = Modifier,
 ) {
@@ -317,11 +316,11 @@ private fun DayCell(
         modifier = modifier
             .border(0.5.dp, GridLine)
             .background(cellBg)
-            .padding(horizontal = 3.dp, vertical = 2.dp),
+            .padding(vertical = 2.dp), // 가로 패딩 없음 → 여러 날 막대가 칸 끝까지 이어짐
     ) {
         Column(Modifier.fillMaxSize()) {
             Box(
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.padding(start = 3.dp).size(20.dp)
                     .then(if (isToday) Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary) else Modifier),
                 contentAlignment = Alignment.Center,
             ) {
@@ -340,25 +339,25 @@ private fun DayCell(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp),
                     textAlign = TextAlign.Center,
                 )
             }
             Spacer(Modifier.height(2.dp))
-            events.take(2).forEach { EventLabel(it) }
-            if (events.size > 2) {
+            dayEvents.take(2).forEach { EventLabel(it, dayOfWeek) }
+            if (dayEvents.size > 2) {
                 Text(
-                    "+${events.size - 2}",
+                    "+${dayEvents.size - 2}",
                     fontSize = 9.sp,
                     color = Ink.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(start = 2.dp),
+                    modifier = Modifier.padding(start = 4.dp),
                 )
             }
         }
         // 오른쪽 하단 음력 + 절기 (작고 옅게)
         Text(
             if (term != null) "$lunar ($term)" else lunar,
-            modifier = Modifier.align(Alignment.BottomEnd),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 3.dp),
             fontSize = 8.sp,
             maxLines = 1,
             color = if (term != null) Color(0xFF8A6D3B).copy(alpha = if (inMonth) 1f else 0.4f)
@@ -368,22 +367,36 @@ private fun DayCell(
 }
 
 @Composable
-private fun EventLabel(event: CalendarEvent) {
+private fun EventLabel(dayEvent: DayEvent, dayOfWeek: Int) {
+    val e = dayEvent.event
+    // 이 칸이 (그 회차) 기간의 시작/끝이거나 주(週)의 양끝(일/토)이면 모서리를 둥글게 → 여러 날은 하나의 막대처럼 이어짐
+    val roundLeft = dayEvent.spanStart || dayOfWeek == 0
+    val roundRight = dayEvent.spanEnd || dayOfWeek == 6
+    val r = 4.dp
+    val shape = RoundedCornerShape(
+        topStart = if (roundLeft) r else 0.dp, bottomStart = if (roundLeft) r else 0.dp,
+        topEnd = if (roundRight) r else 0.dp, bottomEnd = if (roundRight) r else 0.dp,
+    )
     Box(
         Modifier.fillMaxWidth()
-            .padding(bottom = 2.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(Family.colorOfIds(event.memberIds))
-            .padding(horizontal = 4.dp, vertical = 1.dp),
+            .padding(bottom = 2.dp, start = if (roundLeft) 1.dp else 0.dp, end = if (roundRight) 1.dp else 0.dp)
+            .clip(shape)
+            .background(Family.colorOfIds(e.memberIds))
+            .height(14.dp)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Text(
-            event.title,
-            color = Color.White,
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Medium,
-        )
+        // 제목은 막대(주 세그먼트)의 시작 칸에만 표시
+        if (roundLeft) {
+            Text(
+                e.title,
+                color = Color.White,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 
@@ -393,11 +406,8 @@ private fun DaySheet(
     holidayName: String?,
     events: List<CalendarEvent>,
     onAdd: () -> Unit,
-    onEdit: (String) -> Unit,
-    onDeleteAll: (String) -> Unit,
-    onExcludeOccurrence: (CalendarEvent) -> Unit,
+    onView: (String) -> Unit,
 ) {
-    var expandedId by remember { mutableStateOf<String?>(null) }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)
             .verticalScroll(rememberScrollState()),
@@ -423,14 +433,7 @@ private fun DaySheet(
             )
         } else {
             events.forEach { ev ->
-                EventCard(
-                    event = ev,
-                    expanded = expandedId == ev.id,
-                    onToggle = { expandedId = if (expandedId == ev.id) null else ev.id },
-                    onEdit = { onEdit(ev.id) },
-                    onDeleteAll = { onDeleteAll(ev.id); if (expandedId == ev.id) expandedId = null },
-                    onExcludeOccurrence = { onExcludeOccurrence(ev); if (expandedId == ev.id) expandedId = null },
-                )
+                EventCard(event = ev, onClick = { onView(ev.id) })
                 Spacer(Modifier.height(10.dp))
             }
         }
@@ -449,84 +452,42 @@ private fun DaySheet(
 }
 
 @Composable
-private fun EventCard(
-    event: CalendarEvent,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onEdit: () -> Unit,
-    onDeleteAll: () -> Unit,
-    onExcludeOccurrence: () -> Unit,
-) {
+private fun EventCard(event: CalendarEvent, onClick: () -> Unit) {
     val time = if (event.allDay) "하루 종일"
     else listOf(event.startTime, event.endTime).filter { it.isNotBlank() }.joinToString(" ~ ")
-    var showDelete by remember { mutableStateOf(false) }
-    Column(
+    Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onToggle() }
+            .clickable { onClick() }
             .padding(14.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            MemberTags(event.memberIds)
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(event.title, style = MaterialTheme.typography.titleMedium, color = Ink)
-                Text(
-                    if (time.isNotBlank()) time else "시간 미정",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Ink.copy(alpha = 0.6f),
-                )
+        MemberTags(event.memberIds)
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(event.title, style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(
+                if (time.isNotBlank()) time else "시간 미정",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Ink.copy(alpha = 0.6f),
+            )
+            val extras = buildList {
+                if (event.photoUrls.isNotEmpty()) add("사진 ${event.photoUrls.size}")
+                if (event.description.isNotBlank()) add("메모")
+                if (event.repeat.isNotBlank()) add(repeatLabel(event.repeat))
+            }
+            if (extras.isNotEmpty()) {
+                Text(extras.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
-        if (expanded) {
-            Spacer(Modifier.height(12.dp))
-            if (event.description.isNotBlank()) {
-                DescriptionText(event.description)
-                Spacer(Modifier.height(8.dp))
-            }
-            if (event.photoUrls.isNotEmpty()) {
-                PhotoStrip(event.photoUrls)
-                Spacer(Modifier.height(8.dp))
-            }
-            DetailRow("시간", if (time.isNotBlank()) time else "미정")
-            DetailRow("날짜", dateRange(event))
-            if (event.repeat.isNotBlank()) DetailRow("반복", repeatLabel(event.repeat))
-            if (event.lunar) DetailRow("음력", "예")
-            if (event.reminder != "none") DetailRow("알림", com.familyboard.app.data.model.Reminders.label(event.reminder))
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, null); Spacer(Modifier.size(6.dp)); Text("수정")
-                }
-                OutlinedButton(onClick = { if (event.repeat.isNotBlank()) showDelete = true else onDeleteAll() }) {
-                    Icon(Icons.Default.Delete, null); Spacer(Modifier.size(6.dp)); Text("삭제")
-                }
-            }
-        }
-    }
-
-    if (showDelete) {
-        AlertDialog(
-            onDismissRequest = { showDelete = false },
-            title = { Text("반복 일정 삭제") },
-            text = { Text("이 일정은 반복 일정입니다. 어떻게 삭제할까요?") },
-            confirmButton = {
-                TextButton(onClick = { showDelete = false; onDeleteAll() }) { Text("모든 반복 삭제") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { showDelete = false; onExcludeOccurrence() }) { Text("이 날짜만") }
-                    TextButton(onClick = { showDelete = false }) { Text("취소") }
-                }
-            },
-        )
+        Text("보기", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
     }
 }
 
 /** 첨부 사진 썸네일 가로 스크롤 + 탭 시 전체보기 */
 @Composable
-private fun PhotoStrip(urls: List<String>) {
+internal fun PhotoStrip(urls: List<String>) {
     var viewing by remember { mutableStateOf<String?>(null) }
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -555,7 +516,7 @@ private fun PhotoStrip(urls: List<String>) {
 
 /** 상세 내용 표시. URL 은 클릭 시 외부 브라우저로 연다. */
 @Composable
-private fun DescriptionText(text: String) {
+internal fun DescriptionText(text: String) {
     val context = LocalContext.current
     val linkColor = MaterialTheme.colorScheme.primary
     val annotated = remember(text, linkColor) {
@@ -588,7 +549,7 @@ private fun DescriptionText(text: String) {
 
 /** 담당자 태그(색상 + 이름)를 세로로 쌓아 표시 */
 @Composable
-private fun MemberTags(memberIds: List<String>) {
+internal fun MemberTags(memberIds: List<String>) {
     val ids = if (memberIds.isEmpty() || memberIds.contains(Family.ALL_ID)) listOf(Family.ALL_ID) else memberIds
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ids.forEach { id ->
@@ -606,21 +567,21 @@ private fun MemberTags(memberIds: List<String>) {
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
+internal fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         Text(label, color = Ink.copy(alpha = 0.5f), modifier = Modifier.width(56.dp), fontSize = 14.sp)
         Text(value, color = Ink, fontSize = 14.sp)
     }
 }
 
-private fun repeatLabel(key: String): String = when (key) {
+internal fun repeatLabel(key: String): String = when (key) {
     "weekly" -> "매주"
     "monthly" -> "매월"
     "yearly" -> "매년"
     else -> ""
 }
 
-private fun dateRange(e: CalendarEvent): String =
+internal fun dateRange(e: CalendarEvent): String =
     if (e.endDateIso.isBlank() || e.endDateIso == e.startDateIso) e.startDateIso
     else "${e.startDateIso} ~ ${e.endDateIso}"
 

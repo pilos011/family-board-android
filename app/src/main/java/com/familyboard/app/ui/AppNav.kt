@@ -27,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.familyboard.app.ui.calendar.AddEventScreen
 import com.familyboard.app.ui.calendar.CalendarScreen
+import com.familyboard.app.ui.calendar.ViewEventScreen
 import com.familyboard.app.ui.allowance.AllowanceScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.lists.ListsScreen
@@ -39,10 +40,12 @@ private object Routes {
     const val ALLOWANCE = "allowance"
     const val ADD_EVENT = "addEvent/{startIso}/{endIso}"
     const val EDIT_EVENT = "editEvent/{eventId}"
+    const val VIEW_EVENT = "viewEvent/{eventId}/{dateIso}"
     const val LIST_DETAIL = "listDetail/{board}"
     const val SEARCH = "search"
     fun addEvent(startIso: String, endIso: String) = "addEvent/$startIso/$endIso"
     fun editEvent(eventId: String) = "editEvent/$eventId"
+    fun viewEvent(eventId: String, dateIso: String) = "viewEvent/$eventId/$dateIso"
     fun listDetail(board: String) = "listDetail/$board"
 }
 
@@ -101,7 +104,7 @@ private fun MainScaffold(vm: AppViewModel) {
                 CalendarScreen(
                     vm = vm,
                     onAddEvent = { s, e -> nav.navigate(Routes.addEvent(s.toString(), e.toString())) },
-                    onEditEvent = { id -> nav.navigate(Routes.editEvent(id)) },
+                    onViewEvent = { id, dateIso -> nav.navigate(Routes.viewEvent(id, dateIso)) },
                     onSearch = { nav.navigate(Routes.SEARCH) },
                 )
             }
@@ -131,6 +134,15 @@ private fun MainScaffold(vm: AppViewModel) {
                     defaultMemberId = currentMemberId,
                     onBack = { nav.popBackStack() },
                     editEventId = entry.arguments?.getString("eventId"),
+                )
+            }
+            composable(Routes.VIEW_EVENT) { entry ->
+                ViewEventScreen(
+                    vm = vm,
+                    eventId = entry.arguments?.getString("eventId").orEmpty(),
+                    dateIso = entry.arguments?.getString("dateIso").orEmpty(),
+                    onEdit = { id -> nav.navigate(Routes.editEvent(id)) },
+                    onBack = { nav.popBackStack() },
                 )
             }
             composable(Routes.LIST_DETAIL) { entry ->
