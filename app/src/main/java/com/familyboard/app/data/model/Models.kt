@@ -29,11 +29,21 @@ data class ListItem(
     val amount: Long = 0,          // 용돈 정산 금액(원). 그 외 보드는 0
     val memberIds: List<String> = listOf("all"), // 담당자(복수). ["all"]=공용
     val mustDo: Boolean = false,   // 버킷리스트 "꼭 하자!" 토글 (대표페이지 상단 노출)
+    val description: String = "",  // 버킷 상세 내용
+    val photoUrls: List<String> = emptyList(), // 버킷 첨부 사진
+    val progress: List<ProgressNote> = emptyList(), // 버킷 진행 이력(카드 메모)
 )
 
-/** 인생 버킷 리스트 보드 키 (사람별). 선일/은선만 사용. */
+/** 버킷 진행 이력 메모 */
+data class ProgressNote(
+    val text: String = "",
+    val by: String = "",       // 작성 멤버 id
+    val dateIso: String = "",  // yyyy-MM-dd
+)
+
+/** 인생 버킷 리스트 보드 키 (부부 공용, 단일). */
 object BucketBoards {
-    fun of(memberId: String): String = "bucket_$memberId"
+    const val BOARD = "bucket"
 }
 
 /** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */

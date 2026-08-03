@@ -15,11 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
@@ -29,6 +33,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,20 +49,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyboard.app.data.BucketLife
 import com.familyboard.app.data.Family
+import com.familyboard.app.data.LifeStats
 import com.familyboard.app.data.model.BucketBoards
 import com.familyboard.app.data.model.ListItem
+import com.familyboard.app.data.model.ProgressNote
 import com.familyboard.app.ui.AppViewModel
+import com.familyboard.app.ui.calendar.DescriptionText
+import com.familyboard.app.ui.calendar.PhotoStrip
+import com.familyboard.app.ui.common.PhotoPickerRow
+import java.time.LocalDate
 
 private val Ink = Color(0xFF2B2B2E)
 private val Purple = Color(0xFF845EF7)
 
-/** 대표 페이지: 남은 날 박스 + '꼭 하자!' 항목 10개 + 눈 버튼 */
+// ─────────────────────────── 대표 페이지 ───────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BucketHomeScreen(
@@ -67,7 +79,7 @@ fun BucketHomeScreen(
     onBack: () -> Unit,
 ) {
     val me = currentMemberId ?: "seonil"
-    val items by vm.bucketItemsFor(me).collectAsStateWithLifecycle()
+    val items by vm.bucketItems.collectAsStateWithLifecycle()
     val featured = remember(items) { items.filter { it.mustDo }.take(10) }
     val stats = remember(me) { BucketLife.stats(me) }
 
@@ -76,6 +88,7 @@ fun BucketHomeScreen(
         topBar = {
             TopAppBar(
                 title = { Text("인생 버킷 리스트") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
                 },
@@ -87,8 +100,12 @@ fun BucketHomeScreen(
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().padding(20.dp)) {
+        Column(
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        ) {
             if (stats != null) LifeBox(stats)
+            Spacer(Modifier.height(12.dp))
+            QuoteBox()
             Spacer(Modifier.height(20.dp))
             Text("꼭 하자! 목록", style = MaterialTheme.typography.titleMedium, color = Ink)
             Spacer(Modifier.height(8.dp))
@@ -98,22 +115,20 @@ fun BucketHomeScreen(
                     color = Ink.copy(alpha = 0.5f),
                 )
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(featured, key = { it.id }) { itm ->
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                                .background(Purple.copy(alpha = 0.10f)).padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.Star, null, tint = Purple, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.size(10.dp))
-                            Text(
-                                itm.text,
-                                Modifier.weight(1f),
-                                color = if (itm.checked) Ink.copy(alpha = 0.4f) else Ink,
-                                textDecoration = if (itm.checked) TextDecoration.LineThrough else TextDecoration.None,
-                            )
-                        }
+                featured.forEach { itm ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp))
+                            .background(Purple.copy(alpha = 0.10f)).padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Star, null, tint = Purple, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Text(
+                            itm.text,
+                            Modifier.weight(1f),
+                            color = if (itm.checked) Ink.copy(alpha = 0.4f) else Ink,
+                            textDecoration = if (itm.checked) TextDecoration.LineThrough else TextDecoration.None,
+                        )
                     }
                 }
             }
@@ -122,20 +137,42 @@ fun BucketHomeScreen(
 }
 
 @Composable
-private fun LifeBox(stats: com.familyboard.app.data.LifeStats) {
+private fun LifeBox(stats: LifeStats) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
             .background(Purple.copy(alpha = 0.12f)).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("나의 남은 날", fontSize = 14.sp, color = Ink.copy(alpha = 0.6f))
         Spacer(Modifier.height(4.dp))
-        Text("%,d 일".format(stats.remaining), fontSize = 44.sp, fontWeight = FontWeight.Bold, color = Purple)
+        Text(
+            "%,d 일".format(stats.remaining),
+            fontSize = 44.sp, fontWeight = FontWeight.Bold, color = Purple,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Stat("지나온 날", "%,d 일".format(stats.passed))
             Stat("진행률", "%.1f%%".format(stats.progressPercent))
             Stat("올해 남은 날", "${stats.remainingThisYear}일")
         }
+    }
+}
+
+@Composable
+private fun QuoteBox() {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF2B2B2E)).padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "\"우물쭈물하다가 내 이럴 줄 알았지\"",
+            color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text("— 조지 버나드 쇼의 묘비 글귀 —", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
     }
 }
 
@@ -148,122 +185,65 @@ private fun Stat(label: String, value: String) {
     }
 }
 
-/** 버킷 목록: 사람 전환(배우자 공유) + 항목 카드 + (+) 추가 */
+// ─────────────────────────── 목록 ───────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BucketListScreen(
     vm: AppViewModel,
-    currentMemberId: String?,
+    onOpenAdd: () -> Unit,
+    onOpenView: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val me = currentMemberId ?: "seonil"
-    var person by remember { mutableStateOf(me) }
-    val items by vm.bucketItemsFor(person).collectAsStateWithLifecycle()
+    val items by vm.bucketItems.collectAsStateWithLifecycle()
     val sorted = remember(items) { items.sortedBy { it.checked } }
-    var showAdd by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("버킷 목록") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
                 },
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }, containerColor = Purple) {
+            FloatingActionButton(onClick = onOpenAdd, containerColor = Purple) {
                 Icon(Icons.Default.Add, "버킷 추가", tint = Color.White)
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            // 사람 전환 (선일/은선)
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf("seonil", "eunseon").forEach { id ->
-                    val on = person == id
-                    Box(
-                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
-                            .background(if (on) Purple else Color(0xFFF1F3F5))
-                            .clickable { person = id }.padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "${Family.nameOf(id)}의 버킷",
-                            color = if (on) Color.White else Color(0xFF555555),
-                            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                }
+        if (sorted.isEmpty()) {
+            Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
+                Text("버킷 항목이 없어요.\n오른쪽 아래 +로 추가해 보세요.", color = Ink.copy(alpha = 0.5f))
             }
-
-            if (sorted.isEmpty()) {
-                Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("버킷 항목이 없어요.\n오른쪽 아래 +로 추가해 보세요.", color = Ink.copy(alpha = 0.5f))
+        } else {
+            LazyColumn(
+                Modifier.padding(padding).fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item { Spacer(Modifier.height(4.dp)) }
+                items(sorted, key = { it.id }) { itm ->
+                    BucketRow(
+                        item = itm,
+                        onToggle = { vm.toggleItem(itm.id, it) },
+                        onMustDo = { vm.updateItem(itm.copy(mustDo = !itm.mustDo)) },
+                        onClick = { onOpenView(itm.id) },
+                    )
                 }
-            } else {
-                LazyColumn(
-                    Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(sorted, key = { it.id }) { itm ->
-                        BucketRow(
-                            item = itm,
-                            onToggle = { vm.toggleItem(itm.id, it) },
-                            onMustDo = { vm.updateItem(itm.copy(mustDo = !itm.mustDo)) },
-                            onDelete = { vm.deleteItem(itm.id) },
-                        )
-                    }
-                    item { Spacer(Modifier.height(80.dp)) }
-                }
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
-    }
-
-    if (showAdd) {
-        var text by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showAdd = false },
-            title = { Text("${Family.nameOf(person)}의 버킷 추가") },
-            text = {
-                OutlinedTextField(
-                    value = text, onValueChange = { text = it },
-                    placeholder = { Text("예: 오로라 보러 가기") }, singleLine = false,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (text.isNotBlank()) {
-                        vm.addItem(
-                            ListItem(
-                                text = text.trim(), checked = false,
-                                board = BucketBoards.of(person), createdBy = me,
-                            )
-                        )
-                    }
-                    showAdd = false
-                }) { Text("추가") }
-            },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("취소") } },
-        )
     }
 }
 
 @Composable
-private fun BucketRow(
-    item: ListItem,
-    onToggle: (Boolean) -> Unit,
-    onMustDo: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun BucketRow(item: ListItem, onToggle: (Boolean) -> Unit, onMustDo: () -> Unit, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 6.dp),
+            .background(MaterialTheme.colorScheme.surface).clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(checked = item.checked, onCheckedChange = onToggle)
@@ -274,9 +254,6 @@ private fun BucketRow(
             textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
         )
         MustDoChip(on = item.mustDo, onClick = onMustDo)
-        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Default.Close, "삭제", tint = Ink.copy(alpha = 0.3f), modifier = Modifier.size(18.dp))
-        }
     }
 }
 
@@ -285,21 +262,189 @@ private fun MustDoChip(on: Boolean, onClick: () -> Unit) {
     Row(
         Modifier.clip(RoundedCornerShape(16.dp))
             .background(if (on) Purple else Color(0xFFF1F3F5))
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+            .clickable { onClick() }.padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            Icons.Default.Star, null,
-            tint = if (on) Color.White else Color(0xFFAAAAAA),
-            modifier = Modifier.size(15.dp),
-        )
+        Icon(Icons.Default.Star, null, tint = if (on) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(15.dp))
         Spacer(Modifier.size(4.dp))
-        Text(
-            "꼭 하자!",
-            color = if (on) Color.White else Color(0xFF888888),
-            fontSize = 12.sp,
-            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+        Text("꼭 하자!", color = if (on) Color.White else Color(0xFF888888), fontSize = 12.sp,
+            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+// ─────────────────────────── 추가/수정 ───────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BucketAddScreen(
+    vm: AppViewModel,
+    currentMemberId: String?,
+    editId: String?,
+    onBack: () -> Unit,
+) {
+    val me = currentMemberId ?: "seonil"
+    val editing = remember(editId) { editId?.let { vm.bucketById(it) } }
+    var title by remember { mutableStateOf(editing?.text ?: "") }
+    var description by remember { mutableStateOf(editing?.description ?: "") }
+    var photoUrls by remember { mutableStateOf(editing?.photoUrls ?: emptyList<String>()) }
+
+    fun save() {
+        if (title.isBlank()) return
+        val item = ListItem(
+            id = editing?.id ?: "",
+            text = title.trim(),
+            checked = editing?.checked ?: false,
+            board = BucketBoards.BOARD,
+            createdBy = editing?.createdBy ?: me,
+            mustDo = editing?.mustDo ?: false,
+            description = description.trim(),
+            photoUrls = photoUrls,
+            progress = editing?.progress ?: emptyList(),
         )
+        if (editing != null) vm.updateItem(item) else vm.addItem(item)
+        onBack()
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            TopAppBar(
+                title = { Text(if (editing != null) "버킷 수정" else "버킷 추가") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
+                },
+                actions = { IconButton(onClick = { save() }) { Icon(Icons.Default.Check, "저장") } },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier.padding(padding).verticalScroll(rememberScrollState())
+                .padding(20.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            OutlinedTextField(
+                value = title, onValueChange = { title = it },
+                label = { Text("제목") }, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+            )
+            OutlinedTextField(
+                value = description, onValueChange = { if (it.length <= 500) description = it },
+                label = { Text("상세 내용 (선택)") }, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp), minLines = 2,
+                supportingText = { Text("${description.length}/500") },
+            )
+            PhotoPickerRow(photoUrls = photoUrls, onChange = { photoUrls = it })
+        }
+    }
+}
+
+// ─────────────────────────── 보기(상세 + 진행 이력) ───────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BucketViewScreen(
+    vm: AppViewModel,
+    itemId: String,
+    currentMemberId: String?,
+    onEdit: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val me = currentMemberId ?: "seonil"
+    val items by vm.bucketItems.collectAsStateWithLifecycle()
+    val item = remember(items, itemId) { items.firstOrNull { it.id == itemId } }
+    var note by remember { mutableStateOf("") }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            TopAppBar(
+                title = { Text("버킷") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
+                },
+                actions = {
+                    if (item != null) IconButton(onClick = { onEdit(itemId) }) { Icon(Icons.Default.Edit, "수정") }
+                },
+            )
+        },
+    ) { padding ->
+        if (item == null) {
+            Box(Modifier.padding(padding).fillMaxSize(), Alignment.Center) {
+                Text("삭제된 항목입니다.", color = Ink.copy(alpha = 0.5f))
+            }
+            return@Scaffold
+        }
+        Column(
+            Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(20.dp).fillMaxWidth(),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    item.text, style = MaterialTheme.typography.headlineMedium, color = Ink,
+                    textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
+                    modifier = Modifier.weight(1f),
+                )
+                MustDoChip(on = item.mustDo, onClick = { vm.updateItem(item.copy(mustDo = !item.mustDo)) })
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("등록: ${Family.nameOf(item.createdBy)}", fontSize = 13.sp, color = Ink.copy(alpha = 0.5f))
+
+            if (item.description.isNotBlank()) {
+                Spacer(Modifier.height(16.dp))
+                DescriptionText(item.description)
+            }
+            if (item.photoUrls.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                PhotoStrip(item.photoUrls)
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text("진행 이력", style = MaterialTheme.typography.titleMedium, color = Ink)
+            Spacer(Modifier.height(4.dp))
+            Text("이 꿈을 위해 있었던 일을 기록해서 서로 리마인드해요.", fontSize = 12.sp, color = Ink.copy(alpha = 0.5f))
+            Spacer(Modifier.height(10.dp))
+
+            // 이력 추가
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = note, onValueChange = { note = it },
+                    placeholder = { Text("진행 사항 메모") }, modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp), singleLine = true,
+                )
+                Spacer(Modifier.size(8.dp))
+                IconButton(onClick = {
+                    if (note.isNotBlank()) {
+                        val n = ProgressNote(text = note.trim(), by = me, dateIso = LocalDate.now().toString())
+                        vm.updateItem(item.copy(progress = item.progress + n))
+                        note = ""
+                    }
+                }) { Icon(Icons.Default.Add, "이력 추가", tint = Purple) }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            if (item.progress.isEmpty()) {
+                Text("아직 기록이 없어요.", color = Ink.copy(alpha = 0.4f))
+            } else {
+                item.progress.reversed().forEach { p ->
+                    Column(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF1F3F5)).padding(14.dp),
+                    ) {
+                        Text(p.text, color = Ink)
+                        Spacer(Modifier.height(4.dp))
+                        Text("${Family.nameOf(p.by)} · ${p.dateIso}", fontSize = 11.sp, color = Ink.copy(alpha = 0.5f))
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { onEdit(itemId) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Edit, null); Spacer(Modifier.size(6.dp)); Text("수정")
+                }
+                OutlinedButton(onClick = { vm.deleteItem(itemId); onBack() }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Delete, null); Spacer(Modifier.size(6.dp)); Text("삭제")
+                }
+            }
+        }
     }
 }

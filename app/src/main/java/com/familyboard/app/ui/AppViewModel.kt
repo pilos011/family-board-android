@@ -69,16 +69,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNHO)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 인생 버킷 (선일/은선, 배우자와 공유)
-    val bucketSeonil: StateFlow<List<ListItem>> =
-        board.items(com.familyboard.app.data.model.BucketBoards.of("seonil"))
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val bucketEunseon: StateFlow<List<ListItem>> =
-        board.items(com.familyboard.app.data.model.BucketBoards.of("eunseon"))
+    // 인생 버킷 (부부 공용, 단일 보드)
+    val bucketItems: StateFlow<List<ListItem>> =
+        board.items(com.familyboard.app.data.model.BucketBoards.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun bucketItemsFor(memberId: String): StateFlow<List<ListItem>> =
-        if (memberId == "eunseon") bucketEunseon else bucketSeonil
+    fun bucketById(id: String): ListItem? = bucketItems.value.firstOrNull { it.id == id }
 
     /** 사용 가능한 앱 업데이트(없으면 null) */
     val updateInfo: MutableStateFlow<UpdateInfo?> = MutableStateFlow(null)

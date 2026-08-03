@@ -191,6 +191,7 @@ fun AddEventScreen(
         topBar = {
             TopAppBar(
                 title = { Text(if (editing != null) "일정 수정" else "일정 추가") },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
                 },

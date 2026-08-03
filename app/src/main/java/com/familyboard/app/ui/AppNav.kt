@@ -29,8 +29,10 @@ import com.familyboard.app.ui.calendar.AddEventScreen
 import com.familyboard.app.ui.calendar.CalendarScreen
 import com.familyboard.app.ui.calendar.ViewEventScreen
 import com.familyboard.app.ui.allowance.AllowanceScreen
+import com.familyboard.app.ui.bucket.BucketAddScreen
 import com.familyboard.app.ui.bucket.BucketHomeScreen
 import com.familyboard.app.ui.bucket.BucketListScreen
+import com.familyboard.app.ui.bucket.BucketViewScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.lists.ListsScreen
 import com.familyboard.app.ui.onboarding.OnboardingScreen
@@ -46,6 +48,11 @@ private object Routes {
     const val LIST_DETAIL = "listDetail/{board}"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
+    const val BUCKET_ADD = "bucketAdd"
+    const val BUCKET_EDIT = "bucketEdit/{itemId}"
+    const val BUCKET_VIEW = "bucketView/{itemId}"
+    fun bucketEdit(itemId: String) = "bucketEdit/$itemId"
+    fun bucketView(itemId: String) = "bucketView/$itemId"
     const val SEARCH = "search"
     fun addEvent(startIso: String, endIso: String) = "addEvent/$startIso/$endIso"
     fun editEvent(eventId: String) = "editEvent/$eventId"
@@ -133,7 +140,25 @@ private fun MainScaffold(vm: AppViewModel) {
             composable(Routes.BUCKET_LIST) {
                 BucketListScreen(
                     vm = vm,
+                    onOpenAdd = { nav.navigate(Routes.BUCKET_ADD) },
+                    onOpenView = { id -> nav.navigate(Routes.bucketView(id)) },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.BUCKET_ADD) {
+                BucketAddScreen(vm = vm, currentMemberId = currentMemberId, editId = null,
+                    onBack = { nav.popBackStack() })
+            }
+            composable(Routes.BUCKET_EDIT) { entry ->
+                BucketAddScreen(vm = vm, currentMemberId = currentMemberId,
+                    editId = entry.arguments?.getString("itemId"), onBack = { nav.popBackStack() })
+            }
+            composable(Routes.BUCKET_VIEW) { entry ->
+                BucketViewScreen(
+                    vm = vm,
+                    itemId = entry.arguments?.getString("itemId").orEmpty(),
                     currentMemberId = currentMemberId,
+                    onEdit = { id -> nav.navigate(Routes.bucketEdit(id)) },
                     onBack = { nav.popBackStack() },
                 )
             }
