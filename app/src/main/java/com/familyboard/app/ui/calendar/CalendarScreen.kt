@@ -348,6 +348,10 @@ private fun MonthGrid(
                 repeat(7) { d ->
                     val idx = w * 7 + d
                     val date = gridStart.plusDays(idx.toLong())
+                    val hName = holidays[date.toString()]
+                    // 같은 이름의 공휴일이 연달아 있으면 사용자 일정처럼 하나의 막대로 이어 그림
+                    val hSpanStart = hName != null && holidays[date.minusDays(1).toString()] != hName
+                    val hSpanEnd = hName != null && holidays[date.plusDays(1).toString()] != hName
                     DayCell(
                         date = date,
                         inMonth = date.month == month.month,
@@ -356,7 +360,9 @@ private fun MonthGrid(
                         inDragRange = idx in dragLo..dragHi,
                         dayOfWeek = d,
                         dayEvents = eventsByDate[date.toString()].orEmpty(),
-                        holidayName = holidays[date.toString()],
+                        holidayName = hName,
+                        holidaySpanStart = hSpanStart,
+                        holidaySpanEnd = hSpanEnd,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -375,6 +381,8 @@ private fun DayCell(
     dayOfWeek: Int,
     dayEvents: List<DayEvent>,
     holidayName: String?,
+    holidaySpanStart: Boolean = true,
+    holidaySpanEnd: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val isHoliday = holidayName != null
@@ -411,19 +419,16 @@ private fun DayCell(
                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
                 )
             }
-            if (holidayName != null && inMonth) {
-                Text(
-                    holidayName,
-                    color = Sunday,
-                    fontSize = 8.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp),
-                    textAlign = TextAlign.Center,
+            Spacer(Modifier.height(2.dp))
+            if (holidayName != null) {
+                HolidayLabel(
+                    name = holidayName,
+                    dayOfWeek = dayOfWeek,
+                    spanStart = holidaySpanStart,
+                    spanEnd = holidaySpanEnd,
+                    dim = !inMonth,
                 )
             }
-            Spacer(Modifier.height(2.dp))
             dayEvents.take(2).forEach { EventLabel(it, dayOfWeek) }
             if (dayEvents.size > 2) {
                 Text(
@@ -443,6 +448,39 @@ private fun DayCell(
             color = if (term != null) Color(0xFF8A6D3B).copy(alpha = if (inMonth) 1f else 0.4f)
             else Color(0xFFB0B0B0).copy(alpha = if (inMonth) 1f else 0.4f),
         )
+    }
+}
+
+@Composable
+private fun HolidayLabel(name: String, dayOfWeek: Int, spanStart: Boolean, spanEnd: Boolean, dim: Boolean) {
+    // 사용자 일정 막대(EventLabel)와 동일한 방식: 회차/주 양끝에서 모서리 둥글게 → 연휴가 하나의 막대로 이어짐
+    val roundLeft = spanStart || dayOfWeek == 0
+    val roundRight = spanEnd || dayOfWeek == 6
+    val r = 4.dp
+    val shape = RoundedCornerShape(
+        topStart = if (roundLeft) r else 0.dp, bottomStart = if (roundLeft) r else 0.dp,
+        topEnd = if (roundRight) r else 0.dp, bottomEnd = if (roundRight) r else 0.dp,
+    )
+    Box(
+        Modifier.fillMaxWidth()
+            .padding(bottom = 2.dp, start = if (roundLeft) 1.dp else 0.dp, end = if (roundRight) 1.dp else 0.dp)
+            .clip(shape)
+            .background(Sunday.copy(alpha = if (dim) 0.4f else 1f))
+            .height(17.dp)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        // 이름은 막대(주 세그먼트)의 시작 칸에만
+        if (roundLeft) {
+            Text(
+                name,
+                color = Color.White,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 
