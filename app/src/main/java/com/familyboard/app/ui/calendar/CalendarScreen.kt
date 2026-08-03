@@ -2,8 +2,14 @@ package com.familyboard.app.ui.calendar
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -158,19 +164,37 @@ fun CalendarScreen(
                 onMonthClick = { showMonthPicker = true },
             )
             WeekdayHeader()
-            MonthGrid(
-                month = month,
-                selected = selected,
-                today = LocalDate.now(),
-                gridStart = gridStart,
-                eventsByDate = eventsByDate,
-                holidays = holidays,
+            AnimatedContent(
+                targetState = month,
                 modifier = Modifier.weight(1f),
-                onSelect = { selected = it; sheetOpen = true },
-                onAddRange = { s, e -> onAddEvent(s, e) },
-                onPrevMonth = { month = month.minusMonths(1) },
-                onNextMonth = { month = month.plusMonths(1) },
-            )
+                transitionSpec = {
+                    // 다음 달이면 왼쪽으로, 이전 달이면 오른쪽으로 슬라이드
+                    val dir = if (targetState > initialState) 1 else -1
+                    (slideInHorizontally(tween(320)) { w -> dir * w } + fadeIn(tween(320)))
+                        .togetherWith(slideOutHorizontally(tween(320)) { w -> -dir * w } + fadeOut(tween(320)))
+                },
+                label = "monthSlide",
+            ) { m ->
+                val gStart = remember(m) {
+                    val f = m.atDay(1); f.minusDays((f.dayOfWeek.value % 7).toLong())
+                }
+                val evByDate = remember(events, m) {
+                    RecurrenceExpander.expand(events, gStart, gStart.plusDays(41))
+                }
+                MonthGrid(
+                    month = m,
+                    selected = selected,
+                    today = LocalDate.now(),
+                    gridStart = gStart,
+                    eventsByDate = evByDate,
+                    holidays = holidays,
+                    modifier = Modifier.fillMaxSize(),
+                    onSelect = { selected = it; sheetOpen = true },
+                    onAddRange = { s, e -> onAddEvent(s, e) },
+                    onPrevMonth = { month = month.minusMonths(1) },
+                    onNextMonth = { month = month.plusMonths(1) },
+                )
+            }
         }
 
         FloatingActionButton(

@@ -119,17 +119,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addEvent(event: CalendarEvent) = viewModelScope.launch {
+    fun addEvent(event: CalendarEvent, notifyTargets: List<String> = emptyList()) = viewModelScope.launch {
         board.upsertEvent(event)
-        notifyEventRegistered(event)
+        notifyEventRegistered(event, notifyTargets)
     }
 
-    /** 등록 알림: 등록자 외에, 태깅된(또는 모두) 가족에게 푸시 요청 */
-    private suspend fun notifyEventRegistered(e: CalendarEvent) {
+    /** 등록 알림: 사용자가 명시적으로 선택한 가족에게만 발송(기본은 없음, 등록자 제외). */
+    private suspend fun notifyEventRegistered(e: CalendarEvent, notifyTargets: List<String>) {
         val actor = e.createdBy
-        if (actor.isBlank()) return
-        val targets = (if (e.memberIds.contains(Family.ALL_ID)) Family.members.map { it.id } else e.memberIds)
-            .filter { it != actor }
+        val targets = notifyTargets.filter { it != actor }.distinct()
         if (targets.isEmpty()) return
         val whenText = if (e.allDay) "하루 종일" else e.startTime
         val body = listOfNotNull(

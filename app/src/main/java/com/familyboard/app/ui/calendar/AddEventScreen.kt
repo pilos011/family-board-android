@@ -121,6 +121,8 @@ fun AddEventScreen(
     var repeat by remember { mutableStateOf(editing?.repeat ?: "") }
     var lunar by remember { mutableStateOf(editing?.lunar ?: false) }
     var reminder by remember { mutableStateOf(editing?.reminder ?: "none") }
+    // 등록 시 알림 보낼 가족(선택). 기본 없음 → 아무에게도 안 보냄.
+    var notifyIds by remember { mutableStateOf(emptyList<String>()) }
     var pick by remember { mutableStateOf<Pick?>(null) }
 
     var photoUrls by remember { mutableStateOf(editing?.photoUrls ?: emptyList<String>()) }
@@ -182,7 +184,7 @@ fun AddEventScreen(
             photoUrls = photoUrls,
             exdates = editing?.exdates ?: emptyList(),
         )
-        if (editing != null) vm.updateEvent(ev) else vm.addEvent(ev)
+        if (editing != null) vm.updateEvent(ev) else vm.addEvent(ev, notifyIds)
         onBack()
     }
 
@@ -257,6 +259,18 @@ fun AddEventScreen(
             Text("여러 명 선택 가능", style = MaterialTheme.typography.bodyLarge, color = Ink.copy(alpha = 0.5f))
             Spacer(Modifier.height(8.dp))
             MemberPicker(selected = memberIds, onSelect = { memberIds = it })
+
+            if (editing == null) {
+                Spacer(Modifier.height(16.dp))
+                Text("알림 보낼 가족 (선택)", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (notifyIds.isEmpty()) "선택하지 않으면 알림을 보내지 않아요"
+                    else "${notifyIds.size}명에게 등록 알림을 보냅니다",
+                    style = MaterialTheme.typography.bodyLarge, color = Ink.copy(alpha = 0.5f),
+                )
+                Spacer(Modifier.height(8.dp))
+                NotifyPicker(selected = notifyIds, onSelect = { notifyIds = it })
+            }
 
             Spacer(Modifier.height(8.dp))
             Divider()
@@ -462,6 +476,44 @@ private fun MemberPicker(selected: List<String>, onSelect: (List<String>) -> Uni
                 onSelect(if (cur.isEmpty()) listOf(Family.ALL_ID) else cur)
             }
         }
+    }
+}
+
+@Composable
+private fun NotifyPicker(selected: List<String>, onSelect: (List<String>) -> Unit) {
+    val allIds = remember { Family.members.map { it.id } }
+    val allOn = selected.isNotEmpty() && allIds.all { selected.contains(it) }
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        NotifyChip("모두", allOn) { onSelect(if (allOn) emptyList() else allIds) }
+        Family.members.forEach { m ->
+            NotifyChip(m.name, selected.contains(m.id)) {
+                val cur = selected.toMutableList()
+                if (cur.contains(m.id)) cur.remove(m.id) else cur.add(m.id)
+                onSelect(cur)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotifyChip(label: String, on: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(16.dp))
+            .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Default.Notifications, null,
+            tint = if (on) Color.White else Color(0xFFAAAAAA), modifier = Modifier.size(15.dp),
+        )
+        Spacer(Modifier.size(4.dp))
+        Text(label, color = if (on) Color.White else Color(0xFF555555),
+            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
