@@ -176,13 +176,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun settleAllowance(targetMemberId: String, items: List<ListItem>) = viewModelScope.launch {
         if (items.isEmpty()) return@launch
         val actor = currentMemberId.value.orEmpty()
-        val amount = items.sumOf { it.amount }
+        val total = items.sumOf { it.amount }
         val parent = when (actor) {
             "eunseon" -> "엄마"
             "seonil" -> "아빠"
             else -> Family.nameOf(actor)
         }
-        val msg = "${parent}의 용돈 정산 %,d원이 완료 되었습니다. 확인해보세요.".format(amount)
+        val msg = buildString {
+            append("${parent}가 아래 항목을 정산했어요.\n")
+            append("\n")
+            items.forEach {
+                append("\t\t${it.text.ifBlank { "항목" }} %,d원\n".format(it.amount))
+            }
+            append("\t\t---------------\n")
+            append("\t\t합계 : %,d원\n".format(total))
+            append("\n")
+            append("❤️ 사랑해 아들~")
+        }
         runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
         items.forEach { board.deleteItem(it.id) }
     }
@@ -201,6 +211,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val total = items.sumOf { it.amount }
         val body = buildString {
             append("${childName}에게서 용돈 정산 요청이 왔습니다.\n")
+            append("\n")
             items.forEach {
                 append("\t\t${it.text.ifBlank { "항목" }} %,d원\n".format(it.amount))
             }
