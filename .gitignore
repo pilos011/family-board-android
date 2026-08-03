@@ -1,0 +1,23 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# 빌드 산출물
+app/build/
+build/
+
+# Firebase 비공개 설정 (레포에 올리지 말 것)
+app/google-services.json
+
+# Claude 프로젝트 메모리 (개인 토큰 포함 — 커밋 제외)
+.claude/memory/
+
+# Firebase Admin SDK 키 (서버 전용, 절대 커밋 금지)
+app/*firebase-adminsdk*.json

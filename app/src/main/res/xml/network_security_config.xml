@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 기본은 평문 차단, 헤르메스 알림 서버(HTTP)만 예외 허용 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">y.iptime.org</domain>
+    </domain-config>
+</network-security-config>

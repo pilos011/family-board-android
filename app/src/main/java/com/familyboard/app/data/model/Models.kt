@@ -1,0 +1,81 @@
+package com.familyboard.app.data.model
+
+/** 캘린더 일정. Firestore 직렬화를 위해 모든 필드에 기본값을 둔다. */
+data class CalendarEvent(
+    val id: String = "",
+    val title: String = "",
+    val startDateIso: String = "", // yyyy-MM-dd (시작일)
+    val endDateIso: String = "",   // yyyy-MM-dd (종료일, 여러 날 일정 지원)
+    val allDay: Boolean = false,
+    val startTime: String = "",    // "HH:mm" 24시간 (allDay=false 일 때)
+    val endTime: String = "",
+    val memberIds: List<String> = listOf("all"), // 담당자(복수). ["all"] = 가족 공용
+    val repeat: String = "",       // "" | "weekly" | "monthly" | "yearly"
+    val lunar: Boolean = false,    // 음력 기준 일정 여부
+    val reminder: String = "none", // 알림: none/atTime/5m/15m/30m/1h/2h/1d/2d
+    val createdBy: String = "",    // 등록한 멤버 id (등록 알림에서 본인 제외용)
+    val description: String = "",  // 상세 내용(최대 300자, URL 포함 가능)
+    val photoUrls: List<String> = emptyList(), // 첨부 사진 URL(최대 5장)
+    val exdates: List<String> = emptyList(),   // 반복 일정에서 제외된 날짜(yyyy-MM-dd)
+)
+
+/** 리스트(장보기/할 일/용돈 정산) 항목. */
+data class ListItem(
+    val id: String = "",
+    val text: String = "",
+    val checked: Boolean = false,
+    val board: String = "",       // BoardType.key 또는 AllowanceBoards.*
+    val createdBy: String = "",    // 등록한 member id
+    val amount: Long = 0,          // 용돈 정산 금액(원). 그 외 보드는 0
+    val memberIds: List<String> = listOf("all"), // 담당자(복수). ["all"]=공용
+)
+
+/** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */
+object AllowanceBoards {
+    const val JUNYOUNG = "allowance_junyoung"
+    const val JUNHO = "allowance_junho"
+}
+
+/** 리스트 보드 종류. */
+enum class BoardType(val key: String, val title: String) {
+    SHOPPING("shopping", "장보기"),
+    TODO("todo", "할 일");
+
+    companion object {
+        fun fromKey(key: String?): BoardType = entries.firstOrNull { it.key == key } ?: SHOPPING
+    }
+}
+
+/** 한국 공휴일 (공공데이터포털 특일정보 API). */
+data class Holiday(
+    val dateIso: String = "",
+    val name: String = "",
+)
+
+/**
+ * 알림 시점 옵션. 기본값은 알림 없음. (실제 알림 발송 스케줄링은 후속 작업)
+ * 사용자 지정은 "custom:yyyy-MM-dd" 형태로 저장되며, 해당일의 이벤트 시작 시간에 알림.
+ */
+object Reminders {
+    const val CUSTOM = "custom"
+
+    val options = listOf(
+        "none" to "알림 없음",
+        "atTime" to "이벤트 시간에",
+        "5m" to "5분 전",
+        "15m" to "15분 전",
+        "30m" to "30분 전",
+        "1h" to "1시간 전",
+        "2h" to "2시간 전",
+        "1d" to "1일 전",
+        "2d" to "2일 전",
+        CUSTOM to "사용자 지정",
+    )
+
+    fun isCustom(key: String): Boolean = key == CUSTOM || key.startsWith("custom:")
+
+    fun label(key: String): String {
+        if (key.startsWith("custom:")) return "사용자 지정 (${key.removePrefix("custom:")})"
+        return options.firstOrNull { it.first == key }?.second ?: "알림 없음"
+    }
+}

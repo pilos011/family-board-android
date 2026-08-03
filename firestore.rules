@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// 가족보드 Firestore 보안 규칙
+// 익명 인증(Anonymous Auth)을 포함해 "인증된 요청"만 읽기/쓰기 허용.
+// 앱이 시작 시 자동으로 익명 로그인하므로 가족은 로그인 UI 없이 사용 가능.
+// 공개 API로 인증 없이 접근하는 것은 차단된다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // events / items 컬렉션: 인증된(익명 포함) 요청만 접근
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

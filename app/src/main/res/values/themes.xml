@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 가 실제 UI/색상을 그리므로 XML 테마는 창 기본값만 담당 (NoActionBar) -->
+    <style name="Theme.FamilyBoard" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

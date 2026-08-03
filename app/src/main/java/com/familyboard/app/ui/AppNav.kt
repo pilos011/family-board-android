@@ -1,0 +1,154 @@
+package com.familyboard.app.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.familyboard.app.ui.calendar.AddEventScreen
+import com.familyboard.app.ui.calendar.CalendarScreen
+import com.familyboard.app.ui.allowance.AllowanceScreen
+import com.familyboard.app.ui.lists.ListDetailScreen
+import com.familyboard.app.ui.lists.ListsScreen
+import com.familyboard.app.ui.onboarding.OnboardingScreen
+import com.familyboard.app.ui.search.SearchScreen
+
+private object Routes {
+    const val CALENDAR = "calendar"
+    const val LISTS = "lists"
+    const val ALLOWANCE = "allowance"
+    const val ADD_EVENT = "addEvent/{startIso}/{endIso}"
+    const val EDIT_EVENT = "editEvent/{eventId}"
+    const val LIST_DETAIL = "listDetail/{board}"
+    const val SEARCH = "search"
+    fun addEvent(startIso: String, endIso: String) = "addEvent/$startIso/$endIso"
+    fun editEvent(eventId: String) = "editEvent/$eventId"
+    fun listDetail(board: String) = "listDetail/$board"
+}
+
+@Composable
+fun AppRoot() {
+    val vm: AppViewModel = viewModel()
+    val userState by vm.userState.collectAsStateWithLifecycle()
+
+    when (userState) {
+        UserState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+        UserState.NeedSelect -> OnboardingScreen(onSelected = vm::selectMember)
+        is UserState.Selected -> MainScaffold(vm)
+    }
+}
+
+@Composable
+private fun MainScaffold(vm: AppViewModel) {
+    val nav = rememberNavController()
+    val backStack by nav.currentBackStackEntryAsState()
+    val route = backStack?.destination?.route
+    val showBar = route == Routes.CALENDAR || route == Routes.LISTS || route == Routes.ALLOWANCE
+    val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
+
+    Scaffold(
+        bottomBar = {
+            if (showBar) {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = route == Routes.CALENDAR,
+                        onClick = { nav.navigateTab(Routes.CALENDAR) },
+                        icon = { Icon(Icons.Default.CalendarMonth, null) },
+                        label = { Text("캘린더") },
+                    )
+                    NavigationBarItem(
+                        selected = route == Routes.LISTS,
+                        onClick = { nav.navigateTab(Routes.LISTS) },
+                        icon = { Icon(Icons.Default.Checklist, null) },
+                        label = { Text("리스트") },
+                    )
+                    NavigationBarItem(
+                        selected = route == Routes.ALLOWANCE,
+                        onClick = { nav.navigateTab(Routes.ALLOWANCE) },
+                        icon = { Icon(Icons.Default.Savings, null) },
+                        label = { Text("용돈 정산") },
+                    )
+                }
+            }
+        },
+    ) { inner ->
+        NavHost(
+            navController = nav,
+            startDestination = Routes.CALENDAR,
+            modifier = Modifier.padding(inner),
+        ) {
+            composable(Routes.CALENDAR) {
+                CalendarScreen(
+                    vm = vm,
+                    onAddEvent = { s, e -> nav.navigate(Routes.addEvent(s.toString(), e.toString())) },
+                    onEditEvent = { id -> nav.navigate(Routes.editEvent(id)) },
+                    onSearch = { nav.navigate(Routes.SEARCH) },
+                )
+            }
+            composable(Routes.SEARCH) {
+                SearchScreen(vm = vm, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.LISTS) {
+                ListsScreen(vm = vm, onOpenBoard = { nav.navigate(Routes.listDetail(it)) })
+            }
+            composable(Routes.ALLOWANCE) {
+                AllowanceScreen(vm = vm)
+            }
+            composable(Routes.ADD_EVENT) { entry ->
+                AddEventScreen(
+                    vm = vm,
+                    startIso = entry.arguments?.getString("startIso").orEmpty(),
+                    endIso = entry.arguments?.getString("endIso").orEmpty(),
+                    defaultMemberId = currentMemberId,
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.EDIT_EVENT) { entry ->
+                AddEventScreen(
+                    vm = vm,
+                    startIso = "",
+                    endIso = "",
+                    defaultMemberId = currentMemberId,
+                    onBack = { nav.popBackStack() },
+                    editEventId = entry.arguments?.getString("eventId"),
+                )
+            }
+            composable(Routes.LIST_DETAIL) { entry ->
+                ListDetailScreen(
+                    vm = vm,
+                    boardKey = entry.arguments?.getString("board").orEmpty(),
+                    currentMemberId = currentMemberId,
+                    onBack = { nav.popBackStack() },
+                )
+            }
+        }
+    }
+}
+
+private fun androidx.navigation.NavController.navigateTab(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}

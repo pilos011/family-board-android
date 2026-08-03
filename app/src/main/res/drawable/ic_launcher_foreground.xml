@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 가족 보드 느낌: 집 + 체크 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30 L74,46 L74,74 L60,74 L60,60 L48,60 L48,74 L34,74 L34,46 Z" />
+    <path
+        android:fillColor="#FFD43B"
+        android:pathData="M44,52 l4,4 l10,-10 l3,3 l-13,13 l-7,-7 z" />
+</vector>
