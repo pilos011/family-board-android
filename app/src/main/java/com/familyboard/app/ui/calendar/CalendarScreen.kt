@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -59,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -72,6 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -153,6 +156,8 @@ fun CalendarScreen(
                 modifier = Modifier.weight(1f),
                 onSelect = { selected = it; sheetOpen = true },
                 onAddRange = { s, e -> onAddEvent(s, e) },
+                onPrevMonth = { month = month.minusMonths(1) },
+                onNextMonth = { month = month.plusMonths(1) },
             )
         }
 
@@ -297,10 +302,14 @@ private fun MonthGrid(
     modifier: Modifier = Modifier,
     onSelect: (LocalDate) -> Unit,
     onAddRange: (LocalDate, LocalDate) -> Unit,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     var dragAnchor by remember { mutableStateOf<Int?>(null) }
     var dragCurrent by remember { mutableStateOf<Int?>(null) }
+    // 드래그로 정한 기간(상대 인덱스 s..e). 손을 떼면 바로 추가하지 않고 확인 버튼을 띄운다.
+    var pendingRange by remember(gridStart) { mutableStateOf<Pair<Int, Int>?>(null) }
 
     fun cellAt(off: Offset): Int {
         if (size.width == 0 || size.height == 0) return 0
@@ -309,63 +318,122 @@ private fun MonthGrid(
         return row * 7 + col
     }
 
-    val dragLo = if (dragAnchor != null && dragCurrent != null) minOf(dragAnchor!!, dragCurrent!!) else -1
-    val dragHi = if (dragAnchor != null && dragCurrent != null) maxOf(dragAnchor!!, dragCurrent!!) else -2
+    // 하이라이트 구간: 진행 중 드래그 우선, 없으면 확인 대기 중인 pendingRange
+    val hlLo: Int
+    val hlHi: Int
+    if (dragAnchor != null && dragCurrent != null) {
+        hlLo = minOf(dragAnchor!!, dragCurrent!!); hlHi = maxOf(dragAnchor!!, dragCurrent!!)
+    } else if (pendingRange != null) {
+        hlLo = pendingRange!!.first; hlHi = pendingRange!!.second
+    } else { hlLo = -1; hlHi = -2 }
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .onSizeChanged { size = it }
-            .pointerInput(gridStart, size) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val startIdx = cellAt(down.position)
-                    dragAnchor = startIdx
-                    dragCurrent = startIdx
-                    var dragged = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull()
-                        if (change == null || !change.pressed) break
-                        val idx = cellAt(change.position)
-                        if (idx != startIdx) { dragged = true; change.consume() }
-                        dragCurrent = idx
+    Box(modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .onSizeChanged { size = it }
+                .pointerInput(gridStart, size) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startIdx = cellAt(down.position)
+                        dragAnchor = startIdx
+                        dragCurrent = startIdx
+                        var dragged = false
+                        var twoFinger = false
+                        var panDx = 0f
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+                            if (pressed.size >= 2 && !twoFinger) {
+                                // 두 손가락 감지 → 월 이동 모드로 전환(범위 선택 취소)
+                                twoFinger = true
+                                dragAnchor = null; dragCurrent = null; panDx = 0f
+                            }
+                            if (twoFinger) {
+                                val c = pressed.first()
+                                panDx += c.position.x - c.previousPosition.x
+                                event.changes.forEach { it.consume() }
+                            } else {
+                                val change = event.changes.firstOrNull() ?: break
+                                val idx = cellAt(change.position)
+                                if (idx != startIdx) { dragged = true; change.consume() }
+                                dragCurrent = idx
+                            }
+                        }
+                        if (twoFinger) {
+                            dragAnchor = null; dragCurrent = null
+                            val threshold = (if (size.width > 0) size.width else 1000) * 0.12f
+                            when {
+                                panDx <= -threshold -> onNextMonth()
+                                panDx >= threshold -> onPrevMonth()
+                            }
+                        } else {
+                            val a = dragAnchor; val b = dragCurrent
+                            dragAnchor = null; dragCurrent = null
+                            if (a != null && b != null) {
+                                val s = minOf(a, b); val e = maxOf(a, b)
+                                if (!dragged || s == e) { pendingRange = null; onSelect(gridStart.plusDays(s.toLong())) }
+                                else pendingRange = s to e   // 바로 추가하지 않고 확인 버튼 표시
+                            }
+                        }
                     }
-                    val a = dragAnchor
-                    val b = dragCurrent
-                    dragAnchor = null
-                    dragCurrent = null
-                    if (a != null && b != null) {
-                        val s = minOf(a, b); val e = maxOf(a, b)
-                        if (!dragged || s == e) onSelect(gridStart.plusDays(s.toLong()))
-                        else onAddRange(gridStart.plusDays(s.toLong()), gridStart.plusDays(e.toLong()))
+                },
+        ) {
+            repeat(6) { w ->
+                Row(Modifier.fillMaxWidth().weight(1f)) {
+                    repeat(7) { d ->
+                        val idx = w * 7 + d
+                        val date = gridStart.plusDays(idx.toLong())
+                        val hName = holidays[date.toString()]
+                        // 같은 이름의 공휴일이 연달아 있으면 사용자 일정처럼 하나의 막대로 이어 그림
+                        val hSpanStart = hName != null && holidays[date.minusDays(1).toString()] != hName
+                        val hSpanEnd = hName != null && holidays[date.plusDays(1).toString()] != hName
+                        DayCell(
+                            date = date,
+                            inMonth = date.month == month.month,
+                            isToday = date == today,
+                            isSelected = date == selected,
+                            inDragRange = idx in hlLo..hlHi,
+                            dayOfWeek = d,
+                            dayEvents = eventsByDate[date.toString()].orEmpty(),
+                            holidayName = hName,
+                            holidaySpanStart = hSpanStart,
+                            holidaySpanEnd = hSpanEnd,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
                     }
                 }
-            },
-    ) {
-        repeat(6) { w ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(7) { d ->
-                    val idx = w * 7 + d
-                    val date = gridStart.plusDays(idx.toLong())
-                    val hName = holidays[date.toString()]
-                    // 같은 이름의 공휴일이 연달아 있으면 사용자 일정처럼 하나의 막대로 이어 그림
-                    val hSpanStart = hName != null && holidays[date.minusDays(1).toString()] != hName
-                    val hSpanEnd = hName != null && holidays[date.plusDays(1).toString()] != hName
-                    DayCell(
-                        date = date,
-                        inMonth = date.month == month.month,
-                        isToday = date == today,
-                        isSelected = date == selected,
-                        inDragRange = idx in dragLo..dragHi,
-                        dayOfWeek = d,
-                        dayEvents = eventsByDate[date.toString()].orEmpty(),
-                        holidayName = hName,
-                        holidaySpanStart = hSpanStart,
-                        holidaySpanEnd = hSpanEnd,
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                    )
-                }
+            }
+        }
+
+        // 드래그로 정한 기간 확인(추가/취소) — 뗀 자리(마지막 행) 근처에 표시
+        pendingRange?.let { (s, e) ->
+            val sDate = gridStart.plusDays(s.toLong())
+            val eDate = gridStart.plusDays(e.toLong())
+            val cellH = if (size.height > 0) size.height / 6 else 0
+            val midRow = ((s / 7) + (e / 7)) / 2
+            val yPx = (midRow * cellH + cellH / 2)
+            Row(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .offset { IntOffset(0, yPx) }
+                    .shadow(6.dp, RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White)
+                    .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "${sDate.monthValue}/${sDate.dayOfMonth} ~ ${eDate.monthValue}/${eDate.dayOfMonth}",
+                    color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.size(6.dp))
+                TextButton(onClick = { pendingRange = null }) { Text("취소") }
+                Button(onClick = {
+                    pendingRange = null
+                    onAddRange(sDate, eDate)
+                }) { Text("추가") }
             }
         }
     }
