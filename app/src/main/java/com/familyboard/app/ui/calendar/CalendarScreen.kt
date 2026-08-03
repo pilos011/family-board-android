@@ -466,19 +466,19 @@ private fun HolidayLabel(name: String, dayOfWeek: Int, spanStart: Boolean, spanE
             .padding(bottom = 2.dp, start = if (roundLeft) 1.dp else 0.dp, end = if (roundRight) 1.dp else 0.dp)
             .clip(shape)
             .background(Sunday.copy(alpha = if (dim) 0.4f else 1f))
-            .height(17.dp)
+            .height(14.dp)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        // 이름은 막대(주 세그먼트)의 시작 칸에만
+        // 이름은 막대(주 세그먼트)의 시작 칸에만 (폰트 크기는 원래대로)
         if (roundLeft) {
             Text(
                 name,
                 color = Color.White,
-                fontSize = 11.sp,
+                fontSize = 8.5.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
             )
         }
     }
