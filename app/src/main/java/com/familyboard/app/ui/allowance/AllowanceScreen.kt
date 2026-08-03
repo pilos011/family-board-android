@@ -134,7 +134,8 @@ private fun AllowanceSection(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     modifier = Modifier.height(34.dp),
                 ) { Text("정산", fontWeight = FontWeight.SemiBold) }
-            } else {
+            } else if (currentMemberId == memberId) {
+                // 자녀는 본인 섹션에서만 조르기 가능
                 // 전체 체크 토글: 모두 체크돼 있으면 해제, 아니면 전체 체크
                 val allChecked = items.isNotEmpty() && items.all { it.checked }
                 IconButton(
