@@ -10,6 +10,8 @@ import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.data.Family
 import com.familyboard.app.notif.NotifyApi
 import com.familyboard.app.notif.ReminderScheduler
+import com.familyboard.app.notif.UpdateChecker
+import com.familyboard.app.notif.UpdateInfo
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -67,6 +69,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNHO)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 사용 가능한 앱 업데이트(없으면 null) */
+    val updateInfo: MutableStateFlow<UpdateInfo?> = MutableStateFlow(null)
+
     /** dateIso -> 공휴일명 */
     val holidays: MutableStateFlow<Map<String, String>> = MutableStateFlow(emptyMap())
     private val loadedMonths = mutableSetOf<String>()
@@ -87,6 +92,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+        // 앱 업데이트 확인
+        viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
     }
 
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> =
