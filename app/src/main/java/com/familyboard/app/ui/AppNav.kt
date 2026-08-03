@@ -29,6 +29,8 @@ import com.familyboard.app.ui.calendar.AddEventScreen
 import com.familyboard.app.ui.calendar.CalendarScreen
 import com.familyboard.app.ui.calendar.ViewEventScreen
 import com.familyboard.app.ui.allowance.AllowanceScreen
+import com.familyboard.app.ui.bucket.BucketHomeScreen
+import com.familyboard.app.ui.bucket.BucketListScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.lists.ListsScreen
 import com.familyboard.app.ui.onboarding.OnboardingScreen
@@ -42,6 +44,8 @@ private object Routes {
     const val EDIT_EVENT = "editEvent/{eventId}"
     const val VIEW_EVENT = "viewEvent/{eventId}/{dateIso}"
     const val LIST_DETAIL = "listDetail/{board}"
+    const val BUCKET_HOME = "bucketHome"
+    const val BUCKET_LIST = "bucketList"
     const val SEARCH = "search"
     fun addEvent(startIso: String, endIso: String) = "addEvent/$startIso/$endIso"
     fun editEvent(eventId: String) = "editEvent/$eventId"
@@ -112,7 +116,26 @@ private fun MainScaffold(vm: AppViewModel) {
                 SearchScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable(Routes.LISTS) {
-                ListsScreen(vm = vm, onOpenBoard = { nav.navigate(Routes.listDetail(it)) })
+                ListsScreen(
+                    vm = vm,
+                    onOpenBoard = { nav.navigate(Routes.listDetail(it)) },
+                    onOpenBucket = { nav.navigate(Routes.BUCKET_HOME) },
+                )
+            }
+            composable(Routes.BUCKET_HOME) {
+                BucketHomeScreen(
+                    vm = vm,
+                    currentMemberId = currentMemberId,
+                    onOpenList = { nav.navigate(Routes.BUCKET_LIST) },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.BUCKET_LIST) {
+                BucketListScreen(
+                    vm = vm,
+                    currentMemberId = currentMemberId,
+                    onBack = { nav.popBackStack() },
+                )
             }
             composable(Routes.ALLOWANCE) {
                 AllowanceScreen(vm = vm)

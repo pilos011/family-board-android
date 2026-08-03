@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,9 +41,12 @@ fun ListsScreen(
     vm: AppViewModel,
     modifier: Modifier = Modifier,
     onOpenBoard: (String) -> Unit,
+    onOpenBucket: () -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
+    val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
+    val showBucket = com.familyboard.app.data.BucketLife.supports(currentMemberId)
 
     Column(
         modifier
@@ -69,6 +73,36 @@ fun ListsScreen(
                 icon = Icons.Default.CheckCircle,
                 modifier = Modifier.weight(1f),
             ) { onOpenBoard(BoardType.TODO.key) }
+        }
+        if (showBucket) {
+            Spacer(Modifier.height(16.dp))
+            BucketWideCard(onClick = onOpenBucket)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BucketWideCard(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(96.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF845EF7)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Row(
+            Modifier.fillMaxSize().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("인생 버킷 리스트", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Spacer(Modifier.height(4.dp))
+                Text("남은 날과 꼭 하고 싶은 것들", color = Color.White.copy(alpha = 0.9f),
+                    fontWeight = FontWeight.Medium)
+            }
+            Icon(Icons.Default.Favorite, null, tint = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.height(48.dp))
         }
     }
 }
