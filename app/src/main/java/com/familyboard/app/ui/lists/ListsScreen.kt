@@ -1,5 +1,6 @@
 package com.familyboard.app.ui.lists
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,11 +26,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.familyboard.app.R
+import com.familyboard.app.data.BucketLife
 import com.familyboard.app.data.model.BoardType
 import com.familyboard.app.ui.AppViewModel
 import com.familyboard.app.ui.theme.ShoppingBlue
@@ -46,7 +51,8 @@ fun ListsScreen(
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
-    val showBucket = com.familyboard.app.data.BucketLife.supports(currentMemberId)
+    val showBucket = BucketLife.supports(currentMemberId)
+    val spouse = BucketLife.spouseName(currentMemberId)
 
     Column(
         modifier
@@ -76,33 +82,51 @@ fun ListsScreen(
         }
         if (showBucket) {
             Spacer(Modifier.height(16.dp))
-            BucketWideCard(onClick = onOpenBucket)
+            BucketWideCard(spouseName = spouse, onClick = onOpenBucket)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BucketWideCard(onClick: () -> Unit) {
+private fun BucketWideCard(spouseName: String?, onClick: () -> Unit) {
+    val title = if (spouseName != null) "${spouseName}과 함께하는\n인생 버킷 리스트" else "인생 버킷 리스트"
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(96.dp),
+        modifier = Modifier.fillMaxWidth().height(118.dp),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF845EF7)),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
-        Row(
-            Modifier.fillMaxSize().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("인생 버킷 리스트", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Spacer(Modifier.height(4.dp))
-                Text("남은 날과 꼭 하고 싶은 것들", color = Color.White.copy(alpha = 0.9f),
-                    fontWeight = FontWeight.Medium)
+        Box(Modifier.fillMaxSize()) {
+            // 배경 사진(노을·산 일러스트)
+            Image(
+                painter = painterResource(R.drawable.bucket_bg),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            // 글자 가독성용 어둡게 처리
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.horizontalGradient(
+                        listOf(Color.Black.copy(alpha = 0.45f), Color.Black.copy(alpha = 0.15f)),
+                    ),
+                ),
+            )
+            Row(
+                Modifier.fillMaxSize().padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White,
+                        fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("남은 날 안에 같이 꼭 하고 싶은 것들", color = Color.White.copy(alpha = 0.92f),
+                        fontWeight = FontWeight.Medium)
+                }
+                Icon(painterResource(R.drawable.ic_bucket), null, tint = Color.White,
+                    modifier = Modifier.height(46.dp))
             }
-            Icon(Icons.Default.Favorite, null, tint = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.height(48.dp))
         }
     }
 }

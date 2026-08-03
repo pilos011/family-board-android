@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="400dp"
+    android:height="160dp"
+    android:viewportWidth="400"
+    android:viewportHeight="160">
+
+    <!-- 노을 하늘 그라데이션 -->
+    <path android:pathData="M0,0 L400,0 L400,160 L0,160 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="0" android:endY="160">
+                <item android:offset="0" android:color="#FF5F3DC4" />
+                <item android:offset="0.55" android:color="#FFB5568A" />
+                <item android:offset="1" android:color="#FFF0976A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 해 -->
+    <path
+        android:pathData="M312,58 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0 Z"
+        android:fillColor="#FFFFE3B0"
+        android:fillAlpha="0.92" />
+
+    <!-- 뒤쪽 산 -->
+    <path
+        android:pathData="M0,160 L0,112 L80,70 L150,106 L230,58 L320,110 L400,80 L400,160 Z"
+        android:fillColor="#FF7048A8"
+        android:fillAlpha="0.55" />
+
+    <!-- 앞쪽 산 -->
+    <path
+        android:pathData="M0,160 L0,132 L90,96 L180,136 L260,100 L360,140 L400,120 L400,160 Z"
+        android:fillColor="#FF3B2A63"
+        android:fillAlpha="0.85" />
+</vector>

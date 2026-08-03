@@ -85,12 +85,14 @@ fun BucketHomeScreen(
     val items by vm.bucketItems.collectAsStateWithLifecycle()
     val featured = remember(items) { items.filter { it.mustDo }.take(10) }
     val stats = remember(me) { BucketLife.stats(me) }
+    val spouse = remember(me) { BucketLife.spouseName(me) }
+    val homeTitle = if (spouse != null) "${spouse}과 함께하는 인생 버킷 리스트" else "인생 버킷 리스트"
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text("인생 버킷 리스트") },
+                title = { Text(homeTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1) },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
@@ -124,7 +126,10 @@ fun BucketHomeScreen(
                             .background(Purple.copy(alpha = 0.10f)).padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Default.Star, null, tint = Purple, modifier = Modifier.size(18.dp))
+                        Icon(
+                            BucketIcons.of(itm.icon) ?: Icons.Default.Star,
+                            null, tint = Purple, modifier = Modifier.size(18.dp),
+                        )
                         Spacer(Modifier.size(10.dp))
                         Text(
                             itm.text,

@@ -29,7 +29,16 @@ object BucketLife {
         "eunseon" to SEONIL_DEATH.plusDays((5.8 * 365.25).toLong()), // +5.8년
     )
 
+    /** 배우자 전체 이름 (제목 표시용). */
+    private val spouseFullName = mapOf(
+        "seonil" to "안은선",   // 선일의 앱 → 배우자 은선
+        "eunseon" to "김선일",  // 은선의 앱 → 배우자 선일
+    )
+
     fun supports(memberId: String?): Boolean = memberId != null && birth.containsKey(memberId)
+
+    /** 배우자 전체 이름. 지원되지 않으면 null. */
+    fun spouseName(memberId: String?): String? = spouseFullName[memberId]
 
     fun stats(memberId: String, today: LocalDate = LocalDate.now()): LifeStats? {
         val b = birth[memberId] ?: return null
