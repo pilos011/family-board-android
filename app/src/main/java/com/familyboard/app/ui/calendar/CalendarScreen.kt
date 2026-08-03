@@ -467,11 +467,20 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit) {
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Text(event.title, style = MaterialTheme.typography.titleMedium, color = Ink)
-            Text(
-                if (time.isNotBlank()) time else "시간 미정",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Ink.copy(alpha = 0.6f),
-            )
+            val multiDay = event.endDateIso.isNotBlank() && event.endDateIso != event.startDateIso
+            if (multiDay) {
+                Text(
+                    spanText(event),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Ink.copy(alpha = 0.6f),
+                )
+            } else {
+                Text(
+                    if (time.isNotBlank()) time else "시간 미정",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Ink.copy(alpha = 0.6f),
+                )
+            }
             val extras = buildList {
                 if (event.photoUrls.isNotEmpty()) add("사진 ${event.photoUrls.size}")
                 if (event.description.isNotBlank()) add("메모")
@@ -579,6 +588,28 @@ internal fun repeatLabel(key: String): String = when (key) {
     "monthly" -> "매월"
     "yearly" -> "매년"
     else -> ""
+}
+
+/** 여러 날 일정의 "시작일시 ~ 종료일시" 문구. 하루종일/00:00 이면 시간 없이 날짜만. */
+internal fun spanText(e: CalendarEvent): String {
+    val s = runCatching { LocalDate.parse(e.startDateIso) }.getOrNull()
+    val en = runCatching { LocalDate.parse(e.endDateIso) }.getOrNull()
+    if (s == null || en == null) return dateRange(e)
+    fun d(x: LocalDate) = "${x.monthValue}월 ${x.dayOfMonth}일"
+    val noTime = e.allDay || (isZeroTime(e.startTime) && isZeroTime(e.endTime))
+    return if (noTime) "${d(s)} ~ ${d(en)}"
+    else "${d(s)} ${koTime(e.startTime)} ~ ${d(en)} ${koTime(e.endTime)}"
+}
+
+private fun isZeroTime(t: String): Boolean = t.isBlank() || t == "00:00"
+
+private fun koTime(hhmm: String): String {
+    val p = hhmm.split(":")
+    if (p.size < 2) return ""
+    val h = p[0].toIntOrNull() ?: return ""
+    val ampm = if (h < 12) "오전" else "오후"
+    val h12 = if (h % 12 == 0) 12 else h % 12
+    return "$ampm $h12:${p[1]}"
 }
 
 internal fun dateRange(e: CalendarEvent): String =
