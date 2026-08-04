@@ -133,13 +133,19 @@ class EmergencyActivity : ComponentActivity() {
     private fun shareLocation() {
         lifecycleScope.launch {
             val loc = fetchLocation()
-            if (loc == null) { toast("위치를 가져오지 못했어요"); return@launch }
             if (testMode) {
                 // 혼자 테스트: 내 폰에 '위치 공유됨' 알림을 띄우고, 탭하면 지도앱으로 연다.
-                postLocalLocation(loc.latitude, loc.longitude)
-                toast("테스트: 위치 알림을 보냈어요. 알림을 탭해 지도로 확인하세요")
+                // 실제 위치를 못 찾아도 예시 좌표로 흐름을 확인할 수 있게 한다.
+                val lat = loc?.latitude ?: 37.5665
+                val lng = loc?.longitude ?: 126.9780
+                postLocalLocation(lat, lng)
+                toast(
+                    if (loc != null) "테스트: 위치 알림을 보냈어요. 알림을 탭해 지도로 확인하세요"
+                    else "테스트: 실제 위치를 못 찾아 예시 좌표로 표시했어요. 알림을 탭하세요"
+                )
                 return@launch
             }
+            if (loc == null) { toast("위치를 가져오지 못했어요"); return@launch }
             val me = CurrentUserStore(applicationContext).currentMemberId.first().orEmpty()
             runCatching {
                 NotifyApi.notifyData(
