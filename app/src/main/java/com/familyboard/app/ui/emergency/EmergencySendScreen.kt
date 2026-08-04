@@ -1,6 +1,5 @@
 package com.familyboard.app.ui.emergency
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,7 +29,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -157,29 +155,6 @@ fun EmergencySendScreen(
             ) {
                 Icon(Icons.Default.Send, null); Spacer(Modifier.size(8.dp))
                 Text("빠른 연락 요청 보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = {
-                    // 혼자 테스트: FCM 없이 내 폰에 전체화면을 바로 띄워본다(보낸이=배우자로 가정)
-                    val spouse = when (currentMemberId) {
-                        "seonil" -> "eunseon"; "eunseon" -> "seonil"; else -> currentMemberId ?: "seonil"
-                    }
-                    context.startActivity(
-                        Intent(context, EmergencyActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            putExtra(EmergencyActivity.EXTRA_SENDER, spouse)
-                            putExtra(EmergencyActivity.EXTRA_MESSAGE, buildBody(message, wantLoc))
-                            putExtra(EmergencyActivity.EXTRA_WANT_LOC, wantLoc)
-                            putExtra(EmergencyActivity.EXTRA_TEST, true)
-                        }
-                    )
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Text("테스트: 내 폰에 전체화면 미리보기", fontWeight = FontWeight.Medium)
             }
         }
     }
