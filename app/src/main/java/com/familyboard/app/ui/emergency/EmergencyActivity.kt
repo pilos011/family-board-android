@@ -3,8 +3,10 @@ package com.familyboard.app.ui.emergency
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
@@ -44,6 +46,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Image
@@ -77,12 +82,21 @@ class EmergencyActivity : ComponentActivity() {
 
     private var testMode = false
 
+    // 시스템 글자 크기와 무관하게 항상 기본(1.0)으로 강제
+    override fun attachBaseContext(newBase: Context) {
+        val config = Configuration(newBase.resources.configuration)
+        config.fontScale = 1.0f
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
+
     private val locPermLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) shareLocation() else toast("위치 권한이 필요해요")
         }
 
     private var senderId: String = ""
+    // 화면에 표시할 현재 긴급 내용(재수신 시 onNewIntent 로 갱신)
+    private var ui by mutableStateOf(Triple("", "", false))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,17 +113,13 @@ class EmergencyActivity : ComponentActivity() {
             )
         }
 
-        senderId = intent.getStringExtra(EXTRA_SENDER).orEmpty()
-        val message = intent.getStringExtra(EXTRA_MESSAGE).orEmpty()
-        val wantLoc = intent.getBooleanExtra(EXTRA_WANT_LOC, false)
-        testMode = intent.getBooleanExtra(EXTRA_TEST, false)
-        // 전체화면을 띄웠으니 상태바의 긴급 알림은 정리
-        androidx.core.app.NotificationManagerCompat.from(this).cancel(9001)
+        applyIntent(intent)
         vibrateAlarm()
 
         setContent {
+            val (sender, message, wantLoc) = ui
             WaitingContent(
-                senderName = Family.nameOf(senderId),
+                senderName = Family.nameOf(sender),
                 message = message,
                 showLocation = wantLoc,
                 onCall = { callSender() },
@@ -117,6 +127,24 @@ class EmergencyActivity : ComponentActivity() {
                 onClose = { finish() },
             )
         }
+    }
+
+    // 이미 떠 있는 상태(singleTask)에서 새 긴급이 오면 내용을 교체하고 다시 진동
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyIntent(intent)
+        vibrateAlarm()
+    }
+
+    /** 인텐트에서 발신자/메시지/위치요청을 읽어 상태 갱신 + 상태바 긴급 알림 정리 */
+    private fun applyIntent(intent: Intent) {
+        senderId = intent.getStringExtra(EXTRA_SENDER).orEmpty()
+        val message = intent.getStringExtra(EXTRA_MESSAGE).orEmpty()
+        val wantLoc = intent.getBooleanExtra(EXTRA_WANT_LOC, false)
+        testMode = intent.getBooleanExtra(EXTRA_TEST, false)
+        androidx.core.app.NotificationManagerCompat.from(this).cancel(9001)
+        ui = Triple(senderId, message, wantLoc)
     }
 
     private fun callSender() {

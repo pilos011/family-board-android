@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -21,6 +22,14 @@ import com.familyboard.app.ui.AppRoot
 import com.familyboard.app.ui.theme.FamilyBoardTheme
 
 class MainActivity : ComponentActivity() {
+
+    // 시스템 글자 크기(폰트 스케일)와 무관하게 앱 내부는 항상 '기본(1.0)'으로 강제.
+    // (은선폰처럼 시스템 글자 크기를 최대로 둔 경우 UI가 넘치는 문제 방지)
+    override fun attachBaseContext(newBase: Context) {
+        val config = Configuration(newBase.resources.configuration)
+        config.fontScale = 1.0f
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
 
     // 시작 시 필요한 권한을 순차로 요청 (알림 → 배터리 최적화 예외 → 전체화면 알림)
     private var permStep = 0
