@@ -113,11 +113,12 @@ fun HomeScreen(
 
     val checkedNotices = remember(notices) { notices.filter { it.checked }.take(4) }
 
-    // 일정 보드: 올해 안(오늘 한 달 전 ~ 12/31)에서 지난 2개 + 다가오는 4개
+    // 일정 보드: 롤링 윈도우(오늘 한 달 전 ~ 3개월 후)에서 지난 2개 + 다가오는 4개.
+    // 고정 연말(12/31) 대신 롤링으로 두어 연말에도 내년 초 일정이 "다가오는 일정"에 보이게 함.
     val schedule = remember(events, today) {
-        val yearEnd = LocalDate.of(today.year, 12, 31)
+        val winEnd = today.plusMonths(3)
         val winStart = today.minusMonths(1)
-        val occ = RecurrenceExpander.expand(events, winStart, yearEnd)
+        val occ = RecurrenceExpander.expand(events, winStart, winEnd)
             .flatMap { (dateStr, day) ->
                 val d = runCatching { LocalDate.parse(dateStr) }.getOrNull()
                 if (d == null) emptyList() else day.filter { it.spanStart }.map { d to it.event }
@@ -251,7 +252,7 @@ private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit) {
     }
 }
 
-/** 업데이트 있을 때 빨간 종 아이콘. 30초마다 흔들린다. */
+/** 업데이트 있을 때 빨간 종 아이콘. 4초마다 흔들린다. */
 @Composable
 private fun UpdateBell(onClick: () -> Unit) {
     val rot = remember { Animatable(0f) }
@@ -451,6 +452,8 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
                 Spacer(Modifier.height(10.dp))
                 Text("주요 일정", color = ChalkSoft, fontSize = 12.sp, letterSpacing = 2.sp)
                 Spacer(Modifier.height(8.dp))
+                // NOTE: 준호 수능(제목이 정확히 "준호 수능"인 D-Day) 전용 맞춤 박스.
+                // 아래 시험 일정은 해당 연도 상수라 매년(수능일 발표 후) 수동 갱신 필요.
                 ExamRow("9월 모의평가", "9/2 (수)", false)
                 ExamRow("응시원서 현장 접수", "8/24 ~ 9/4", false)
                 ExamRow("수능 시험일", "11/19 (목)", true)

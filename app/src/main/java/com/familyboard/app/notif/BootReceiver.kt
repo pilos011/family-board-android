@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.familyboard.app.FamilyBoardApp
+import com.familyboard.app.data.model.DDayBoard
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +43,7 @@ class BootReceiver : BroadcastReceiver() {
                         ReminderScheduler.rearm(app, events, mid)
                     }
                     runCatching {
-                        val dday = container.boardRepository.items("dday").first()
+                        val dday = container.boardRepository.items(DDayBoard.BOARD).first()
                         DDayReminderScheduler.rearm(app, dday, mid)
                     }
                 }

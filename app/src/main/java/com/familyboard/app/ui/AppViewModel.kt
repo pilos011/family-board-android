@@ -225,26 +225,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun settleAllowance(targetMemberId: String, items: List<ListItem>) = viewModelScope.launch {
         if (items.isEmpty()) return@launch
         val actor = currentMemberId.value.orEmpty()
-        val total = items.sumOf { it.amount }
         val parent = when (actor) {
             "eunseon" -> "엄마"
             "seonil" -> "아빠"
             else -> Family.nameOf(actor)
         }
+        // 항목별로 삭제하고 성공한 것만 집계 → 실제로 정산된 항목만 알림에 반영
+        // (일괄 실패 시 알림 누락, 일부 실패 시 유령 알림/재정산을 방지)
+        val settled = items.filter { runCatching { board.deleteItem(it.id) }.isSuccess }
+        if (settled.isEmpty()) return@launch
+        val settledTotal = settled.sumOf { it.amount }
         val msg = buildString {
             append("${parent}가 아래 항목을 정산했어요.\n")
             append("\n")
-            items.forEach {
+            settled.forEach {
                 append("\t\t${it.text.ifBlank { "항목" }} %,d원\n".format(it.amount))
             }
             append("\t\t---------------\n")
-            append("\t\t합계 : %,d원\n".format(total))
+            append("\t\t합계 : %,d원\n".format(settledTotal))
             append("\n")
             append("❤️ 사랑해 아들~")
         }
-        // 삭제가 성공했을 때만 완료 알림 발송(알림만 가고 항목이 남아 재정산되는 상황 방지)
-        val deleted = runCatching { items.forEach { board.deleteItem(it.id) } }.isSuccess
-        if (deleted) runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
+        runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
     }
 
     /** 여러 항목의 체크 상태를 한 번에 설정(전체 체크/해제). */
