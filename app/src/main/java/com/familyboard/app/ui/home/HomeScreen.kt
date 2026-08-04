@@ -2,6 +2,7 @@ package com.familyboard.app.ui.home
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,9 +14,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,10 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +66,10 @@ private val Gaegu = FontFamily(
     Font(R.font.gaegu_bold, FontWeight.Bold),
 )
 private val NanumPen = FontFamily(Font(R.font.nanum_pen))
+private val NanumGothic = FontFamily(
+    Font(R.font.nanum_gothic, FontWeight.Normal),
+    Font(R.font.nanum_gothic_bold, FontWeight.Bold),
+)
 
 private val Ink = Color(0xFF3A2C1D)
 private val NoteColors = listOf(Color(0xFFFFF3A8), Color(0xFFC7EFD0), Color(0xFFFFCBD3), Color(0xFFBFE0FF))
@@ -141,34 +151,62 @@ fun HomeScreen(
 
 @Composable
 private fun TitleSign() {
+    val shape = RoundedCornerShape(22.dp)
+    val faceH = 96.dp
+    Box(Modifier.fillMaxWidth().height(faceH + 12.dp)) {
+        // 옆면(두께) — 앞면보다 아래로 내려 어두운 나무색이 보이게
+        Box(
+            Modifier.fillMaxWidth().height(faceH).align(Alignment.TopCenter)
+                .offset(y = 11.dp).clip(shape).background(Color(0xFF3A2410)),
+        )
+        // 앞면 패널
+        Box(
+            Modifier.fillMaxWidth().height(faceH).align(Alignment.TopCenter)
+                .shadow(16.dp, shape).clip(shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.wood_bg),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            // 베벨: 밝은 안쪽 테두리 + 어두운 외곽으로 입체감
+            Box(Modifier.fillMaxSize().border(3.dp, Color(0x40FFE9C7), shape))
+            Box(Modifier.fillMaxSize().border(1.dp, Color(0x55000000), shape))
+            // 모서리 나사
+            Screw(Modifier.align(Alignment.TopStart).padding(12.dp))
+            Screw(Modifier.align(Alignment.TopEnd).padding(12.dp))
+            Screw(Modifier.align(Alignment.BottomStart).padding(12.dp))
+            Screw(Modifier.align(Alignment.BottomEnd).padding(12.dp))
+            Text(
+                "준준패밀리 보드",
+                fontFamily = Gaegu, fontWeight = FontWeight.Bold, fontSize = 34.sp,
+                color = Color(0xFFFFF6E8),
+                style = TextStyle(shadow = Shadow(Color(0xB3000000), Offset(0f, 3f), 6f)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Screw(modifier: Modifier) {
     Box(
-        Modifier.fillMaxWidth().height(74.dp)
-            .shadow(8.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp)),
+        modifier.size(13.dp).clip(CircleShape)
+            .background(Brush.radialGradient(listOf(Color(0xFFF0DFBE), Color(0xFF6E5230)))),
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            painter = painterResource(R.drawable.wood_bg),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
-        Box(Modifier.fillMaxSize().background(Color(0x33000000)))
-        Text(
-            "준준패밀리 보드",
-            fontFamily = Gaegu, fontWeight = FontWeight.Bold, fontSize = 30.sp,
-            color = Color(0xFFFFF6E8),
-        )
+        Box(Modifier.width(8.dp).height(2.dp).background(Color(0x66000000)))
     }
 }
 
 @Composable
 private fun SectionLabel(text: String) {
     Text(
-        text, fontFamily = Gaegu, fontWeight = FontWeight.Bold, fontSize = 20.sp,
+        text, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 18.sp,
         color = Color.White,
-        modifier = Modifier.shadow(0.dp).background(Color(0x55000000), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 3.dp),
+        modifier = Modifier.background(Color(0x66000000), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     )
 }
 
@@ -228,20 +266,30 @@ private fun EventLine(
     e: com.familyboard.app.data.model.CalendarEvent,
     pastStyle: Boolean,
 ) {
+    // 여러 날 일정은 시작~종료로 표시
+    val dur = runCatching {
+        ChronoUnit.DAYS.between(LocalDate.parse(e.startDateIso), LocalDate.parse(e.endDateIso.ifBlank { e.startDateIso }))
+    }.getOrDefault(0L).coerceAtLeast(0L)
+    val end = date.plusDays(dur)
+    val multi = end != date
+    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}~${end.monthValue}/${end.dayOfMonth}"
+    else "${date.monthValue}/${date.dayOfMonth}"
+    val sub = when {
+        multi -> ""
+        e.allDay -> " · 하루 종일"
+        e.startTime.isNotBlank() -> " · ${e.startTime}"
+        else -> ""
+    }
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "${date.monthValue}/${date.dayOfMonth}",
-            fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            dateLabel,
+            fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
             color = if (pastStyle) Color(0xFFA89A86) else Ink.copy(alpha = 0.7f),
-            modifier = Modifier.width(46.dp),
+            modifier = Modifier.widthIn(min = 46.dp),
         )
+        Spacer(Modifier.size(8.dp))
         Icon(Icons.Default.Event, null, tint = if (pastStyle) Color(0xFFCDBFA8) else Color(0xFFE8794A), modifier = Modifier.size(14.dp))
         Spacer(Modifier.size(8.dp))
-        val sub = when {
-            e.allDay -> " · 하루 종일"
-            e.startTime.isNotBlank() -> " · ${e.startTime}"
-            else -> ""
-        }
         Text(
             e.title + sub,
             fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -271,7 +319,7 @@ private fun Chalkboard(dday: Int, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Text("🎓 중요 카운트다운", fontFamily = Gaegu, color = ChalkSoft, fontSize = 15.sp)
-                    Text("준호 수능", fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 22.sp)
+                    Text("준호 수능", fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 22.sp)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
