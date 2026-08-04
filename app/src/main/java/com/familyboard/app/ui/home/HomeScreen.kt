@@ -469,10 +469,21 @@ private fun EventLine(
         Spacer(Modifier.size(9.dp))
         Text(
             e.title + sub,
+            modifier = Modifier.weight(1f),
             fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (pastStyle) DatePast else Ink,
             textDecoration = if (pastStyle) TextDecoration.LineThrough else TextDecoration.None,
         )
+        // 오른쪽 정렬 작성자 이름(실제 멤버가 등록한 경우만)
+        val author = Family.byId(e.createdBy)?.name
+        if (author != null) {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                author,
+                fontSize = 12.sp, maxLines = 1,
+                color = if (pastStyle) DatePast else DateUp.copy(alpha = 0.75f),
+            )
+        }
     }
 }
 
