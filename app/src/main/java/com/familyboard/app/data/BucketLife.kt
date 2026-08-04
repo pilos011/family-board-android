@@ -22,7 +22,7 @@ object BucketLife {
 
     private val birth = mapOf(
         "seonil" to LocalDate.of(1974, 2, 21),
-        "eunseon" to LocalDate.of(1976, 4, 16),
+        "eunseon" to LocalDate.of(1976, 4, 12),
     )
     private val death = mapOf(
         "seonil" to SEONIL_DEATH,

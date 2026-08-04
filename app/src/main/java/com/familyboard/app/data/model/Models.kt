@@ -33,6 +33,8 @@ data class ListItem(
     val photoUrls: List<String> = emptyList(), // 버킷 첨부 사진
     val progress: List<ProgressNote> = emptyList(), // 버킷 진행 이력(카드 메모)
     val icon: String = "",         // 버킷 꾸미기 아이콘 키 (BucketIcons)
+    val dateIso: String = "",      // D-Day 목표 날짜(yyyy-MM-dd)
+    val yearly: Boolean = false,   // D-Day 매년 반복 여부
 )
 
 /** 버킷 진행 이력 메모 */
@@ -45,6 +47,11 @@ data class ProgressNote(
 /** 인생 버킷 리스트 보드 키 (부부 공용, 단일). */
 object BucketBoards {
     const val BOARD = "bucket"
+}
+
+/** D-Day(카운트다운) 보드 키. 가족 모두 사용. */
+object DDayBoard {
+    const val BOARD = "dday"
 }
 
 /** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */

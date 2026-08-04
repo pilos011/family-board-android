@@ -68,6 +68,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(BoardType.NOTICE.key)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // D-Day (카운트다운, 가족 모두)
+    val ddayItems: StateFlow<List<ListItem>> =
+        board.items(com.familyboard.app.data.model.DDayBoard.BOARD)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val allowanceJunyoung: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNYOUNG)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

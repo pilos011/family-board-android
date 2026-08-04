@@ -33,6 +33,7 @@ import com.familyboard.app.ui.bucket.BucketAddScreen
 import com.familyboard.app.ui.bucket.BucketHomeScreen
 import com.familyboard.app.ui.bucket.BucketListScreen
 import com.familyboard.app.ui.bucket.BucketViewScreen
+import com.familyboard.app.ui.dday.DDayScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.lists.ListsScreen
 import com.familyboard.app.ui.onboarding.OnboardingScreen
@@ -46,6 +47,7 @@ private object Routes {
     const val EDIT_EVENT = "editEvent/{eventId}"
     const val VIEW_EVENT = "viewEvent/{eventId}/{dateIso}"
     const val LIST_DETAIL = "listDetail/{board}"
+    const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
     const val BUCKET_ADD = "bucketAdd"
@@ -127,7 +129,11 @@ private fun MainScaffold(vm: AppViewModel) {
                     vm = vm,
                     onOpenBoard = { nav.navigate(Routes.listDetail(it)) },
                     onOpenBucket = { nav.navigate(Routes.BUCKET_HOME) },
+                    onOpenDday = { nav.navigate(Routes.DDAY) },
                 )
+            }
+            composable(Routes.DDAY) {
+                DDayScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.BUCKET_HOME) {
                 BucketHomeScreen(

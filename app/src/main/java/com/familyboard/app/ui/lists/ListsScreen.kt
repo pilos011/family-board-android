@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
@@ -48,6 +49,7 @@ fun ListsScreen(
     modifier: Modifier = Modifier,
     onOpenBoard: (String) -> Unit,
     onOpenBucket: () -> Unit,
+    onOpenDday: () -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
@@ -84,6 +86,8 @@ fun ListsScreen(
                 modifier = Modifier.weight(1f),
             ) { onOpenBoard(BoardType.TODO.key) }
         }
+        Spacer(Modifier.height(16.dp))
+        DDayWideCard(onClick = onOpenDday)
         if (isParent) {
             Spacer(Modifier.height(16.dp))
             NoticeWideCard(count = notices.size) { onOpenBoard(BoardType.NOTICE.key) }
@@ -91,6 +95,33 @@ fun ListsScreen(
         if (showBucket) {
             Spacer(Modifier.height(16.dp))
             BucketWideCard(spouseName = spouse, onClick = onOpenBucket)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DDayWideCard(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(96.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF5C7CFA)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Row(
+            Modifier.fillMaxSize().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("D-Day", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "기념일·생일 카운트다운",
+                    color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.Medium,
+                )
+            }
+            Icon(Icons.Default.HourglassBottom, null, tint = Color.White, modifier = Modifier.height(44.dp))
         }
     }
 }
