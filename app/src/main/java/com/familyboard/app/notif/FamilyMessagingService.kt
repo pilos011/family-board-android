@@ -35,6 +35,11 @@ class FamilyMessagingService : FirebaseMessagingService() {
         const val CH_EMERGENCY = "emergency"
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
+
     override fun onNewToken(token: String) {
         scope.launch {
             val memberId = CurrentUserStore(applicationContext).currentMemberId.first()
@@ -88,7 +93,6 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
-            .setOngoing(true)
             .setContentIntent(pi)
             .setFullScreenIntent(pi, true)
             .build()

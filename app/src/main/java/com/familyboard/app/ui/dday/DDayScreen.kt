@@ -134,7 +134,7 @@ fun DDayScreen(
 
             if (userRows.isNotEmpty()) {
                 items(userRows, key = { it.id!! }) { r ->
-                    DDayCard(row = r, onClick = { editItem = items.first { it.id == r.id } })
+                    DDayCard(row = r, onClick = { items.firstOrNull { it.id == r.id }?.let { editItem = it } })
                 }
             }
 

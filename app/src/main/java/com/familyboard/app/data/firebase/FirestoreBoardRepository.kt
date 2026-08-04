@@ -65,4 +65,9 @@ class FirestoreBoardRepository(
     override suspend fun deleteItem(id: String) {
         itemsCol.document(id).delete().await()
     }
+
+    override suspend fun deleteByBoard(board: String) {
+        val snap = itemsCol.whereEqualTo("board", board).get().await()
+        for (doc in snap.documents) doc.reference.delete().await()
+    }
 }

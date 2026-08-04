@@ -77,10 +77,6 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 // 손글씨/라운드 폰트 (번들)
-private val Gaegu = FontFamily(
-    Font(R.font.gaegu, FontWeight.Normal),
-    Font(R.font.gaegu_bold, FontWeight.Bold),
-)
 private val NanumPen = FontFamily(Font(R.font.nanum_pen))
 private val NanumGothic = FontFamily(
     Font(R.font.nanum_gothic, FontWeight.Normal),
@@ -116,7 +112,8 @@ fun HomeScreen(
         val winStart = today.minusMonths(1)
         val occ = RecurrenceExpander.expand(events, winStart, yearEnd)
             .flatMap { (dateStr, day) ->
-                day.filter { it.spanStart }.map { LocalDate.parse(dateStr) to it.event }
+                val d = runCatching { LocalDate.parse(dateStr) }.getOrNull()
+                if (d == null) emptyList() else day.filter { it.spanStart }.map { d to it.event }
             }
             .sortedBy { it.first }
         val past = occ.filter { it.first.isBefore(today) }.takeLast(2)
@@ -210,7 +207,7 @@ fun HomeScreen(
                         val url = info?.url ?: return@TextButton
                         downloading = true
                         scope.launch {
-                            val f = UpdateChecker.downloadApk(context, url)
+                            val f = UpdateChecker.downloadApk(context, url, info.sha256)
                             downloading = false
                             if (f != null) { showUpdate = false; UpdateChecker.installApk(context, f) }
                         }
@@ -416,7 +413,7 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
                         Text(dateText, color = ChalkSoft, fontSize = 13.sp)
                     }
                 }
-                Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
+                Text(ddayLabel, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
             }
             if (examList) {
                 Spacer(Modifier.height(10.dp))

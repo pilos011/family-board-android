@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyboard.app.data.Family
 import com.familyboard.app.data.model.CalendarEvent
 import com.familyboard.app.data.model.Reminders
@@ -96,7 +97,31 @@ fun AddEventScreen(
     onBack: () -> Unit,
     editEventId: String? = null,
 ) {
-    val editing = remember(editEventId) { editEventId?.let { vm.eventById(it) } }
+    val eventsState by vm.events.collectAsStateWithLifecycle()
+    val editing = remember(eventsState, editEventId) {
+        editEventId?.let { id -> eventsState.firstOrNull { it.id == id } }
+    }
+    // 수정 진입인데 대상이 아직 로딩 전이거나 삭제됨 → 빈 폼(새 일정 생성) 오작동 방지
+    if (editEventId != null && editing == null) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                TopAppBar(
+                    title = { Text("일정 수정") },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    navigationIcon = {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
+                    },
+                )
+            },
+        ) { padding ->
+            Box(Modifier.padding(padding).fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                if (eventsState.isEmpty()) CircularProgressIndicator()
+                else Text("삭제된 일정입니다.", color = Ink.copy(alpha = 0.5f))
+            }
+        }
+        return
+    }
     val startD = remember(startIso) { runCatching { LocalDate.parse(startIso) }.getOrDefault(LocalDate.now()) }
     val endD = remember(endIso) { runCatching { LocalDate.parse(endIso) }.getOrDefault(startD) }
     val isRange = endD.isAfter(startD)

@@ -108,7 +108,8 @@ fun SearchScreen(vm: AppViewModel, onBack: () -> Unit) {
 private fun buildRows(events: List<CalendarEvent>, query: String, today: LocalDate): List<Row> {
     val q = query.trim()
     val filtered = events
-        .filter { it.startDateIso.isNotBlank() }
+        // 잘못된/비ISO 날짜 문자열이 섞여도 크래시하지 않도록 파싱 가능한 것만
+        .filter { runCatching { LocalDate.parse(it.startDateIso) }.isSuccess }
         .filter { q.isBlank() || it.title.contains(q, ignoreCase = true) || Family.namesOf(it.memberIds).contains(q, true) }
         .sortedWith(compareBy({ it.startDateIso }, { it.startTime }))
 

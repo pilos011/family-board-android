@@ -46,6 +46,10 @@ class InMemoryBoardRepository : BoardRepository {
         itemsFlow.value = itemsFlow.value.filter { it.id != id }
     }
 
+    override suspend fun deleteByBoard(board: String) {
+        itemsFlow.value = itemsFlow.value.filter { it.board != board }
+    }
+
     private fun seedEvents(): List<CalendarEvent> {
         val today = LocalDate.now().toString()
         return listOf(

@@ -66,8 +66,7 @@ private fun MemberRow(member: Member, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier.size(48.dp).clip(CircleShape).background(member.color)
-                    .clickable(enabled = false) {},
+                modifier = Modifier.size(48.dp).clip(CircleShape).background(member.color),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(com.familyboard.app.data.Family.initialOf(member.id), color = androidx.compose.ui.graphics.Color.White,

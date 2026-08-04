@@ -154,7 +154,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addEvent(event: CalendarEvent, notifyTargets: List<String> = emptyList()) = viewModelScope.launch {
-        board.upsertEvent(event)
+        runCatching { board.upsertEvent(event) }
         notifyEventRegistered(event, notifyTargets)
     }
 
@@ -167,24 +167,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val body = "\"${e.title}\"\n📅 ${eventWhenText(e)}"
         runCatching { NotifyApi.notify(actor, targets, title, body) }
     }
-    fun updateEvent(event: CalendarEvent) = viewModelScope.launch { board.upsertEvent(event) }
-    fun deleteEvent(id: String) = viewModelScope.launch { board.deleteEvent(id) }
+    fun updateEvent(event: CalendarEvent) = viewModelScope.launch { runCatching { board.upsertEvent(event) } }
+    fun deleteEvent(id: String) = viewModelScope.launch { runCatching { board.deleteEvent(id) } }
 
     /** 반복 일정에서 특정 날짜만 제외(그 회차만 삭제) */
     fun excludeOccurrence(event: CalendarEvent, dateIso: String) = viewModelScope.launch {
         if (!event.exdates.contains(dateIso)) {
-            board.upsertEvent(event.copy(exdates = event.exdates + dateIso))
+            runCatching { board.upsertEvent(event.copy(exdates = event.exdates + dateIso)) }
         }
     }
 
     fun eventById(id: String): CalendarEvent? = events.value.firstOrNull { it.id == id }
 
-    fun addItem(item: ListItem) = viewModelScope.launch { board.upsertItem(item) }
-    fun updateItem(item: ListItem) = viewModelScope.launch { board.upsertItem(item) }
+    fun addItem(item: ListItem) = viewModelScope.launch { runCatching { board.upsertItem(item) } }
+    fun updateItem(item: ListItem) = viewModelScope.launch { runCatching { board.upsertItem(item) } }
+
+    /** 커스텀 리스트 삭제: 정의 문서 + 그 리스트의 모든 항목(자식) 함께 삭제. */
+    fun deleteCustomList(listId: String) = viewModelScope.launch {
+        runCatching { board.deleteItem(listId); board.deleteByBoard(listId) }
+    }
 
     /** 할 일 추가 + 태깅된 담당자에게 등록 알림(등록자 제외). 장보기 등 다른 보드는 사용하지 않음. */
     fun addTodoWithNotify(item: ListItem) = viewModelScope.launch {
-        board.upsertItem(item)
+        runCatching { board.upsertItem(item) }
         val actor = item.createdBy
         val targets = (if (item.memberIds.contains(Family.ALL_ID)) Family.members.map { it.id } else item.memberIds)
             .filter { it != actor }
@@ -194,8 +199,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { NotifyApi.notify(actor, targets, "✅ 새 할 일", body) }
     }
 
-    fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { board.setChecked(id, checked) }
-    fun deleteItem(id: String) = viewModelScope.launch { board.deleteItem(id) }
+    fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { runCatching { board.setChecked(id, checked) } }
+    fun deleteItem(id: String) = viewModelScope.launch { runCatching { board.deleteItem(id) } }
 
     /** 긴급 연락 발송: 대상에게 전체화면 긴급 알림. wantLocation 이면 위치공유 요청 버튼 노출. */
     fun sendEmergency(targetIds: List<String>, message: String, wantLocation: Boolean) = viewModelScope.launch {
@@ -238,12 +243,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             append("❤️ 사랑해 아들~")
         }
         runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
-        items.forEach { board.deleteItem(it.id) }
+        runCatching { items.forEach { board.deleteItem(it.id) } }
     }
 
     /** 여러 항목의 체크 상태를 한 번에 설정(전체 체크/해제). */
     fun setCheckedAll(items: List<ListItem>, checked: Boolean) = viewModelScope.launch {
-        items.forEach { if (it.checked != checked) board.setChecked(it.id, checked) }
+        runCatching { items.forEach { if (it.checked != checked) board.setChecked(it.id, checked) } }
     }
 
     /**

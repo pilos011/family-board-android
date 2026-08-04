@@ -69,8 +69,12 @@ fun ListDetailScreen(
     val title = knownBoard?.title ?: customDef?.text ?: "목록"
     // 장보기·공지·커스텀(본인 전용): 담당 없이 등록자만 표시하는 단순 목록
     val simpleList = isCustom || knownBoard == BoardType.SHOPPING || knownBoard == BoardType.NOTICE
-    val items by remember(boardKey) { vm.boardItems(boardKey) }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
+    // 고정 보드는 이미 공유 StateFlow 재사용(이중 구독·빈상태 깜빡임 방지), 커스텀만 콜드 flow
+    val items by if (isCustom) {
+        remember(boardKey) { vm.boardItems(boardKey) }.collectAsStateWithLifecycle(initialValue = emptyList())
+    } else {
+        vm.itemsFor(boardKey).collectAsStateWithLifecycle()
+    }
     var input by remember { mutableStateOf("") }
     var tagIds by remember { mutableStateOf(listOf(Family.ALL_ID)) }
 
@@ -99,7 +103,7 @@ fun ListDetailScreen(
                 },
                 actions = {
                     if (isCustom && customDef != null) {
-                        IconButton(onClick = { vm.deleteItem(boardKey); onBack() }) {
+                        IconButton(onClick = { vm.deleteCustomList(boardKey); onBack() }) {
                             Icon(Icons.Default.Delete, "리스트 삭제")
                         }
                     }

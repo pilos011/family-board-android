@@ -18,4 +18,5 @@ interface BoardRepository {
     suspend fun upsertItem(item: ListItem)
     suspend fun setChecked(id: String, checked: Boolean)
     suspend fun deleteItem(id: String)
+    suspend fun deleteByBoard(board: String)
 }

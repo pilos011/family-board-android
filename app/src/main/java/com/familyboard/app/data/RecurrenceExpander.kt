@@ -39,6 +39,16 @@ object RecurrenceExpander {
         return map
     }
 
+    /** exdate 가 회차 기간[occStart, occStart+duration] 안에 하나라도 있으면 제외(여러 날 일정 대응). */
+    private fun excluded(e: CalendarEvent, occStart: LocalDate, duration: Long): Boolean {
+        if (e.exdates.isEmpty()) return false
+        val occEnd = occStart.plusDays(duration.coerceAtLeast(0))
+        return e.exdates.any {
+            val d = runCatching { LocalDate.parse(it) }.getOrNull() ?: return@any false
+            !d.isBefore(occStart) && !d.isAfter(occEnd)
+        }
+    }
+
     private fun placeSpan(
         map: HashMap<String, MutableList<DayEvent>>,
         e: CalendarEvent,
@@ -69,7 +79,7 @@ object RecurrenceExpander {
         var occ = start.plusWeeks(n0)
         var guard = 0
         while (!occ.isAfter(winEnd) && guard < 300) {
-            if (!occ.isBefore(start) && !e.exdates.contains(occ.toString()))
+            if (!occ.isBefore(start) && !excluded(e, occ, duration))
                 placeSpan(map, e, occ, duration, winStart, winEnd)
             occ = occ.plusWeeks(1); guard++
         }
@@ -87,7 +97,7 @@ object RecurrenceExpander {
             val occStart = LocalDate.of(ym.year, ym.month, start.dayOfMonth.coerceAtMost(ym.lengthOfMonth()))
             val validDay = start.dayOfMonth <= ym.lengthOfMonth()
             if (occStart.isAfter(winEnd)) break
-            if (validDay && !occStart.isBefore(start) && !e.exdates.contains(occStart.toString()))
+            if (validDay && !occStart.isBefore(start) && !excluded(e, occStart, duration))
                 placeSpan(map, e, occStart, duration, winStart, winEnd)
             n++; guard++
         }
@@ -100,7 +110,7 @@ object RecurrenceExpander {
         var year = maxOf(start.year, winStart.year - 1)
         while (year <= winEnd.year + 1) {
             val occStart = runCatching { start.withYear(year) }.getOrNull()
-            if (occStart != null && !occStart.isBefore(start) && !e.exdates.contains(occStart.toString()))
+            if (occStart != null && !occStart.isBefore(start) && !excluded(e, occStart, duration))
                 placeSpan(map, e, occStart, duration, winStart, winEnd)
             year++
         }
@@ -116,7 +126,7 @@ object RecurrenceExpander {
             val occStart = LunarCalendar.solarForLunar(
                 year, lunar.month, lunar.day, lunar.leap, start.monthValue, start.dayOfMonth,
             )
-            if (occStart != null && !occStart.isBefore(start) && !e.exdates.contains(occStart.toString()))
+            if (occStart != null && !occStart.isBefore(start) && !excluded(e, occStart, duration))
                 placeSpan(map, e, occStart, duration, winStart, winEnd)
             year++
         }

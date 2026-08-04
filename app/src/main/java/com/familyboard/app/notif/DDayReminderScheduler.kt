@@ -23,8 +23,9 @@ import java.time.ZoneId
 object DDayReminderScheduler {
     private const val TAG = "DDayReminder"
     private const val ACTION = "com.familyboard.app.DDAY_REMINDER"
+    private const val PREFS = "dday_sched"
+    private const val KEY = "keys"
     private val NOTIFY_HOUR = LocalTime.of(9, 0)
-    private val scheduled = mutableSetOf<String>()
 
     private data class Alarm(val key: String, val trigger: Long, val title: String, val text: String)
 
@@ -79,8 +80,10 @@ object DDayReminderScheduler {
 
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val newKeys = alarms.map { it.key }.toSet()
-        // 사라진 예약 취소
-        (scheduled - newKeys).forEach { am.cancel(pi(context, it, "", "")) }
+        // 사라진 예약 취소 (영속 저장으로 재부팅/재시작 후에도 정리)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prev = prefs.getStringSet(KEY, emptySet()) ?: emptySet()
+        (prev - newKeys).forEach { am.cancel(pi(context, it, "", "")) }
         // 새로/갱신 예약
         alarms.forEach { a ->
             val p = pi(context, a.key, a.title, a.text)
@@ -94,7 +97,7 @@ object DDayReminderScheduler {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, a.trigger, p)
             }
         }
-        scheduled.clear(); scheduled.addAll(newKeys)
+        prefs.edit().putStringSet(KEY, newKeys).apply()
         Log.i(TAG, "예약 ${alarms.size}건")
     }
 

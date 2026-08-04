@@ -18,6 +18,7 @@ data class UpdateInfo(
     val versionName: String,
     val url: String,
     val notes: String,
+    val sha256: String = "", // 있으면 다운로드 APK 무결성 검증에 사용
 )
 
 /**
@@ -44,22 +45,44 @@ object UpdateChecker {
                     versionName = o.optString("versionName"),
                     url = o.optString("url"),
                     notes = o.optString("notes"),
+                    sha256 = o.optString("sha256"),
                 )
             } else null
         }.onFailure { Log.w(TAG, "업데이트 확인 실패", it) }.getOrNull()
     }
 
-    /** APK 다운로드 → 캐시에 저장 (성공 시 File) */
-    suspend fun downloadApk(context: Context, url: String): File? = withContext(Dispatchers.IO) {
-        runCatching {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10000; readTimeout = 60000
+    /** APK 다운로드 → 캐시에 저장 (성공 시 File). expectedSha256 이 있으면 무결성 검증 후 불일치 시 실패. */
+    suspend fun downloadApk(context: Context, url: String, expectedSha256: String = ""): File? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10000; readTimeout = 60000
+                }
+                val out = File(context.cacheDir, "update.apk")
+                conn.inputStream.use { input -> out.outputStream().use { input.copyTo(it) } }
+                conn.disconnect()
+                if (expectedSha256.isNotBlank()) {
+                    val actual = sha256Of(out)
+                    if (!actual.equals(expectedSha256.trim(), ignoreCase = true)) {
+                        Log.w(TAG, "APK 해시 불일치 — 설치 중단 (expected=$expectedSha256 actual=$actual)")
+                        out.delete()
+                        return@runCatching null
+                    }
+                }
+                out
+            }.onFailure { Log.w(TAG, "APK 다운로드 실패", it) }.getOrNull()
+        }
+
+    private fun sha256Of(file: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { ins ->
+            val buf = ByteArray(8192)
+            while (true) {
+                val n = ins.read(buf); if (n < 0) break
+                md.update(buf, 0, n)
             }
-            val out = File(context.cacheDir, "update.apk")
-            conn.inputStream.use { input -> out.outputStream().use { input.copyTo(it) } }
-            conn.disconnect()
-            out
-        }.onFailure { Log.w(TAG, "APK 다운로드 실패", it) }.getOrNull()
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** 설치 인텐트 실행 (사용자가 '알 수 없는 앱 설치 허용' 후 설치) */

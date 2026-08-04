@@ -103,6 +103,8 @@ class EmergencyActivity : ComponentActivity() {
         val message = intent.getStringExtra(EXTRA_MESSAGE).orEmpty()
         val wantLoc = intent.getBooleanExtra(EXTRA_WANT_LOC, false)
         testMode = intent.getBooleanExtra(EXTRA_TEST, false)
+        // 전체화면을 띄웠으니 상태바의 긴급 알림은 정리
+        androidx.core.app.NotificationManagerCompat.from(this).cancel(9001)
         vibrateAlarm()
 
         setContent {
@@ -215,13 +217,16 @@ class EmergencyActivity : ComponentActivity() {
                 lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
                 else -> return last
             }
-            return suspendCancellableCoroutine { cont ->
-                val signal = CancellationSignal()
-                runCatching {
-                    lm.getCurrentLocation(provider, signal, mainExecutor) { loc -> cont.resume(loc ?: last) }
-                }.onFailure { cont.resume(last) }
-                cont.invokeOnCancellation { signal.cancel() }
-            }
+            // 8초 안에 fix 를 못 잡으면 마지막 알려진 위치로 폴백(무한 대기 방지)
+            return kotlinx.coroutines.withTimeoutOrNull(8000) {
+                suspendCancellableCoroutine { cont ->
+                    val signal = CancellationSignal()
+                    runCatching {
+                        lm.getCurrentLocation(provider, signal, mainExecutor) { loc -> cont.resume(loc ?: last) }
+                    }.onFailure { cont.resume(last) }
+                    cont.invokeOnCancellation { signal.cancel() }
+                }
+            } ?: last
         }
         return last
     }

@@ -25,7 +25,8 @@ object ReminderScheduler {
     const val CHANNEL_ID = "event_reminders"
     private const val TAG = "ReminderScheduler"
     private const val ACTION = "com.familyboard.app.REMINDER"
-    private val scheduled = mutableSetOf<String>()
+    private const val PREFS = "reminder_sched"
+    private const val KEY = "ids"
 
     fun ensureChannel(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -43,9 +44,12 @@ object ReminderScheduler {
         ensureChannel(context)
         val relevant = events.filter { it.reminder != "none" && isForMe(it, currentMemberId) }
         val newIds = relevant.map { it.id }.toSet()
-        (scheduled - newIds).forEach { cancel(context, it) }
+        // 예약된 id 를 영속 저장 → 프로세스/재부팅 후에도 삭제·변경된 일정의 유령 알람을 취소
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prev = prefs.getStringSet(KEY, emptySet()) ?: emptySet()
+        (prev - newIds).forEach { cancel(context, it) }
         relevant.forEach { scheduleFrom(context, it, System.currentTimeMillis()) }
-        scheduled.clear(); scheduled.addAll(newIds)
+        prefs.edit().putStringSet(KEY, newIds).apply()
     }
 
     private fun isForMe(e: CalendarEvent, mid: String?): Boolean =
