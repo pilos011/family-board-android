@@ -1,11 +1,14 @@
 package com.familyboard.app.ui.home
 
+import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,6 +96,8 @@ private val KrDow = listOf("월", "화", "수", "목", "금", "토", "일")
 @Composable
 fun HomeScreen(
     vm: AppViewModel,
+    onOpenEvent: (String, String) -> Unit,
+    onOpenDday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
@@ -164,15 +169,15 @@ fun HomeScreen(
 
             SectionLabel("일정 보드")
             Spacer(Modifier.height(8.dp))
-            ScheduleBoard(past = schedule.first, upcoming = schedule.second)
+            ScheduleBoard(past = schedule.first, upcoming = schedule.second, onOpenEvent = onOpenEvent)
             Spacer(Modifier.height(26.dp))
 
             special?.let { (item, d, _) ->
-                CountdownBox(title = item.text, dday = d, dateText = null, examList = true)
+                CountdownBox(title = item.text, dday = d, dateText = null, examList = true, onLongPress = onOpenDday)
             }
             others.forEach { (item, d, t) ->
                 Spacer(Modifier.height(12.dp))
-                CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false)
+                CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false, onLongPress = onOpenDday)
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -222,15 +227,17 @@ fun HomeScreen(
 @Composable
 private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit) {
     // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩. 비율 유지 75% 크기, 가운데.
-    // 오른쪽 빈 공간 가운데에 업데이트 아이콘(있을 때) 표시.
+    // 타이틀 탭 → 만든이 표시. 오른쪽 빈 공간 가운데에 업데이트 아이콘(있을 때).
     val shape = RoundedCornerShape(12.dp)
+    val context = LocalContext.current
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth(0.75f)) {
             Box(Modifier.matchParentSize().offset(y = 4.dp).clip(shape).background(Color(0xFF4A3018)))
             Image(
                 painter = painterResource(R.drawable.jun_title),
                 contentDescription = "준준가족 보드",
-                modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape),
+                modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape)
+                    .clickable { Toast.makeText(context, "만든이 : 김선일", Toast.LENGTH_SHORT).show() },
                 contentScale = ContentScale.FillWidth,
             )
         }
@@ -302,6 +309,7 @@ private val DateUp = Color(0xFF6F5C46)
 private fun ScheduleBoard(
     past: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     upcoming: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
+    onOpenEvent: (String, String) -> Unit,
 ) {
     val shape = RoundedCornerShape(10.dp)
     Box(Modifier.fillMaxWidth()) {
@@ -321,11 +329,11 @@ private fun ScheduleBoard(
             }
             if (past.isNotEmpty()) {
                 PaperDivider("지난 일정")
-                past.forEach { (d, e) -> EventLine(d, e, pastStyle = true) }
+                past.forEach { (d, e) -> EventLine(d, e, pastStyle = true, onOpenEvent = onOpenEvent) }
             }
             if (upcoming.isNotEmpty()) {
                 PaperDivider("다가오는 일정")
-                upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false) }
+                upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false, onOpenEvent = onOpenEvent) }
             }
         }
         // 집게(불독 클립)
@@ -349,11 +357,13 @@ private fun PaperDivider(label: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventLine(
     date: LocalDate,
     e: com.familyboard.app.data.model.CalendarEvent,
     pastStyle: Boolean,
+    onOpenEvent: (String, String) -> Unit,
 ) {
     // 여러 날 일정은 시작~종료로 표시
     val dur = runCatching {
@@ -370,7 +380,12 @@ private fun EventLine(
         else -> ""
     }
     val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = { if (e.id.isNotBlank()) onOpenEvent(e.id, date.toString()) })
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
@@ -394,8 +409,9 @@ private val Gold = Color(0xFFE7B24C)
 private val Chalk = Color(0xFFF2EAD6)
 private val ChalkSoft = Color(0xFFB9C7BA)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean) {
+private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean, onLongPress: () -> Unit) {
     val ddayLabel = when {
         dday == 0 -> "D-DAY"; dday > 0 -> "D-$dday"; else -> "D+${-dday}"
     }
@@ -403,6 +419,7 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
         Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF2C4A3B), BoardGreen)))
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .padding(18.dp),
     ) {
         Column {
