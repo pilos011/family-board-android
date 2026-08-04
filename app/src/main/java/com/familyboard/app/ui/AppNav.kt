@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,6 +37,7 @@ import com.familyboard.app.ui.bucket.BucketListScreen
 import com.familyboard.app.ui.bucket.BucketViewScreen
 import com.familyboard.app.ui.dday.DDayScreen
 import com.familyboard.app.ui.emergency.EmergencySendScreen
+import com.familyboard.app.ui.home.HomeScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.manage.ManageScreen
 import com.familyboard.app.ui.lists.ListsScreen
@@ -43,6 +45,7 @@ import com.familyboard.app.ui.onboarding.OnboardingScreen
 import com.familyboard.app.ui.search.SearchScreen
 
 private object Routes {
+    const val HOME = "home"
     const val CALENDAR = "calendar"
     const val LISTS = "lists"
     const val ALLOWANCE = "allowance"
@@ -84,7 +87,7 @@ private fun MainScaffold(vm: AppViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val showBar = route == Routes.CALENDAR || route == Routes.LISTS ||
+    val showBar = route == Routes.HOME || route == Routes.CALENDAR || route == Routes.LISTS ||
         route == Routes.ALLOWANCE || route == Routes.MANAGE
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
@@ -93,6 +96,12 @@ private fun MainScaffold(vm: AppViewModel) {
         bottomBar = {
             if (showBar) {
                 NavigationBar {
+                    NavigationBarItem(
+                        selected = route == Routes.HOME,
+                        onClick = { nav.navigateTab(Routes.HOME) },
+                        icon = { Icon(Icons.Default.Home, null) },
+                        label = { Text("홈") },
+                    )
                     NavigationBarItem(
                         selected = route == Routes.CALENDAR,
                         onClick = { nav.navigateTab(Routes.CALENDAR) },
@@ -125,9 +134,16 @@ private fun MainScaffold(vm: AppViewModel) {
     ) { inner ->
         NavHost(
             navController = nav,
-            startDestination = Routes.CALENDAR,
+            startDestination = Routes.HOME,
             modifier = Modifier.padding(inner),
         ) {
+            composable(Routes.HOME) {
+                HomeScreen(
+                    vm = vm,
+                    onOpenCalendar = { nav.navigateTab(Routes.CALENDAR) },
+                    onOpenDday = { nav.navigate(Routes.DDAY) },
+                )
+            }
             composable(Routes.CALENDAR) {
                 CalendarScreen(
                     vm = vm,
