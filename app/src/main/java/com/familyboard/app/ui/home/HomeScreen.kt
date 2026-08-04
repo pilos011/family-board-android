@@ -1,6 +1,10 @@
 package com.familyboard.app.ui.home
 
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,8 +14,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,12 +31,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -93,7 +95,6 @@ private val PinColors = listOf(Color(0xFFD63B2F), Color(0xFF2F7FD6), Color(0xFFE
 
 private val KrDow = listOf("월", "화", "수", "목", "금", "토", "일")
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     vm: AppViewModel,
@@ -185,10 +186,21 @@ fun HomeScreen(
                     fontFamily = NanumPen, fontSize = 18.sp, color = Color.White,
                 )
             } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // 부모(선일·은선)만 롱클릭으로 공지 화면 이동. 자녀는 반응 없음.
-                    checkedNotices.forEachIndexed { i, n ->
-                        PostIt(n.text, i, onLongPress = if (canManageNotice) onOpenNotice else null)
+                // 화면 폭과 무관하게 항상 한 줄에 2개씩(각 절반 폭). 플립3 등 좁은 폭에서 세로로 접히지 않게 함.
+                // 부모(선일·은선)만 롱클릭으로 공지 화면 이동. 자녀는 반응 없음.
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    checkedNotices.chunked(2).forEachIndexed { rowIdx, rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            rowItems.forEachIndexed { colIdx, n ->
+                                PostIt(
+                                    n.text, rowIdx * 2 + colIdx,
+                                    modifier = Modifier.weight(1f),
+                                    onLongPress = if (canManageNotice) onOpenNotice else null,
+                                )
+                            }
+                            // 마지막 줄에 1개만 있으면 왼쪽 절반 폭을 유지하도록 빈칸 채움
+                            if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+                        }
                     }
                 }
             }
@@ -268,28 +280,44 @@ private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit, onTitleCli
             )
         }
         if (updateAvailable) {
-            Box(Modifier.align(Alignment.CenterEnd), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.align(Alignment.CenterEnd).offset(x = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 UpdateBell(onClick = onUpdate)
             }
         }
     }
 }
 
-/** 업데이트 있을 때 빨간 종 아이콘. 4초마다 흔들린다. */
+/** 업데이트 있을 때 뜨는 원형 배지(위로 화살표). 계속 통통 튀며 맥동해 눈에 잘 띈다. */
 @Composable
 private fun UpdateBell(onClick: () -> Unit) {
-    val rot = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(4_000)
-            repeat(6) { i -> rot.animateTo(if (i % 2 == 0) 18f else -18f, tween(70)) }
-            rot.animateTo(0f, tween(70))
-        }
-    }
-    IconButton(onClick = onClick) {
+    val t = rememberInfiniteTransition(label = "update")
+    val bounce by t.animateFloat(
+        initialValue = 0f, targetValue = -5f,
+        animationSpec = infiniteRepeatable(tween(560, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bounce",
+    )
+    val pulse by t.animateFloat(
+        initialValue = 0.92f, targetValue = 1.10f,
+        animationSpec = infiniteRepeatable(tween(560, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse",
+    )
+    Box(
+        Modifier
+            .size(38.dp)
+            .offset(y = bounce.dp)
+            .scale(pulse)
+            .shadow(8.dp, CircleShape)
+            .clip(CircleShape)
+            .background(Brush.verticalGradient(listOf(Color(0xFFFF6B6B), Color(0xFFE03131))))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
         Icon(
-            Icons.Default.Notifications, "업데이트 있음",
-            tint = Color(0xFFE03131), modifier = Modifier.rotate(rot.value),
+            Icons.Filled.Upgrade, "업데이트 있음",
+            tint = Color.White, modifier = Modifier.size(24.dp),
         )
     }
 }
@@ -305,11 +333,11 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun PostIt(text: String, index: Int, onLongPress: (() -> Unit)? = null) {
+private fun PostIt(text: String, index: Int, modifier: Modifier = Modifier, onLongPress: (() -> Unit)? = null) {
     val rot = listOf(-2.5f, 1.8f, -1.2f, 2.4f)[index % 4]
     val haptic = LocalHapticFeedback.current
     Box(
-        Modifier.width(156.dp).height(130.dp).rotate(rot)
+        modifier.height(130.dp).rotate(rot)
             .shadow(6.dp, RoundedCornerShape(3.dp))
             .background(NoteColors[index % NoteColors.size], RoundedCornerShape(3.dp))
             .then(
