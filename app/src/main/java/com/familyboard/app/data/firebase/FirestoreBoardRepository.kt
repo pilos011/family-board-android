@@ -31,7 +31,8 @@ class FirestoreBoardRepository(
     override fun events(): Flow<List<CalendarEvent>> = callbackFlow {
         val reg = eventsCol.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
-            trySend(snap?.documents?.mapNotNull { it.toObject(CalendarEvent::class.java) } ?: emptyList())
+            // 손상 문서 1개가 전체 스트림을 막지 않도록 문서별로 방어
+            trySend(snap?.documents?.mapNotNull { runCatching { it.toObject(CalendarEvent::class.java) }.getOrNull() } ?: emptyList())
         }
         awaitClose { reg.remove() }
     }
@@ -48,7 +49,7 @@ class FirestoreBoardRepository(
     override fun items(board: String): Flow<List<ListItem>> = callbackFlow {
         val reg = itemsCol.whereEqualTo("board", board).addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
-            trySend(snap?.documents?.mapNotNull { it.toObject(ListItem::class.java) } ?: emptyList())
+            trySend(snap?.documents?.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() } ?: emptyList())
         }
         awaitClose { reg.remove() }
     }

@@ -38,10 +38,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.familyboard.app.data.model.CalendarEvent
 import com.familyboard.app.data.model.Reminders
 import com.familyboard.app.ui.AppViewModel
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 private val Ink = Color(0xFF2B2B2E)
+
+/** 반복 일정의 특정 회차 날짜 범위(dateIso = 그 회차 시작일 기준). */
+private fun occurrenceRange(e: CalendarEvent, dateIso: String): String {
+    val s = runCatching { LocalDate.parse(dateIso) }.getOrNull() ?: return dateRange(e)
+    val dur = runCatching {
+        ChronoUnit.DAYS.between(LocalDate.parse(e.startDateIso), LocalDate.parse(e.endDateIso.ifBlank { e.startDateIso }))
+    }.getOrDefault(0L).coerceAtLeast(0L)
+    return if (dur == 0L) s.toString() else "$s ~ ${s.plusDays(dur)}"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +103,8 @@ fun ViewEventScreen(
             MemberTags(event.memberIds)
             Spacer(Modifier.height(16.dp))
 
-            DetailRow("날짜", dateRange(event))
+            // 반복 일정은 원본 첫 회차가 아니라, 지금 연 회차(dateIso)의 날짜를 보여준다
+            DetailRow("날짜", if (event.repeat.isBlank()) dateRange(event) else occurrenceRange(event, dateIso))
             DetailRow("시간", if (time.isNotBlank()) time else "미정")
             if (event.repeat.isNotBlank()) DetailRow("반복", repeatLabel(event.repeat))
             if (event.lunar) DetailRow("음력", "예")

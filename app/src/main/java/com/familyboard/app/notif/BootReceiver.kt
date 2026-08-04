@@ -29,16 +29,25 @@ class BootReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val container = (app as FamilyBoardApp).container
-                val mid = container.currentUserStore.currentMemberId.first()
+                val mid = withTimeoutOrNull(5_000) { container.currentUserStore.currentMemberId.first() }
+
+                // Firestore/인증과 무관하게 항상 복원: HA 5분 리포트 + 가족 생일 알림
+                runCatching { HaReportScheduler.schedule(app) }
+                runCatching { DDayReminderScheduler.rearm(app, emptyList(), mid) }
+
+                // Firestore 가 준비되면 일정 미리알림 + 사용자 D-Day 도 rearm(취소 없이 무장만 → 빈 스냅샷이 예약을 지우지 않음)
                 withTimeoutOrNull(15_000) {
-                    val events = container.boardRepository.events().first()
-                    ReminderScheduler.reconcile(app, events, mid)
-                    val dday = container.boardRepository.items("dday").first()
-                    DDayReminderScheduler.reconcile(app, dday, mid)
+                    runCatching {
+                        val events = container.boardRepository.events().first()
+                        ReminderScheduler.rearm(app, events, mid)
+                    }
+                    runCatching {
+                        val dday = container.boardRepository.items("dday").first()
+                        DDayReminderScheduler.rearm(app, dday, mid)
+                    }
                 }
-                HaReportScheduler.schedule(app)
             } catch (_: Throwable) {
-                // 부팅 직후 네트워크/인증 지연 등은 무시. 다음 앱 실행 시 다시 예약됨.
+                // 부팅 직후 네트워크/인증 지연 등은 무시. 다음 앱 실행 시 reconcile 로 정합성 회복.
             } finally {
                 pending.finish()
             }

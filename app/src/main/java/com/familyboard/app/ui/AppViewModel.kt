@@ -182,9 +182,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun addItem(item: ListItem) = viewModelScope.launch { runCatching { board.upsertItem(item) } }
     fun updateItem(item: ListItem) = viewModelScope.launch { runCatching { board.upsertItem(item) } }
 
-    /** 커스텀 리스트 삭제: 정의 문서 + 그 리스트의 모든 항목(자식) 함께 삭제. */
+    /** 커스텀 리스트 삭제: 자식 항목 먼저 삭제 후 정의 문서 삭제(중간 실패 시 정의가 남아 재시도 가능, 고아 방지). */
     fun deleteCustomList(listId: String) = viewModelScope.launch {
-        runCatching { board.deleteItem(listId); board.deleteByBoard(listId) }
+        runCatching { board.deleteByBoard(listId); board.deleteItem(listId) }
     }
 
     /** 할 일 추가 + 태깅된 담당자에게 등록 알림(등록자 제외). 장보기 등 다른 보드는 사용하지 않음. */
@@ -242,8 +242,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             append("\n")
             append("❤️ 사랑해 아들~")
         }
-        runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
-        runCatching { items.forEach { board.deleteItem(it.id) } }
+        // 삭제가 성공했을 때만 완료 알림 발송(알림만 가고 항목이 남아 재정산되는 상황 방지)
+        val deleted = runCatching { items.forEach { board.deleteItem(it.id) } }.isSuccess
+        if (deleted) runCatching { NotifyApi.notify(actor, listOf(targetMemberId), "용돈 정산 완료", msg) }
     }
 
     /** 여러 항목의 체크 상태를 한 번에 설정(전체 체크/해제). */

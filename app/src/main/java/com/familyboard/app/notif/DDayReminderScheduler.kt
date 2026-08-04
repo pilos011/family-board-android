@@ -32,31 +32,43 @@ object DDayReminderScheduler {
     @Synchronized
     fun reconcile(context: Context, ddayItems: List<ListItem>, currentMemberId: String?) {
         ReminderScheduler.ensureChannel(context)
+        val alarms = buildAlarms(ddayItems, currentMemberId)
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val newKeys = alarms.map { it.key }.toSet()
+        // 사라진 예약 취소 (영속 저장으로 재부팅/재시작 후에도 정리)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prev = prefs.getStringSet(KEY, emptySet()) ?: emptySet()
+        (prev - newKeys).forEach { am.cancel(pi(context, it, "", "")) }
+        armAlarms(context, am, alarms)
+        prefs.edit().putStringSet(KEY, newKeys).apply()
+        Log.i(TAG, "예약 ${alarms.size}건")
+    }
+
+    /** 재부팅 복원용: 취소·prefs 조작 없이 현재 대상 알람을 다시 무장(생일은 Firestore 없이도 가능). */
+    @Synchronized
+    fun rearm(context: Context, ddayItems: List<ListItem>, currentMemberId: String?) {
+        ReminderScheduler.ensureChannel(context)
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        armAlarms(context, am, buildAlarms(ddayItems, currentMemberId))
+    }
+
+    private fun buildAlarms(ddayItems: List<ListItem>, currentMemberId: String?): List<Alarm> {
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now()
         val now = System.currentTimeMillis()
         val alarms = mutableListOf<Alarm>()
 
-        // 1) 가족 생일
-        //    - 당사자: 당일(D-DAY)에만 축하 알림
-        //    - 나머지 가족: 일주일 전·1일 전 알림
+        // 1) 가족 생일 — 당사자는 당일 축하, 나머지는 D-7·D-1
         FamilyBirthdays.list.forEach { (id, birth) ->
             val next = nextAnniversary(birth, today)
             val name = Family.nameOf(id)
             val dateText = "${next.monthValue}월 ${next.dayOfDay()}일 (${krDow(next)})"
             if (id == currentMemberId) {
-                addOne(
-                    alarms, zone, now, key = "bday_${id}_0", date = next,
-                    title = "🎉 생일 축하해요!", text = "오늘은 ${name}님의 생일이에요 🎂",
-                )
+                addOne(alarms, zone, now, key = "bday_${id}_0", date = next,
+                    title = "🎉 생일 축하해요!", text = "오늘은 ${name}님의 생일이에요 🎂")
             } else {
-                addPair(
-                    alarms, zone, now, keyBase = "bday_$id",
-                    target = next,
-                    d7Title = "🎂 ${name}님 생일 일주일 전",
-                    d1Title = "🎂 내일은 ${name}님 생일!",
-                    text = dateText,
-                )
+                addPair(alarms, zone, now, keyBase = "bday_$id", target = next,
+                    d7Title = "🎂 ${name}님 생일 일주일 전", d1Title = "🎂 내일은 ${name}님 생일!", text = dateText)
             }
         }
 
@@ -68,23 +80,15 @@ object DDayReminderScheduler {
                 val base = runCatching { LocalDate.parse(item.dateIso) }.getOrNull() ?: return@forEach
                 val target = if (item.yearly) nextAnniversary(base, today) else base
                 val title = item.text.ifBlank { "D-Day" }
-                addPair(
-                    alarms, zone, now, keyBase = "dday_${item.id}",
-                    target = target,
-                    d7Title = "📌 $title 일주일 전",
-                    d1Title = "📌 내일 $title",
-                    text = "${target.year}년 ${target.monthValue}월 ${target.dayOfDay()}일 (${krDow(target)})",
-                )
+                addPair(alarms, zone, now, keyBase = "dday_${item.id}", target = target,
+                    d7Title = "📌 $title 일주일 전", d1Title = "📌 내일 $title",
+                    text = "${target.year}년 ${target.monthValue}월 ${target.dayOfDay()}일 (${krDow(target)})")
             }
         }
+        return alarms
+    }
 
-        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val newKeys = alarms.map { it.key }.toSet()
-        // 사라진 예약 취소 (영속 저장으로 재부팅/재시작 후에도 정리)
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val prev = prefs.getStringSet(KEY, emptySet()) ?: emptySet()
-        (prev - newKeys).forEach { am.cancel(pi(context, it, "", "")) }
-        // 새로/갱신 예약
+    private fun armAlarms(context: Context, am: AlarmManager, alarms: List<Alarm>) {
         alarms.forEach { a ->
             val p = pi(context, a.key, a.title, a.text)
             try {
@@ -97,8 +101,6 @@ object DDayReminderScheduler {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, a.trigger, p)
             }
         }
-        prefs.edit().putStringSet(KEY, newKeys).apply()
-        Log.i(TAG, "예약 ${alarms.size}건")
     }
 
     private fun addPair(

@@ -3,12 +3,11 @@ package com.familyboard.app.ui.home
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,8 +56,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -357,7 +359,6 @@ private fun PaperDivider(label: String) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventLine(
     date: LocalDate,
@@ -365,6 +366,7 @@ private fun EventLine(
     pastStyle: Boolean,
     onOpenEvent: (String, String) -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     // 여러 날 일정은 시작~종료로 표시
     val dur = runCatching {
         ChronoUnit.DAYS.between(LocalDate.parse(e.startDateIso), LocalDate.parse(e.endDateIso.ifBlank { e.startDateIso }))
@@ -382,7 +384,14 @@ private fun EventLine(
     val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
     Row(
         Modifier.fillMaxWidth()
-            .combinedClickable(onClick = {}, onLongClick = { if (e.id.isNotBlank()) onOpenEvent(e.id, date.toString()) })
+            .pointerInput(e.id, date) {
+                detectTapGestures(onLongPress = {
+                    if (e.id.isNotBlank()) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onOpenEvent(e.id, date.toString())
+                    }
+                })
+            }
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -409,17 +418,21 @@ private val Gold = Color(0xFFE7B24C)
 private val Chalk = Color(0xFFF2EAD6)
 private val ChalkSoft = Color(0xFFB9C7BA)
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean, onLongPress: () -> Unit) {
     val ddayLabel = when {
         dday == 0 -> "D-DAY"; dday > 0 -> "D-$dday"; else -> "D+${-dday}"
     }
+    val haptic = LocalHapticFeedback.current
     Box(
         Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF2C4A3B), BoardGreen)))
-            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .pointerInput(Unit) {
+                detectTapGestures(onLongPress = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongPress()
+                })
+            }
             .padding(18.dp),
     ) {
         Column {

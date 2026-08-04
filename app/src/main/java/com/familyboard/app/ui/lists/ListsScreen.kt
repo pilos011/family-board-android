@@ -247,33 +247,6 @@ private fun DDayWideCard(onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NoticeWideCard(count: Int, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(96.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8A13A)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-    ) {
-        Row(
-            Modifier.fillMaxSize().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("가족 공지사항", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "${count}개 · 선일·은선 전용",
-                    color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.Medium,
-                )
-            }
-            Icon(Icons.Default.PushPin, null, tint = Color.White, modifier = Modifier.height(44.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun BucketWideCard(spouseName: String?, onClick: () -> Unit) {
     val title = if (spouseName != null) "${spouseName}과 함께하는\n인생 버킷 리스트" else "인생 버킷 리스트"
     Card(

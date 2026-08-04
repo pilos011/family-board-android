@@ -52,6 +52,14 @@ object ReminderScheduler {
         prefs.edit().putStringSet(KEY, newIds).apply()
     }
 
+    /** 재부팅 복원용: 취소·prefs 조작 없이 현재 대상 일정의 알람만 다시 무장(빈 스냅샷이 예약을 지우지 않게). */
+    @Synchronized
+    fun rearm(context: Context, events: List<CalendarEvent>, currentMemberId: String?) {
+        ensureChannel(context)
+        events.filter { it.reminder != "none" && isForMe(it, currentMemberId) }
+            .forEach { scheduleFrom(context, it, System.currentTimeMillis()) }
+    }
+
     private fun isForMe(e: CalendarEvent, mid: String?): Boolean =
         e.memberIds.contains(Family.ALL_ID) || (mid != null && e.memberIds.contains(mid))
 

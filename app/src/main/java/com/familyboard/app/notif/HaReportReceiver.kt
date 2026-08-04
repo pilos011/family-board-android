@@ -19,6 +19,8 @@ class HaReportReceiver : BroadcastReceiver() {
             try {
                 val memberId = CurrentUserStore(app).currentMemberId.first()
                 HaReporter.report(app, memberId)
+            } catch (_: Throwable) {
+                // 수집/전송 예외는 무시(5분 주기 반복 크래시 방지)
             } finally {
                 HaReportScheduler.schedule(app) // 다음 5분 재예약
                 pending.finish()
