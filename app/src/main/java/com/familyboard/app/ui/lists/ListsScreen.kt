@@ -125,7 +125,7 @@ fun ListsScreen(
             onClick = { showCreate = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = MaterialTheme.colorScheme.primary,
-        ) { Icon(Icons.Default.Add, "새 체크리스트", tint = Color.White) }
+        ) { Icon(Icons.Default.Add, "새 비공유 체크리스트", tint = Color.White) }
     }
 
     if (showCreate) {
@@ -176,7 +176,7 @@ private fun CreateListDialog(onCreate: (String, String) -> Unit, onDismiss: () -
     var icon by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("새 체크리스트") },
+        title = { Text("새 비공유 체크리스트") },
         text = {
             Column {
                 OutlinedTextField(

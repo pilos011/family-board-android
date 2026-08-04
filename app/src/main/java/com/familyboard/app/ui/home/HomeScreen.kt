@@ -1,5 +1,7 @@
 package com.familyboard.app.ui.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,13 +28,22 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +55,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -58,7 +70,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyboard.app.R
 import com.familyboard.app.data.Family
 import com.familyboard.app.data.RecurrenceExpander
+import com.familyboard.app.notif.UpdateChecker
 import com.familyboard.app.ui.AppViewModel
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -88,6 +102,11 @@ fun HomeScreen(
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
     val events by vm.events.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
+    val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showUpdate by remember { mutableStateOf(false) }
+    var downloading by remember { mutableStateOf(false) }
 
     val checkedNotices = remember(notices) { notices.filter { it.checked }.take(4) }
 
@@ -129,7 +148,7 @@ fun HomeScreen(
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         ) {
-            TitleSign()
+            TitleSign(updateAvailable = updateInfo != null, onUpdate = { showUpdate = true })
             Spacer(Modifier.height(20.dp))
 
             SectionLabel("가족 공지사항")
@@ -161,17 +180,56 @@ fun HomeScreen(
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    if (showUpdate) {
+        val info = updateInfo
+        AlertDialog(
+            onDismissRequest = { if (!downloading) showUpdate = false },
+            title = { Text("새 버전 ${info?.versionName ?: ""} 있어요") },
+            text = {
+                Column {
+                    Text("업데이트가 있습니다. 지금 설치할까요?")
+                    if (!info?.notes.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(info!!.notes, color = Ink.copy(alpha = 0.6f))
+                    }
+                    if (downloading) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.size(8.dp))
+                            Text("다운로드 중…")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !downloading && info != null,
+                    onClick = {
+                        val url = info?.url ?: return@TextButton
+                        downloading = true
+                        scope.launch {
+                            val f = UpdateChecker.downloadApk(context, url)
+                            downloading = false
+                            if (f != null) { showUpdate = false; UpdateChecker.installApk(context, f) }
+                        }
+                    },
+                ) { Text("지금 설치") }
+            },
+            dismissButton = { TextButton(enabled = !downloading, onClick = { showUpdate = false }) { Text("나중에") } },
+        )
+    }
 }
 
 @Composable
-private fun TitleSign() {
+private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit) {
     // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩. 비율 유지 75% 크기, 가운데.
+    // 오른쪽 빈 공간 가운데에 업데이트 아이콘(있을 때) 표시.
     val shape = RoundedCornerShape(12.dp)
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth(0.75f)) {
-            // 옆면(두께) — 앞면보다 살짝 아래
             Box(Modifier.matchParentSize().offset(y = 4.dp).clip(shape).background(Color(0xFF4A3018)))
-            // 앞면
             Image(
                 painter = painterResource(R.drawable.jun_title),
                 contentDescription = "준준가족 보드",
@@ -179,6 +237,30 @@ private fun TitleSign() {
                 contentScale = ContentScale.FillWidth,
             )
         }
+        if (updateAvailable) {
+            Box(Modifier.align(Alignment.CenterEnd), contentAlignment = Alignment.Center) {
+                UpdateBell(onClick = onUpdate)
+            }
+        }
+    }
+}
+
+/** 업데이트 있을 때 빨간 종 아이콘. 30초마다 흔들린다. */
+@Composable
+private fun UpdateBell(onClick: () -> Unit) {
+    val rot = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(4_000)
+            repeat(6) { i -> rot.animateTo(if (i % 2 == 0) 18f else -18f, tween(70)) }
+            rot.animateTo(0f, tween(70))
+        }
+    }
+    IconButton(onClick = onClick) {
+        Icon(
+            Icons.Default.Notifications, "업데이트 있음",
+            tint = Color(0xFFE03131), modifier = Modifier.rotate(rot.value),
+        )
     }
 }
 

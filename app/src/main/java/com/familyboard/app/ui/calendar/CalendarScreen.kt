@@ -130,12 +130,7 @@ fun CalendarScreen(
 
     val events by vm.events.collectAsStateWithLifecycle()
     val holidays by vm.holidays.collectAsStateWithLifecycle()
-    val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
 
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var showUpdate by remember { mutableStateOf(false) }
-    var downloading by remember { mutableStateOf(false) }
     var showYearPicker by remember { mutableStateOf(false) }
     var showMonthPicker by remember { mutableStateOf(false) }
 
@@ -158,8 +153,6 @@ fun CalendarScreen(
                 onNext = { month = month.plusMonths(1) },
                 onToday = { month = YearMonth.now(); selected = LocalDate.now() },
                 onSearch = onSearch,
-                updateAvailable = updateInfo != null,
-                onUpdate = { showUpdate = true },
                 onYearClick = { showYearPicker = true },
                 onMonthClick = { showMonthPicker = true },
             )
@@ -218,46 +211,6 @@ fun CalendarScreen(
                 onView = { id -> sheetOpen = false; onViewEvent(id, selected.toString()) },
             )
         }
-    }
-
-    if (showUpdate) {
-        val info = updateInfo
-        AlertDialog(
-            onDismissRequest = { if (!downloading) showUpdate = false },
-            title = { Text("새 버전 ${info?.versionName ?: ""} 있어요") },
-            text = {
-                Column {
-                    Text("업데이트가 있습니다. 지금 설치할까요?")
-                    if (!info?.notes.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(info!!.notes, color = Ink.copy(alpha = 0.6f))
-                    }
-                    if (downloading) {
-                        Spacer(Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.size(8.dp))
-                            Text("다운로드 중…")
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !downloading && info != null,
-                    onClick = {
-                        val url = info?.url ?: return@TextButton
-                        downloading = true
-                        scope.launch {
-                            val f = UpdateChecker.downloadApk(context, url)
-                            downloading = false
-                            if (f != null) { showUpdate = false; UpdateChecker.installApk(context, f) }
-                        }
-                    },
-                ) { Text("지금 설치") }
-            },
-            dismissButton = { TextButton(enabled = !downloading, onClick = { showUpdate = false }) { Text("나중에") } },
-        )
     }
 
     if (showYearPicker) {
@@ -346,8 +299,6 @@ private fun MonthHeader(
     onNext: () -> Unit,
     onToday: () -> Unit,
     onSearch: () -> Unit,
-    updateAvailable: Boolean,
-    onUpdate: () -> Unit,
     onYearClick: () -> Unit,
     onMonthClick: () -> Unit,
 ) {
@@ -372,32 +323,10 @@ private fun MonthHeader(
         )
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onSearch) { Icon(Icons.Default.Search, "일정 검색", tint = Ink) }
-        if (updateAvailable) UpdateBell(onClick = onUpdate)
         Spacer(Modifier.weight(1f))
         TextButton(onClick = onToday) { Text("오늘") }
         IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, "이전 달", tint = Ink) }
         IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, "다음 달", tint = Ink) }
-    }
-}
-
-/** 업데이트 있을 때 빨간 종 아이콘. 30초마다 흔들린다. */
-@Composable
-private fun UpdateBell(onClick: () -> Unit) {
-    val rot = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(30_000)
-            repeat(6) { i -> rot.animateTo(if (i % 2 == 0) 18f else -18f, tween(70)) }
-            rot.animateTo(0f, tween(70))
-        }
-    }
-    IconButton(onClick = onClick) {
-        Icon(
-            Icons.Default.Notifications,
-            "업데이트 있음",
-            tint = Color(0xFFE03131),
-            modifier = Modifier.rotate(rot.value),
-        )
     }
 }
 
