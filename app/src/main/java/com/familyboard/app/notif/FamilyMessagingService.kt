@@ -108,10 +108,12 @@ class FamilyMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
         val pi = PendingIntent.getActivity(this, 8001, view, flags)
 
+        val body = "${name} 알림 확인하였으며, 위치를 공유합니다."
         val notif = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("📍 ${name}님이 위치를 공유했어요")
-            .setContentText("탭하면 지도에서 위치를 봅니다")
+            .setContentTitle("📍 위치 공유")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$body\n탭하면 지도에서 위치를 봅니다"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pi)

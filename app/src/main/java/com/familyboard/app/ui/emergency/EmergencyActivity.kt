@@ -138,7 +138,8 @@ class EmergencyActivity : ComponentActivity() {
                 // 실제 위치를 못 찾아도 예시 좌표로 흐름을 확인할 수 있게 한다.
                 val lat = loc?.latitude ?: 37.5665
                 val lng = loc?.longitude ?: 126.9780
-                postLocalLocation(lat, lng)
+                val meName = Family.nameOf(CurrentUserStore(applicationContext).currentMemberId.first())
+                postLocalLocation(meName, lat, lng)
                 toast(
                     if (loc != null) "테스트: 위치 알림을 보냈어요. 알림을 탭해 지도로 확인하세요"
                     else "테스트: 실제 위치를 못 찾아 예시 좌표로 표시했어요. 알림을 탭하세요"
@@ -162,16 +163,18 @@ class EmergencyActivity : ComponentActivity() {
     }
 
     /** 테스트용: 내 폰에 위치 공유 알림을 직접 띄운다(탭하면 지도앱). */
-    private fun postLocalLocation(lat: Double, lng: Double) {
+    private fun postLocalLocation(name: String, lat: Double, lng: Double) {
         ReminderScheduler.ensureChannel(this)
         val geo = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode("공유된 위치")})")
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
         val pi = PendingIntent.getActivity(this, 8100, Intent(Intent.ACTION_VIEW, geo), flags)
+        val body = "$name 알림 확인하였으며, 위치를 공유합니다."
         val n = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("📍 위치 공유 (테스트)")
-            .setContentText("탭하면 지도에서 위치를 봅니다")
+            .setContentTitle("📍 위치 공유")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$body\n탭하면 지도에서 위치를 봅니다"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pi)
