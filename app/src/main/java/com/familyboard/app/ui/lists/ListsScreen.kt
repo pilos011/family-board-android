@@ -53,12 +53,9 @@ fun ListsScreen(
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
-    val notices by vm.noticeItems.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
-    // 가족 공지사항은 부모(선일/은선)에게만 노출
-    val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
 
     Column(
         modifier
@@ -92,10 +89,6 @@ fun ListsScreen(
         }
         Spacer(Modifier.height(16.dp))
         DDayWideCard(onClick = onOpenDday)
-        if (isParent) {
-            Spacer(Modifier.height(16.dp))
-            NoticeWideCard(count = notices.size) { onOpenBoard(BoardType.NOTICE.key) }
-        }
     }
 }
 

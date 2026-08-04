@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 fun ManageScreen(
     modifier: Modifier = Modifier,
     onOpenEmergency: () -> Unit,
+    onOpenNotice: () -> Unit,
 ) {
     Column(
         modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
@@ -50,6 +52,14 @@ fun ManageScreen(
             title = "빠른 연락 요청",
             desc = "전화·문자를 안 받을 때 전체화면으로 요청",
             onClick = onOpenEmergency,
+        )
+        Spacer(Modifier.height(12.dp))
+        ToolCard(
+            icon = Icons.Default.PushPin,
+            tint = Color(0xFFE8A13A),
+            title = "가족 공지사항",
+            desc = "가족이 함께 지킬 안내·규칙 (부모 관리)",
+            onClick = onOpenNotice,
         )
     }
 }

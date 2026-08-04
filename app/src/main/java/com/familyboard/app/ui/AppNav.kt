@@ -187,7 +187,10 @@ private fun MainScaffold(vm: AppViewModel) {
                 AllowanceScreen(vm = vm)
             }
             composable(Routes.MANAGE) {
-                ManageScreen(onOpenEmergency = { nav.navigate(Routes.EMERGENCY) })
+                ManageScreen(
+                    onOpenEmergency = { nav.navigate(Routes.EMERGENCY) },
+                    onOpenNotice = { nav.navigate(Routes.listDetail("notice")) },
+                )
             }
             composable(Routes.EMERGENCY) {
                 EmergencySendScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
