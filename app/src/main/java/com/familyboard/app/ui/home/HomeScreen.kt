@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyboard.app.R
+import com.familyboard.app.data.Family
 import com.familyboard.app.data.RecurrenceExpander
 import com.familyboard.app.ui.AppViewModel
 import java.time.LocalDate
@@ -80,8 +81,6 @@ private val KrDow = listOf("월", "화", "수", "목", "금", "토", "일")
 @Composable
 fun HomeScreen(
     vm: AppViewModel,
-    onOpenCalendar: () -> Unit,
-    onOpenDday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
@@ -147,15 +146,15 @@ fun HomeScreen(
 
             SectionLabel("일정 보드")
             Spacer(Modifier.height(8.dp))
-            ScheduleBoard(past = schedule.first, upcoming = schedule.second, today = today, onClick = onOpenCalendar)
+            ScheduleBoard(past = schedule.first, upcoming = schedule.second)
             Spacer(Modifier.height(26.dp))
 
             special?.let { (item, d, _) ->
-                CountdownBox(title = item.text, dday = d, dateText = null, examList = true, onClick = onOpenDday)
+                CountdownBox(title = item.text, dday = d, dateText = null, examList = true)
             }
             others.forEach { (item, d, t) ->
                 Spacer(Modifier.height(12.dp))
-                CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false, onClick = onOpenDday)
+                CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false)
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -164,30 +163,14 @@ fun HomeScreen(
 
 @Composable
 private fun TitleSign() {
-    // 밝은 메이플 판에 갈색으로 각인된 납작한 안내판 (MAPLE 각인 느낌). 글자수에 맞춰 컴팩트.
-    val shape = RoundedCornerShape(14.dp)
-    Box(Modifier.fillMaxWidth().padding(vertical = 2.dp), contentAlignment = Alignment.Center) {
-        Box(
-            Modifier.shadow(6.dp, shape).clip(shape).border(1.dp, Color(0x33000000), shape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.wood_bg),
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop,
-            )
-            Text(
-                "준준가족 보드",
-                modifier = Modifier.padding(horizontal = 28.dp, vertical = 11.dp),
-                fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 23.sp,
-                letterSpacing = 3.sp,
-                color = Color(0xFF3B2410),
-                // 각인(음각): 어두운 글자 + 아래쪽 밝은 하이라이트
-                style = TextStyle(shadow = Shadow(Color(0x99FFF3DD), Offset(0f, 1.5f), 1.5f)),
-            )
-        }
-    }
+    // 사용자가 제작한 타이틀 이미지 사용
+    val shape = RoundedCornerShape(18.dp)
+    Image(
+        painter = painterResource(R.drawable.jun_title),
+        contentDescription = "준준가족 보드",
+        modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape),
+        contentScale = ContentScale.FillWidth,
+    )
 }
 
 @Composable
@@ -222,31 +205,50 @@ private fun PostIt(text: String, index: Int) {
     }
 }
 
+private val Chalkboard = Color(0xFFF3ECDD)      // 칠판 위 밝은 글자
+private val ChalkboardDim = Color(0xFF9AA79B)   // 지난 일정(흐리게)
+private val ChalkLine = Color(0x40FFFFFF)
+
 @Composable
 private fun ScheduleBoard(
     past: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     upcoming: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
-    today: LocalDate,
-    onClick: () -> Unit,
 ) {
-    Box(
-        Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp)).background(Color(0xFFFDFAF3))
-            .clickable { onClick() }.padding(16.dp),
-    ) {
-        // 집게
-        Box(
-            Modifier.align(Alignment.TopCenter).width(58.dp).height(16.dp)
-                .background(Color(0xFF55555A), RoundedCornerShape(4.dp)),
+    Box(Modifier.fillMaxWidth()) {
+        // 실사 칠판(나무 프레임) 이미지 배경
+        Image(
+            painter = painterResource(R.drawable.board_bg),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.FillBounds,
         )
-        Column(Modifier.padding(top = 12.dp)) {
+        // 프레임 안쪽(슬레이트)에 내용 배치
+        Column(Modifier.padding(start = 34.dp, end = 34.dp, top = 30.dp, bottom = 46.dp)) {
             if (past.isEmpty() && upcoming.isEmpty()) {
-                Text("표시할 일정이 없어요.", color = Ink.copy(alpha = 0.5f), fontSize = 14.sp)
+                Text("표시할 일정이 없어요.", color = ChalkboardDim, fontSize = 14.sp)
             }
-            past.forEach { (d, e) -> EventLine(d, e, pastStyle = true) }
-            if (past.isNotEmpty() && upcoming.isNotEmpty()) Spacer(Modifier.height(2.dp))
-            upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false) }
+            if (past.isNotEmpty()) {
+                ChalkDivider("지난 일정")
+                past.forEach { (d, e) -> EventLine(d, e, pastStyle = true) }
+            }
+            if (upcoming.isNotEmpty()) {
+                ChalkDivider("다가오는 일정")
+                upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false) }
+            }
         }
+    }
+}
+
+@Composable
+private fun ChalkDivider(label: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.weight(1f).height(1.dp).background(ChalkLine))
+        Text(label, color = ChalkboardDim, fontSize = 11.sp, letterSpacing = 1.sp)
+        Box(Modifier.weight(1f).height(1.dp).background(ChalkLine))
     }
 }
 
@@ -270,20 +272,21 @@ private fun EventLine(
         e.startTime.isNotBlank() -> " · ${e.startTime}"
         else -> ""
     }
-    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+    val dotColor = if (pastStyle) Color(0xFF7C8B7E) else Family.colorOfIds(e.memberIds)
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-            color = if (pastStyle) Color(0xFFA89A86) else Ink.copy(alpha = 0.7f),
+            color = if (pastStyle) ChalkboardDim else Chalkboard,
             modifier = Modifier.widthIn(min = 46.dp),
         )
-        Spacer(Modifier.size(8.dp))
-        Icon(Icons.Default.Event, null, tint = if (pastStyle) Color(0xFFCDBFA8) else Color(0xFFE8794A), modifier = Modifier.size(14.dp))
-        Spacer(Modifier.size(8.dp))
+        Spacer(Modifier.size(10.dp))
+        Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
+        Spacer(Modifier.size(9.dp))
         Text(
             e.title + sub,
             fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (pastStyle) Color(0xFFA89A86) else Ink,
+            color = if (pastStyle) ChalkboardDim else Chalkboard,
             textDecoration = if (pastStyle) TextDecoration.LineThrough else TextDecoration.None,
         )
     }
@@ -295,7 +298,7 @@ private val Chalk = Color(0xFFF2EAD6)
 private val ChalkSoft = Color(0xFFB9C7BA)
 
 @Composable
-private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean, onClick: () -> Unit) {
+private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean) {
     val ddayLabel = when {
         dday == 0 -> "D-DAY"; dday > 0 -> "D-$dday"; else -> "D+${-dday}"
     }
@@ -303,17 +306,21 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
         Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF2C4A3B), BoardGreen)))
-            .clickable { onClick() }.padding(18.dp),
+            .padding(18.dp),
     ) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
-                    Text(title, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 24.sp)
+                    if (examList) Text("🎓 중요 카운트다운", fontFamily = Gaegu, color = ChalkSoft, fontSize = 15.sp)
+                    Text(title, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 23.sp)
                     if (!examList && dateText != null) {
                         Text(dateText, color = ChalkSoft, fontSize = 13.sp)
                     }
                 }
-                Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
+                    Text("D-DAY", color = Color(0xFFFF6B5E), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                }
             }
             if (examList) {
                 Spacer(Modifier.height(10.dp))

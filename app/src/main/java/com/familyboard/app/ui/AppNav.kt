@@ -138,11 +138,7 @@ private fun MainScaffold(vm: AppViewModel) {
             modifier = Modifier.padding(inner),
         ) {
             composable(Routes.HOME) {
-                HomeScreen(
-                    vm = vm,
-                    onOpenCalendar = { nav.navigateTab(Routes.CALENDAR) },
-                    onOpenDday = { nav.navigate(Routes.DDAY) },
-                )
+                HomeScreen(vm = vm)
             }
             composable(Routes.CALENDAR) {
                 CalendarScreen(
