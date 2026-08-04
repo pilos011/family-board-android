@@ -27,6 +27,10 @@ class MainActivity : ComponentActivity() {
 
     private val notifLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { nextPermStep() }
+    private val fineLocLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { nextPermStep() }
+    private val bgLocLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { nextPermStep() }
     private val batteryLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
     private val fullScreenLauncher =
@@ -38,7 +42,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        if (needNotif() || needBattery() || needFullScreen()) {
+        if (needNotif() || needFineLoc() || needBgLoc() || needBattery() || needFullScreen()) {
             permStep = 0
             nextPermStep()
         }
@@ -56,7 +60,16 @@ class MainActivity : ComponentActivity() {
                 notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else nextPermStep()
 
-            1 -> if (needBattery()) {
+            1 -> if (needFineLoc()) {
+                fineLocLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            } else nextPermStep()
+
+            2 -> if (needBgLoc()) {
+                runCatching { bgLocLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }
+                    .onFailure { nextPermStep() }
+            } else nextPermStep()
+
+            3 -> if (needBattery()) {
                 runCatching {
                     batteryLauncher.launch(
                         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
@@ -65,7 +78,7 @@ class MainActivity : ComponentActivity() {
                 }.onFailure { nextPermStep() }
             } else nextPermStep()
 
-            2 -> if (needFullScreen()) {
+            4 -> if (needFullScreen()) {
                 runCatching {
                     fullScreenLauncher.launch(
                         Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
@@ -81,6 +94,17 @@ class MainActivity : ComponentActivity() {
     private fun needNotif(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+
+    private fun needFineLoc(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) !=
+            PackageManager.PERMISSION_GRANTED
+
+    private fun needBgLoc(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) !=
             PackageManager.PERMISSION_GRANTED
 
     private fun needBattery(): Boolean {

@@ -8,6 +8,8 @@ plugins {
 def holidayApiKey = ""
 def notifyBaseUrl = ""
 def notifySecret = ""
+def haBaseUrl = ""
+def haToken = ""
 def lp = rootProject.file("local.properties")
 if (lp.exists()) {
     def props = new Properties()
@@ -15,6 +17,8 @@ if (lp.exists()) {
     holidayApiKey = props.getProperty("holiday.api.key", "")
     notifyBaseUrl = props.getProperty("notify.base.url", "")
     notifySecret = props.getProperty("notify.secret", "")
+    haBaseUrl = props.getProperty("ha.base.url", "")
+    haToken = props.getProperty("ha.token", "")
 }
 
 android {
@@ -26,11 +30,13 @@ android {
         applicationId "com.jun.family_board"
         minSdk 24
         targetSdk 34
-        versionCode 51
-        versionName "0.9.42"
+        versionCode 52
+        versionName "0.9.43"
         buildConfigField "String", "HOLIDAY_API_KEY", "\"${holidayApiKey}\""
         buildConfigField "String", "NOTIFY_BASE_URL", "\"${notifyBaseUrl}\""
         buildConfigField "String", "NOTIFY_SECRET", "\"${notifySecret}\""
+        buildConfigField "String", "HA_BASE_URL", "\"${haBaseUrl}\""
+        buildConfigField "String", "HA_TOKEN", "\"${haToken}\""
     }
 
     buildTypes {

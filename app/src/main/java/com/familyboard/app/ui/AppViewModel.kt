@@ -123,6 +123,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     val token = FirebaseMessaging.getInstance().token.await()
                     NotifyApi.register(mid, token)
                 }
+                // Home Assistant 기기정보 5분 주기 리포트 예약(+즉시 1회)
+                runCatching {
+                    com.familyboard.app.notif.HaReporter.report(getApplication(), mid)
+                    com.familyboard.app.notif.HaReportScheduler.schedule(getApplication())
+                }
             }
         }
         // 앱 업데이트 확인

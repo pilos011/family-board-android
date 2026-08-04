@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -49,6 +50,10 @@
 
         <receiver
             android:name=".notif.DDayReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".notif.HaReportReceiver"
             android:exported="false" />
 
         <service
