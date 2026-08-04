@@ -1,14 +1,21 @@
 package com.familyboard.app.notif
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.familyboard.app.R
 import com.familyboard.app.data.CurrentUserStore
+import com.familyboard.app.data.Family
+import com.familyboard.app.ui.emergency.EmergencyActivity
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -18,11 +25,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * FCM 수신. 토큰 갱신 시 서버에 재등록하고, 등록 알림 수신 시 폰 알림을 띄운다.
+ * FCM 수신. 토큰 갱신 시 서버에 재등록하고, 알림 종류에 따라 폰 알림/전체화면을 띄운다.
  */
 class FamilyMessagingService : FirebaseMessagingService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    companion object {
+        const val CH_EMERGENCY = "emergency"
+    }
 
     override fun onNewToken(token: String) {
         scope.launch {
@@ -34,12 +45,81 @@ class FamilyMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val n = message.notification
-        val title = n?.title ?: message.data["title"] ?: "가족보드"
-        val body = n?.body ?: message.data["body"] ?: ""
-        showNotification(title, body)
+        val data = message.data
+        when (data["type"]) {
+            "emergency" -> showEmergency(
+                sender = data["sender"] ?: "",
+                msg = data["msg"] ?: (message.notification?.body ?: ""),
+                wantLoc = data["wantLoc"] == "1",
+            )
+            "location" -> showLocation(
+                sender = data["sender"] ?: "",
+                lat = data["lat"] ?: return,
+                lng = data["lng"] ?: return,
+            )
+            else -> {
+                val n = message.notification
+                val title = n?.title ?: data["title"] ?: "가족보드"
+                val body = n?.body ?: data["body"] ?: ""
+                showNotification(title, body)
+            }
+        }
     }
 
+    // ─────────── 긴급 연락: 전체화면 알림 ───────────
+    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean) {
+        ensureEmergencyChannel()
+        val full = Intent(this, EmergencyActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            putExtra(EmergencyActivity.EXTRA_SENDER, sender)
+            putExtra(EmergencyActivity.EXTRA_MESSAGE, msg)
+            putExtra(EmergencyActivity.EXTRA_WANT_LOC, wantLoc)
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(this, 7001, full, flags)
+
+        val name = Family.nameOf(sender)
+        val notif = NotificationCompat.Builder(this, CH_EMERGENCY)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("🚨 ${name}님의 긴급 연락")
+            .setContentText(msg)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(msg))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setAutoCancel(true)
+            .setOngoing(true)
+            .setContentIntent(pi)
+            .setFullScreenIntent(pi, true)
+            .build()
+
+        if (canNotify()) NotificationManagerCompat.from(this).notify(9001, notif)
+        // 앱이 포그라운드면 곧바로 전체화면 시도(백그라운드는 FSI가 처리)
+        runCatching { startActivity(full) }
+    }
+
+    // ─────────── 위치 공유 수신 ───────────
+    private fun showLocation(sender: String, lat: String, lng: String) {
+        ReminderScheduler.ensureChannel(this)
+        val name = Family.nameOf(sender)
+        val geo = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode("$name 위치")})")
+        val view = Intent(Intent.ACTION_VIEW, geo)
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(this, 8001, view, flags)
+
+        val notif = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("📍 ${name}님이 위치를 공유했어요")
+            .setContentText("탭하면 지도에서 위치를 봅니다")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        if (canNotify()) NotificationManagerCompat.from(this).notify(("loc$sender").hashCode(), notif)
+    }
+
+    // ─────────── 일반 알림 ───────────
     private fun showNotification(title: String, body: String) {
         ReminderScheduler.ensureChannel(this)
         val openIntent = packageManager.getLaunchIntentForPackage(packageName)
@@ -52,18 +132,30 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
-            // 여러 줄 본문(내역/합계 등)이 펼쳐서 모두 보이도록 BigText 스타일 적용
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .apply { contentPi?.let { setContentIntent(it) } }
             .build()
+        if (canNotify()) NotificationManagerCompat.from(this).notify((title + body).hashCode(), notification)
+    }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            NotificationManagerCompat.from(this).notify((title + body).hashCode(), notification)
+    private fun ensureEmergencyChannel() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (nm.getNotificationChannel(CH_EMERGENCY) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CH_EMERGENCY, "긴급 연락", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "긴급 연락 전체화면 알림"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400)
+                    setBypassDnd(true)
+                }
+            )
         }
     }
+
+    private fun canNotify(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
 }

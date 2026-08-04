@@ -172,6 +172,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { board.setChecked(id, checked) }
     fun deleteItem(id: String) = viewModelScope.launch { board.deleteItem(id) }
 
+    /** 긴급 연락 발송: 대상에게 전체화면 긴급 알림. wantLocation 이면 위치공유 요청 버튼 노출. */
+    fun sendEmergency(targetIds: List<String>, message: String, wantLocation: Boolean) = viewModelScope.launch {
+        val actor = currentMemberId.value.orEmpty()
+        val targets = targetIds.filter { it != actor }.distinct()
+        if (targets.isEmpty()) return@launch
+        val data = mapOf(
+            "type" to "emergency",
+            "sender" to actor,
+            "msg" to message,
+            "wantLoc" to if (wantLocation) "1" else "0",
+        )
+        runCatching {
+            NotifyApi.notifyData(actor, targets, "🚨 긴급 연락", "${Family.nameOf(actor)}님의 긴급 연락", data)
+        }
+    }
+
     /**
      * 용돈 정산: 체크된 항목들을 대상 아이에게 완료 알림으로 보내고 목록에서 삭제.
      * 메시지 예) "엄마의 용돈 정산 15,000원이 완료 되었습니다. 확인해보세요."

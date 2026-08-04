@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +35,9 @@ import com.familyboard.app.ui.bucket.BucketHomeScreen
 import com.familyboard.app.ui.bucket.BucketListScreen
 import com.familyboard.app.ui.bucket.BucketViewScreen
 import com.familyboard.app.ui.dday.DDayScreen
+import com.familyboard.app.ui.emergency.EmergencySendScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
+import com.familyboard.app.ui.manage.ManageScreen
 import com.familyboard.app.ui.lists.ListsScreen
 import com.familyboard.app.ui.onboarding.OnboardingScreen
 import com.familyboard.app.ui.search.SearchScreen
@@ -43,6 +46,8 @@ private object Routes {
     const val CALENDAR = "calendar"
     const val LISTS = "lists"
     const val ALLOWANCE = "allowance"
+    const val MANAGE = "manage"
+    const val EMERGENCY = "emergency"
     const val ADD_EVENT = "addEvent/{startIso}/{endIso}"
     const val EDIT_EVENT = "editEvent/{eventId}"
     const val VIEW_EVENT = "viewEvent/{eventId}/{dateIso}"
@@ -79,8 +84,10 @@ private fun MainScaffold(vm: AppViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val showBar = route == Routes.CALENDAR || route == Routes.LISTS || route == Routes.ALLOWANCE
+    val showBar = route == Routes.CALENDAR || route == Routes.LISTS ||
+        route == Routes.ALLOWANCE || route == Routes.MANAGE
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
+    val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
 
     Scaffold(
         bottomBar = {
@@ -104,6 +111,14 @@ private fun MainScaffold(vm: AppViewModel) {
                         icon = { Icon(Icons.Default.Savings, null) },
                         label = { Text("용돈 정산") },
                     )
+                    if (isParent) {
+                        NavigationBarItem(
+                            selected = route == Routes.MANAGE,
+                            onClick = { nav.navigateTab(Routes.MANAGE) },
+                            icon = { Icon(Icons.Default.Tune, null) },
+                            label = { Text("관리 기능") },
+                        )
+                    }
                 }
             }
         },
@@ -170,6 +185,12 @@ private fun MainScaffold(vm: AppViewModel) {
             }
             composable(Routes.ALLOWANCE) {
                 AllowanceScreen(vm = vm)
+            }
+            composable(Routes.MANAGE) {
+                ManageScreen(onOpenEmergency = { nav.navigate(Routes.EMERGENCY) })
+            }
+            composable(Routes.EMERGENCY) {
+                EmergencySendScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.ADD_EVENT) { entry ->
                 AddEventScreen(

@@ -29,12 +29,24 @@ object NotifyApi {
     }
 
     suspend fun notify(actor: String, targets: List<String>, title: String, body: String) {
+        notifyData(actor, targets, title, body, emptyMap())
+    }
+
+    /** title/body 외에 커스텀 data 필드를 함께 전송(긴급 연락/위치 공유 등). */
+    suspend fun notifyData(
+        actor: String, targets: List<String>, title: String, body: String, data: Map<String, String>,
+    ) {
         if (!enabled() || targets.isEmpty()) return
         val json = JSONObject()
             .put("actor", actor)
             .put("targets", JSONArray(targets))
             .put("title", title)
             .put("body", body)
+        if (data.isNotEmpty()) {
+            val d = JSONObject()
+            data.forEach { (k, v) -> d.put(k, v) }
+            json.put("data", d)
+        }
         post("/notify", json)
     }
 
