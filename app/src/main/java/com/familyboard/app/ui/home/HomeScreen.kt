@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -205,50 +206,59 @@ private fun PostIt(text: String, index: Int) {
     }
 }
 
-private val Chalkboard = Color(0xFFF3ECDD)      // 칠판 위 밝은 글자
-private val ChalkboardDim = Color(0xFF9AA79B)   // 지난 일정(흐리게)
-private val ChalkLine = Color(0x40FFFFFF)
+private val Paper = Color(0xFFFDFAF3)
+private val PaperRule = Color(0xFFEADFC9)
+private val DatePast = Color(0xFFA89A86)
+private val DateUp = Color(0xFF6F5C46)
 
 @Composable
 private fun ScheduleBoard(
     past: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     upcoming: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
 ) {
+    val shape = RoundedCornerShape(10.dp)
     Box(Modifier.fillMaxWidth()) {
-        // 실사 칠판(나무 프레임) 이미지 배경
-        Image(
-            painter = painterResource(R.drawable.board_bg),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.FillBounds,
-        )
-        // 프레임 안쪽(슬레이트)에 내용 배치
-        Column(Modifier.padding(start = 34.dp, end = 34.dp, top = 30.dp, bottom = 46.dp)) {
+        // 크림 종이 클립보드 (mockup 구성)
+        Column(
+            Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape).background(Paper)
+                .drawBehind {
+                    val gap = 30.dp.toPx(); var y = 42.dp.toPx()
+                    while (y < size.height) {
+                        drawLine(PaperRule, Offset(0f, y), Offset(size.width, y), 1f); y += gap
+                    }
+                }
+                .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 14.dp),
+        ) {
             if (past.isEmpty() && upcoming.isEmpty()) {
-                Text("표시할 일정이 없어요.", color = ChalkboardDim, fontSize = 14.sp)
+                Text("표시할 일정이 없어요.", color = DatePast, fontSize = 14.sp)
             }
             if (past.isNotEmpty()) {
-                ChalkDivider("지난 일정")
+                PaperDivider("지난 일정")
                 past.forEach { (d, e) -> EventLine(d, e, pastStyle = true) }
             }
             if (upcoming.isNotEmpty()) {
-                ChalkDivider("다가오는 일정")
+                PaperDivider("다가오는 일정")
                 upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false) }
             }
         }
+        // 집게(불독 클립)
+        Box(
+            Modifier.align(Alignment.TopCenter).width(60.dp).height(16.dp)
+                .clip(RoundedCornerShape(4.dp)).background(Color(0xFF55555A)),
+        )
     }
 }
 
 @Composable
-private fun ChalkDivider(label: String) {
+private fun PaperDivider(label: String) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(Modifier.weight(1f).height(1.dp).background(ChalkLine))
-        Text(label, color = ChalkboardDim, fontSize = 11.sp, letterSpacing = 1.sp)
-        Box(Modifier.weight(1f).height(1.dp).background(ChalkLine))
+        Box(Modifier.weight(1f).height(1.dp).background(Color(0xFFE4D8C1)))
+        Text(label, color = Color(0xFFB6A488), fontSize = 11.sp, letterSpacing = 1.sp)
+        Box(Modifier.weight(1f).height(1.dp).background(Color(0xFFE4D8C1)))
     }
 }
 
@@ -272,12 +282,12 @@ private fun EventLine(
         e.startTime.isNotBlank() -> " · ${e.startTime}"
         else -> ""
     }
-    val dotColor = if (pastStyle) Color(0xFF7C8B7E) else Family.colorOfIds(e.memberIds)
+    val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-            color = if (pastStyle) ChalkboardDim else Chalkboard,
+            color = if (pastStyle) DatePast else DateUp,
             modifier = Modifier.widthIn(min = 46.dp),
         )
         Spacer(Modifier.size(10.dp))
@@ -286,7 +296,7 @@ private fun EventLine(
         Text(
             e.title + sub,
             fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (pastStyle) ChalkboardDim else Chalkboard,
+            color = if (pastStyle) DatePast else Ink,
             textDecoration = if (pastStyle) TextDecoration.LineThrough else TextDecoration.None,
         )
     }
@@ -309,18 +319,14 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
             .padding(18.dp),
     ) {
         Column {
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    if (examList) Text("🎓 중요 카운트다운", fontFamily = Gaegu, color = ChalkSoft, fontSize = 15.sp)
-                    Text(title, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 23.sp)
+                    Text(title, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 24.sp)
                     if (!examList && dateText != null) {
                         Text(dateText, color = ChalkSoft, fontSize = 13.sp)
                     }
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
-                    Text("D-DAY", color = Color(0xFFFF6B5E), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                }
+                Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
             }
             if (examList) {
                 Spacer(Modifier.height(10.dp))
