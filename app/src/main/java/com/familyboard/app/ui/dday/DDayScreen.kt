@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
@@ -155,10 +156,11 @@ fun DDayScreen(
     if (showAdd) {
         DDayEditDialog(
             initial = null,
-            onSave = { title, date, yearly, icon, notifyIds ->
+            onSave = { title, date, yearly, homePinned, icon, notifyIds ->
                 vm.addItem(
                     ListItem(text = title, board = DDayBoard.BOARD, createdBy = me,
-                        dateIso = date.toString(), yearly = yearly, icon = icon, notifyIds = notifyIds)
+                        dateIso = date.toString(), yearly = yearly, icon = icon,
+                        notifyIds = notifyIds, homePinned = homePinned)
                 )
                 showAdd = false
             },
@@ -168,8 +170,9 @@ fun DDayScreen(
     editItem?.let { item ->
         DDayEditDialog(
             initial = item,
-            onSave = { title, date, yearly, icon, notifyIds ->
-                vm.updateItem(item.copy(text = title, dateIso = date.toString(), yearly = yearly, icon = icon, notifyIds = notifyIds))
+            onSave = { title, date, yearly, homePinned, icon, notifyIds ->
+                vm.updateItem(item.copy(text = title, dateIso = date.toString(), yearly = yearly,
+                    icon = icon, notifyIds = notifyIds, homePinned = homePinned))
                 editItem = null
             },
             onDelete = { vm.deleteItem(item.id); editItem = null },
@@ -222,7 +225,7 @@ private fun DDayCard(row: DRow, onClick: (() -> Unit)?) {
 @Composable
 private fun DDayEditDialog(
     initial: ListItem?,
-    onSave: (String, LocalDate, Boolean, String, List<String>) -> Unit,
+    onSave: (String, LocalDate, Boolean, Boolean, String, List<String>) -> Unit,
     onDelete: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
@@ -233,6 +236,7 @@ private fun DDayEditDialog(
         )
     }
     var yearly by remember { mutableStateOf(initial?.yearly ?: false) }
+    var homePinned by remember { mutableStateOf(initial?.homePinned ?: false) }
     var notifyIds by remember { mutableStateOf(initial?.notifyIds ?: emptyList()) }
     var showNotify by remember { mutableStateOf(false) }
     var icon by remember { mutableStateOf(initial?.icon ?: "") }
@@ -266,6 +270,12 @@ private fun DDayEditDialog(
                     Spacer(Modifier.size(8.dp))
                     Text("매년 반복", Modifier.weight(1f))
                     Switch(checked = yearly, onCheckedChange = { yearly = it })
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Home, null, tint = Ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("홈 화면에 게시", Modifier.weight(1f))
+                    Switch(checked = homePinned, onCheckedChange = { homePinned = it })
                 }
 
                 // 알림: 기본 접힘, 대상 미선택(=알림 없음). 선택 시 일주일 전·1일 전 알림.
@@ -318,7 +328,7 @@ private fun DDayEditDialog(
         confirmButton = {
             TextButton(
                 enabled = title.isNotBlank(),
-                onClick = { onSave(title.trim(), date, yearly, icon, notifyIds) },
+                onClick = { onSave(title.trim(), date, yearly, homePinned, icon, notifyIds) },
             ) { Text("저장") }
         },
         dismissButton = {

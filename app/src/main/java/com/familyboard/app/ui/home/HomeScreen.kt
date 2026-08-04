@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -75,8 +74,6 @@ private val Ink = Color(0xFF3A2C1D)
 private val NoteColors = listOf(Color(0xFFFFF3A8), Color(0xFFC7EFD0), Color(0xFFFFCBD3), Color(0xFFBFE0FF))
 private val PinColors = listOf(Color(0xFFD63B2F), Color(0xFF2F7FD6), Color(0xFFE8A13A), Color(0xFF37B24D))
 
-// 준호 수능 관련 고정 일정
-private val SUNEUNG = LocalDate.of(2026, 11, 19)
 private val KrDow = listOf("월", "화", "수", "목", "금", "토", "일")
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -106,7 +103,17 @@ fun HomeScreen(
         val upcoming = occ.filter { !it.first.isBefore(today) }.take(4)
         past to upcoming
     }
-    val ddayValue = remember(today) { ChronoUnit.DAYS.between(today, SUNEUNG).toInt() }
+    // 홈 카운트다운: D-Day 항목 중 '홈 게시' 체크된 것. 준호 수능은 특별 박스(주요 일정 포함).
+    val ddayItems by vm.ddayItems.collectAsStateWithLifecycle()
+    val pinned = remember(ddayItems, today) {
+        ddayItems.filter { it.homePinned && it.dateIso.isNotBlank() }.mapNotNull { itm ->
+            val base = runCatching { LocalDate.parse(itm.dateIso) }.getOrNull() ?: return@mapNotNull null
+            val target = if (itm.yearly) nextAnniversary(base, today) else base
+            Triple(itm, ChronoUnit.DAYS.between(today, target).toInt(), target)
+        }
+    }
+    val special = pinned.firstOrNull { it.first.text == "준호 수능" }
+    val others = pinned.filter { it.first.text != "준호 수능" }.sortedBy { it.second }
 
     Box(modifier.fillMaxSize()) {
         // 코르크 보드 배경(고정)
@@ -143,7 +150,13 @@ fun HomeScreen(
             ScheduleBoard(past = schedule.first, upcoming = schedule.second, today = today, onClick = onOpenCalendar)
             Spacer(Modifier.height(26.dp))
 
-            Chalkboard(dday = ddayValue, onClick = onOpenDday)
+            special?.let { (item, d, _) ->
+                CountdownBox(title = item.text, dday = d, dateText = null, examList = true, onClick = onOpenDday)
+            }
+            others.forEach { (item, d, t) ->
+                Spacer(Modifier.height(12.dp))
+                CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false, onClick = onOpenDday)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -151,52 +164,29 @@ fun HomeScreen(
 
 @Composable
 private fun TitleSign() {
-    val shape = RoundedCornerShape(22.dp)
-    val faceH = 96.dp
-    Box(Modifier.fillMaxWidth().height(faceH + 12.dp)) {
-        // 옆면(두께) — 앞면보다 아래로 내려 어두운 나무색이 보이게
+    // 밝은 메이플 판에 갈색으로 각인된 납작한 안내판 (MAPLE 각인 느낌). 글자수에 맞춰 컴팩트.
+    val shape = RoundedCornerShape(14.dp)
+    Box(Modifier.fillMaxWidth().padding(vertical = 2.dp), contentAlignment = Alignment.Center) {
         Box(
-            Modifier.fillMaxWidth().height(faceH).align(Alignment.TopCenter)
-                .offset(y = 11.dp).clip(shape).background(Color(0xFF3A2410)),
-        )
-        // 앞면 패널
-        Box(
-            Modifier.fillMaxWidth().height(faceH).align(Alignment.TopCenter)
-                .shadow(16.dp, shape).clip(shape),
+            Modifier.shadow(6.dp, shape).clip(shape).border(1.dp, Color(0x33000000), shape),
             contentAlignment = Alignment.Center,
         ) {
             Image(
                 painter = painterResource(R.drawable.wood_bg),
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.matchParentSize(),
                 contentScale = ContentScale.Crop,
             )
-            // 베벨: 밝은 안쪽 테두리 + 어두운 외곽으로 입체감
-            Box(Modifier.fillMaxSize().border(3.dp, Color(0x40FFE9C7), shape))
-            Box(Modifier.fillMaxSize().border(1.dp, Color(0x55000000), shape))
-            // 모서리 나사
-            Screw(Modifier.align(Alignment.TopStart).padding(12.dp))
-            Screw(Modifier.align(Alignment.TopEnd).padding(12.dp))
-            Screw(Modifier.align(Alignment.BottomStart).padding(12.dp))
-            Screw(Modifier.align(Alignment.BottomEnd).padding(12.dp))
             Text(
-                "준준패밀리 보드",
-                fontFamily = Gaegu, fontWeight = FontWeight.Bold, fontSize = 34.sp,
-                color = Color(0xFFFFF6E8),
-                style = TextStyle(shadow = Shadow(Color(0xB3000000), Offset(0f, 3f), 6f)),
+                "준준가족 보드",
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 11.dp),
+                fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 23.sp,
+                letterSpacing = 3.sp,
+                color = Color(0xFF3B2410),
+                // 각인(음각): 어두운 글자 + 아래쪽 밝은 하이라이트
+                style = TextStyle(shadow = Shadow(Color(0x99FFF3DD), Offset(0f, 1.5f), 1.5f)),
             )
         }
-    }
-}
-
-@Composable
-private fun Screw(modifier: Modifier) {
-    Box(
-        modifier.size(13.dp).clip(CircleShape)
-            .background(Brush.radialGradient(listOf(Color(0xFFF0DFBE), Color(0xFF6E5230)))),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.width(8.dp).height(2.dp).background(Color(0x66000000)))
     }
 }
 
@@ -305,7 +295,7 @@ private val Chalk = Color(0xFFF2EAD6)
 private val ChalkSoft = Color(0xFFB9C7BA)
 
 @Composable
-private fun Chalkboard(dday: Int, onClick: () -> Unit) {
+private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean, onClick: () -> Unit) {
     val ddayLabel = when {
         dday == 0 -> "D-DAY"; dday > 0 -> "D-$dday"; else -> "D+${-dday}"
     }
@@ -316,27 +306,38 @@ private fun Chalkboard(dday: Int, onClick: () -> Unit) {
             .clickable { onClick() }.padding(18.dp),
     ) {
         Column {
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("🎓 중요 카운트다운", fontFamily = Gaegu, color = ChalkSoft, fontSize = 15.sp)
-                    Text("준호 수능", fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 22.sp)
+                    Text(title, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 24.sp)
+                    if (!examList && dateText != null) {
+                        Text(dateText, color = ChalkSoft, fontSize = 13.sp)
+                    }
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
-                }
+                Text(ddayLabel, fontFamily = Gaegu, fontWeight = FontWeight.Bold, color = Gold, fontSize = 46.sp)
             }
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x66F2EAD6)))
-            Spacer(Modifier.height(10.dp))
-            Text("주요 일정", color = ChalkSoft, fontSize = 12.sp, letterSpacing = 2.sp)
-            Spacer(Modifier.height(8.dp))
-            ExamRow("9월 모의평가", "9/2 (수)", false)
-            ExamRow("응시원서 현장 접수", "8/24 ~ 9/4", false)
-            ExamRow("수능 시험일", "11/19 (목)", true)
-            ExamRow("성적 통지일", "12/11 (금)", false)
+            if (examList) {
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x66F2EAD6)))
+                Spacer(Modifier.height(10.dp))
+                Text("주요 일정", color = ChalkSoft, fontSize = 12.sp, letterSpacing = 2.sp)
+                Spacer(Modifier.height(8.dp))
+                ExamRow("9월 모의평가", "9/2 (수)", false)
+                ExamRow("응시원서 현장 접수", "8/24 ~ 9/4", false)
+                ExamRow("수능 시험일", "11/19 (목)", true)
+                ExamRow("성적 통지일", "12/11 (금)", false)
+            }
         }
     }
 }
+
+private fun nextAnniversary(date: LocalDate, today: LocalDate): LocalDate {
+    val md = java.time.MonthDay.of(date.monthValue, date.dayOfMonth)
+    var next = md.atYear(today.year)
+    if (next.isBefore(today)) next = md.atYear(today.year + 1)
+    return next
+}
+
+private fun krDate(d: LocalDate): String = "${d.monthValue}월 ${d.dayOfMonth}일 (${KrDow[d.dayOfWeek.value - 1]})"
 
 @Composable
 private fun ExamRow(name: String, value: String, hi: Boolean) {
