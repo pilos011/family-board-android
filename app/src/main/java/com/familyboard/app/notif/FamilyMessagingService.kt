@@ -82,7 +82,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
         val name = Family.nameOf(sender)
         val notif = NotificationCompat.Builder(this, CH_EMERGENCY)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("🚨 ${name}님의 긴급 연락")
+            .setContentTitle("⏳ ${name}님의 빠른 연락 요청")
             .setContentText(msg)
             .setStyle(NotificationCompat.BigTextStyle().bigText(msg))
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -144,8 +144,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CH_EMERGENCY) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CH_EMERGENCY, "긴급 연락", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "긴급 연락 전체화면 알림"
+                NotificationChannel(CH_EMERGENCY, "빠른 연락 요청", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "빠른 연락 요청 전체화면 알림"
                     enableVibration(true)
                     vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400)
                     setBypassDnd(true)

@@ -46,8 +46,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -103,7 +106,7 @@ class EmergencyActivity : ComponentActivity() {
         vibrateAlarm()
 
         setContent {
-            EmergencyContent(
+            WaitingContent(
                 senderName = Family.nameOf(senderId),
                 message = message,
                 showLocation = wantLoc,
@@ -217,11 +220,14 @@ class EmergencyActivity : ComponentActivity() {
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
 }
 
-private val EmergencyRed = Color(0xFFD6293E)
-private val EmergencyDark = Color(0xFF7A1020)
+// 애타게 기다리는 따뜻한 톤
+private val WarmBg1 = Color(0xFFFBEFD8)
+private val WarmBg2 = Color(0xFFF3D6AF)
+private val WarmInk = Color(0xFF5A4632)
+private val WarmAccent = Color(0xFFE8894A)
 
 @Composable
-private fun EmergencyContent(
+private fun WaitingContent(
     senderName: String,
     message: String,
     showLocation: Boolean,
@@ -231,42 +237,47 @@ private fun EmergencyContent(
 ) {
     Box(
         Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(listOf(EmergencyRed, EmergencyDark)))
+            .background(Brush.verticalGradient(listOf(WarmBg1, WarmBg2)))
             .padding(20.dp),
     ) {
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd)) {
-            Icon(Icons.Default.Close, "닫기", tint = Color.White)
+            Icon(Icons.Default.Close, "닫기", tint = WarmInk.copy(alpha = 0.55f))
         }
 
         Column(
-            Modifier.fillMaxSize().padding(top = 40.dp),
+            Modifier.fillMaxSize().padding(top = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text("🚨", fontSize = 64.sp)
-            Spacer(Modifier.height(8.dp))
-            Text("긴급 연락", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black)
+            Image(
+                painter = painterResource(com.familyboard.app.R.drawable.call_wait),
+                contentDescription = null,
+                modifier = Modifier.size(180.dp),
+                contentScale = ContentScale.Fit,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("빠른 연락 요청", color = WarmInk, fontSize = 28.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(4.dp))
-            Text("보낸 사람 · $senderName", color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp)
-            Spacer(Modifier.height(28.dp))
+            Text("${senderName}님이 애타게 기다리고 있어요", color = WarmInk.copy(alpha = 0.7f), fontSize = 15.sp)
+            Spacer(Modifier.height(24.dp))
             Box(
-                Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.14f), RoundedCornerShape(20.dp))
+                Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
                     .padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    message.ifBlank { "긴급히 연락 바랍니다." },
-                    color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+                    message.ifBlank { "연락 부탁해요." },
+                    color = WarmInk, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center, lineHeight = 32.sp,
                 )
             }
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(30.dp))
 
             Button(
                 onClick = onCall,
                 modifier = Modifier.fillMaxWidth().height(60.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = EmergencyRed),
+                colors = ButtonDefaults.buttonColors(containerColor = WarmAccent, contentColor = Color.White),
             ) {
                 Icon(Icons.Default.Call, null); Spacer(Modifier.size(8.dp))
                 Text("바로 연락", fontSize = 19.sp, fontWeight = FontWeight.Bold)
@@ -278,7 +289,7 @@ private fun EmergencyContent(
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.18f), contentColor = Color.White,
+                        containerColor = WarmInk.copy(alpha = 0.10f), contentColor = WarmInk,
                     ),
                 ) {
                     Icon(Icons.Default.LocationOn, null); Spacer(Modifier.size(8.dp))

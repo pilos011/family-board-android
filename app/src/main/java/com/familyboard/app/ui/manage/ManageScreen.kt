@@ -46,9 +46,9 @@ fun ManageScreen(
 
         ToolCard(
             icon = Icons.Default.Campaign,
-            tint = Color(0xFFD6293E),
-            title = "긴급 연락",
-            desc = "전화·문자를 안 받을 때 전체화면으로 알림",
+            tint = Color(0xFFE8894A),
+            title = "빠른 연락 요청",
+            desc = "전화·문자를 안 받을 때 전체화면으로 요청",
             onClick = onOpenEmergency,
         )
     }

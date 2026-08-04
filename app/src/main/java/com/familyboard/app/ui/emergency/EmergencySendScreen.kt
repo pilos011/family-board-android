@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.familyboard.app.data.Family
 import com.familyboard.app.ui.AppViewModel
 
-private val EmergencyRed = Color(0xFFD6293E)
+private val EmergencyRed = Color(0xFFE8894A) // 따뜻한 톤 강조색
 private const val DEFAULT_MSG = "급한데 연락이 안되어 보내니, 이 알림을 보면 바로 전화 줘!"
 private const val LOC_SUFFIX = "위치도 공유해주면 더 안심이 되겠어."
 
@@ -78,7 +78,7 @@ fun EmergencySendScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text("긴급 연락") },
+                title = { Text("빠른 연락 요청") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
@@ -147,7 +147,7 @@ fun EmergencySendScreen(
             Button(
                 onClick = {
                     vm.sendEmergency(targets, buildBody(message, wantLoc), wantLoc)
-                    Toast.makeText(context, "긴급 연락을 보냈어요", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "빠른 연락 요청을 보냈어요", Toast.LENGTH_SHORT).show()
                     onBack()
                 },
                 enabled = targets.isNotEmpty(),
@@ -156,7 +156,7 @@ fun EmergencySendScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = EmergencyRed),
             ) {
                 Icon(Icons.Default.Send, null); Spacer(Modifier.size(8.dp))
-                Text("긴급 연락 보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("빠른 연락 요청 보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(10.dp))

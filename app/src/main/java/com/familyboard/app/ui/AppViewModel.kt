@@ -184,7 +184,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "wantLoc" to if (wantLocation) "1" else "0",
         )
         runCatching {
-            NotifyApi.notifyData(actor, targets, "🚨 긴급 연락", "${Family.nameOf(actor)}님의 긴급 연락", data)
+            NotifyApi.notifyData(actor, targets, "빠른 연락 요청", "${Family.nameOf(actor)}님의 빠른 연락 요청", data)
         }
     }
 
