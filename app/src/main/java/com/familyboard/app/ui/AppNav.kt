@@ -142,6 +142,8 @@ private fun MainScaffold(vm: AppViewModel) {
                     vm = vm,
                     onOpenEvent = { id, dateIso -> nav.navigate(Routes.viewEvent(id, dateIso)) },
                     onOpenDday = { nav.navigate(Routes.DDAY) },
+                    onOpenNotice = { nav.navigate(Routes.listDetail("notice")) },
+                    canManageNotice = isParent,
                 )
             }
             composable(Routes.CALENDAR) {

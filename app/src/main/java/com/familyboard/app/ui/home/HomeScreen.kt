@@ -1,6 +1,5 @@
 package com.familyboard.app.ui.home
 
-import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -100,6 +99,8 @@ fun HomeScreen(
     vm: AppViewModel,
     onOpenEvent: (String, String) -> Unit,
     onOpenDday: () -> Unit,
+    onOpenNotice: () -> Unit,
+    canManageNotice: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
@@ -110,6 +111,9 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     var showUpdate by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
+    var showMaker by remember { mutableStateOf(false) }
+    // 타이틀 아래 '만든이' 라벨은 잠깐 보였다 사라짐
+    LaunchedEffect(showMaker) { if (showMaker) { kotlinx.coroutines.delay(1800); showMaker = false } }
 
     val checkedNotices = remember(notices) { notices.filter { it.checked }.take(4) }
 
@@ -153,7 +157,24 @@ fun HomeScreen(
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         ) {
-            TitleSign(updateAvailable = updateInfo != null, onUpdate = { showUpdate = true })
+            TitleSign(
+                updateAvailable = updateInfo != null,
+                onUpdate = { showUpdate = true },
+                onTitleClick = { showMaker = true },
+            )
+            // 타이틀 이미지 바로 아래에 만든이 표시(탭 시 잠깐)
+            if (showMaker) {
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "만든이 : 김선일",
+                        fontFamily = NanumGothic, fontSize = 13.sp, color = Color.White,
+                        modifier = Modifier
+                            .background(Color(0x99000000), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(20.dp))
 
             SectionLabel("가족 공지사항")
@@ -165,7 +186,10 @@ fun HomeScreen(
                 )
             } else {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    checkedNotices.forEachIndexed { i, n -> PostIt(n.text, i) }
+                    // 부모(선일·은선)만 롱클릭으로 공지 화면 이동. 자녀는 반응 없음.
+                    checkedNotices.forEachIndexed { i, n ->
+                        PostIt(n.text, i, onLongPress = if (canManageNotice) onOpenNotice else null)
+                    }
                 }
             }
             Spacer(Modifier.height(26.dp))
@@ -228,11 +252,10 @@ fun HomeScreen(
 }
 
 @Composable
-private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit) {
+private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit, onTitleClick: () -> Unit) {
     // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩. 비율 유지 75% 크기, 가운데.
-    // 타이틀 탭 → 만든이 표시. 오른쪽 빈 공간 가운데에 업데이트 아이콘(있을 때).
+    // 타이틀 탭 → 만든이 표시(라벨은 상위에서 타이틀 바로 아래에 렌더). 오른쪽 빈 공간 가운데에 업데이트 아이콘(있을 때).
     val shape = RoundedCornerShape(12.dp)
-    val context = LocalContext.current
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth(0.75f)) {
             Box(Modifier.matchParentSize().offset(y = 4.dp).clip(shape).background(Color(0xFF4A3018)))
@@ -240,7 +263,7 @@ private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit) {
                 painter = painterResource(R.drawable.jun_title),
                 contentDescription = "준준가족 보드",
                 modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape)
-                    .clickable { Toast.makeText(context, "만든이 : 김선일", Toast.LENGTH_SHORT).show() },
+                    .clickable { onTitleClick() },
                 contentScale = ContentScale.FillWidth,
             )
         }
@@ -282,12 +305,21 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun PostIt(text: String, index: Int) {
+private fun PostIt(text: String, index: Int, onLongPress: (() -> Unit)? = null) {
     val rot = listOf(-2.5f, 1.8f, -1.2f, 2.4f)[index % 4]
+    val haptic = LocalHapticFeedback.current
     Box(
         Modifier.width(156.dp).height(130.dp).rotate(rot)
             .shadow(6.dp, RoundedCornerShape(3.dp))
-            .background(NoteColors[index % NoteColors.size], RoundedCornerShape(3.dp)),
+            .background(NoteColors[index % NoteColors.size], RoundedCornerShape(3.dp))
+            .then(
+                if (onLongPress != null) Modifier.pointerInput(Unit) {
+                    detectTapGestures(onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongPress()
+                    })
+                } else Modifier,
+            ),
     ) {
         Box(
             Modifier.align(Alignment.TopCenter).size(16.dp).clip(CircleShape)
