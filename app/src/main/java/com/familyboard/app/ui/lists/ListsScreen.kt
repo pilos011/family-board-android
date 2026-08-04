@@ -68,6 +68,10 @@ fun ListsScreen(
     ) {
         Text("리스트", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(20.dp))
+        if (showBucket) {
+            BucketWideCard(spouseName = spouse, onClick = onOpenBucket)
+            Spacer(Modifier.height(16.dp))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             BoardCard(
                 title = BoardType.SHOPPING.title,
@@ -91,10 +95,6 @@ fun ListsScreen(
         if (isParent) {
             Spacer(Modifier.height(16.dp))
             NoticeWideCard(count = notices.size) { onOpenBoard(BoardType.NOTICE.key) }
-        }
-        if (showBucket) {
-            Spacer(Modifier.height(16.dp))
-            BucketWideCard(spouseName = spouse, onClick = onOpenBucket)
         }
     }
 }

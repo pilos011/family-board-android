@@ -124,7 +124,7 @@ private fun AllowanceSection(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(36.dp).clip(CircleShape).background(Family.colorOf(memberId)),
                 contentAlignment = Alignment.Center) {
-                Text(name.take(1), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(Family.initialOf(memberId), color = Color.White, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.size(10.dp))
             Text(name, style = MaterialTheme.typography.titleLarge, color = Ink)

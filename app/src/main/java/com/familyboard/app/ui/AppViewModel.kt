@@ -102,6 +102,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 ReminderScheduler.reconcile(getApplication(), evs, mid)
             }
         }
+        // D-Day/생일 알림 예약 (앱 실행/항목 변경 시 다음 회차 재예약)
+        viewModelScope.launch {
+            combine(ddayItems, currentMemberId) { items, mid -> items to mid }.collect { (items, mid) ->
+                com.familyboard.app.notif.DDayReminderScheduler.reconcile(getApplication(), items, mid)
+            }
+        }
         // 본인 확정 시 FCM 토큰을 서버에 등록 (등록 알림 수신용)
         viewModelScope.launch {
             currentMemberId.filterNotNull().distinctUntilChanged().collect { mid ->

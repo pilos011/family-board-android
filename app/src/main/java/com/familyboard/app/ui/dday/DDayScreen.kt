@@ -105,6 +105,7 @@ fun DDayScreen(
     }
     val birthdayRows = remember(today) {
         FamilyBirthdays.list.map { (id, birth) -> birthdayRow(id, birth, today) }
+            .sortedBy { it.dday } // 다가오는 생일 순
     }
 
     Scaffold(
@@ -154,10 +155,10 @@ fun DDayScreen(
     if (showAdd) {
         DDayEditDialog(
             initial = null,
-            onSave = { title, date, yearly, icon ->
+            onSave = { title, date, yearly, icon, notifyIds ->
                 vm.addItem(
                     ListItem(text = title, board = DDayBoard.BOARD, createdBy = me,
-                        dateIso = date.toString(), yearly = yearly, icon = icon)
+                        dateIso = date.toString(), yearly = yearly, icon = icon, notifyIds = notifyIds)
                 )
                 showAdd = false
             },
@@ -167,8 +168,8 @@ fun DDayScreen(
     editItem?.let { item ->
         DDayEditDialog(
             initial = item,
-            onSave = { title, date, yearly, icon ->
-                vm.updateItem(item.copy(text = title, dateIso = date.toString(), yearly = yearly, icon = icon))
+            onSave = { title, date, yearly, icon, notifyIds ->
+                vm.updateItem(item.copy(text = title, dateIso = date.toString(), yearly = yearly, icon = icon, notifyIds = notifyIds))
                 editItem = null
             },
             onDelete = { vm.deleteItem(item.id); editItem = null },
@@ -191,7 +192,7 @@ private fun DDayCard(row: DRow, onClick: (() -> Unit)?) {
             Box(
                 Modifier.size(34.dp).clip(CircleShape).background(Family.colorOf(birthdayMemberId(row))),
                 contentAlignment = Alignment.Center,
-            ) { Text(row.title.take(1), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+            ) { Text(Family.initialOf(birthdayMemberId(row)), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
             Spacer(Modifier.size(12.dp))
         } else {
             BucketIcons.of(row.icon)?.let { iv ->
@@ -221,7 +222,7 @@ private fun DDayCard(row: DRow, onClick: (() -> Unit)?) {
 @Composable
 private fun DDayEditDialog(
     initial: ListItem?,
-    onSave: (String, LocalDate, Boolean, String) -> Unit,
+    onSave: (String, LocalDate, Boolean, String, List<String>) -> Unit,
     onDelete: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
@@ -232,6 +233,8 @@ private fun DDayEditDialog(
         )
     }
     var yearly by remember { mutableStateOf(initial?.yearly ?: false) }
+    var notifyIds by remember { mutableStateOf(initial?.notifyIds ?: emptyList()) }
+    var showNotify by remember { mutableStateOf(false) }
     var icon by remember { mutableStateOf(initial?.icon ?: "") }
     var showIcons by remember { mutableStateOf(false) }
     var showDate by remember { mutableStateOf(false) }
@@ -265,6 +268,28 @@ private fun DDayEditDialog(
                     Switch(checked = yearly, onCheckedChange = { yearly = it })
                 }
 
+                // 알림: 기본 접힘, 대상 미선택(=알림 없음). 선택 시 일주일 전·1일 전 알림.
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    Modifier.fillMaxWidth().clickable { showNotify = !showNotify }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("알림 설정", Modifier.weight(1f), color = Ink.copy(alpha = 0.8f))
+                    Text(
+                        if (notifyIds.isEmpty()) "없음" else "${notifyIds.size}명",
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium,
+                    )
+                    Icon(
+                        if (showNotify) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        null, tint = Ink.copy(alpha = 0.6f),
+                    )
+                }
+                if (showNotify) {
+                    Text("선택한 가족에게 일주일 전·1일 전 알림", color = Ink.copy(alpha = 0.5f), fontSize = 12.sp)
+                    Spacer(Modifier.height(6.dp))
+                    DDayNotifyPicker(selected = notifyIds, onSelect = { notifyIds = it })
+                }
+
                 // 아이콘: 기본은 접힌 상태, 탭하면 펼쳐서 선택
                 Spacer(Modifier.height(4.dp))
                 Row(
@@ -293,7 +318,7 @@ private fun DDayEditDialog(
         confirmButton = {
             TextButton(
                 enabled = title.isNotBlank(),
-                onClick = { onSave(title.trim(), date, yearly, icon) },
+                onClick = { onSave(title.trim(), date, yearly, icon, notifyIds) },
             ) { Text("저장") }
         },
         dismissButton = {
@@ -325,6 +350,41 @@ private fun DDayEditDialog(
             dismissButton = { TextButton(onClick = { showDate = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DDayNotifyPicker(selected: List<String>, onSelect: (List<String>) -> Unit) {
+    val allIds = remember { Family.members.map { it.id } }
+    val allOn = selected.isNotEmpty() && allIds.all { selected.contains(it) }
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        NotifyChip("모두", allOn) { onSelect(if (allOn) emptyList() else allIds) }
+        Family.members.forEach { m ->
+            NotifyChip(m.name, selected.contains(m.id)) {
+                val cur = selected.toMutableList()
+                if (cur.contains(m.id)) cur.remove(m.id) else cur.add(m.id)
+                onSelect(cur)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotifyChip(label: String, on: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        Modifier.clip(RoundedCornerShape(16.dp))
+            .background(if (on) Color(0xFF5C7CFA) else Color(0xFFF1F3F5))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        color = if (on) Color.White else Color(0xFF555555),
+        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+        fontSize = 13.sp,
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

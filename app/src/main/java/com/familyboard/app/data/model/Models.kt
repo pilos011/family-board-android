@@ -35,6 +35,7 @@ data class ListItem(
     val icon: String = "",         // 버킷 꾸미기 아이콘 키 (BucketIcons)
     val dateIso: String = "",      // D-Day 목표 날짜(yyyy-MM-dd)
     val yearly: Boolean = false,   // D-Day 매년 반복 여부
+    val notifyIds: List<String> = emptyList(), // D-Day 알림 대상(모두=4인). 비었으면 알림 없음
 )
 
 /** 버킷 진행 이력 메모 */

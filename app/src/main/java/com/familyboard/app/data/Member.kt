@@ -33,6 +33,13 @@ object Family {
     fun nameOf(id: String?): String =
         if (id == ALL_ID || id == null) "모두" else byId(id)?.name ?: "모두"
 
+    /** 아바타용 한 글자 이니셜. 준영/준호는 앞 글자가 같아 뒤 글자로 구분. */
+    fun initialOf(id: String?): String = when (id) {
+        "junyoung" -> "영"
+        "junho" -> "호"
+        else -> nameOf(id).take(1)
+    }
+
     /** 복수 담당자 대표 색: 1명이면 그 색, 여러 명이거나 공용이면 가족색 */
     fun colorOfIds(ids: List<String>): Color = when {
         ids.isEmpty() || ids.contains(ALL_ID) -> allColor

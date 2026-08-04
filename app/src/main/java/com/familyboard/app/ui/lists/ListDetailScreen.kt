@@ -232,7 +232,7 @@ private fun MemberTagDots(memberIds: List<String>) {
                 Modifier.size(22.dp).clip(CircleShape).background(Family.colorOf(id)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(Family.nameOf(id).take(1), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(Family.initialOf(id), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -70,7 +70,7 @@ private fun MemberRow(member: Member, onClick: () -> Unit) {
                     .clickable(enabled = false) {},
                 contentAlignment = Alignment.Center,
             ) {
-                Text(member.name.take(1), color = androidx.compose.ui.graphics.Color.White,
+                Text(com.familyboard.app.data.Family.initialOf(member.id), color = androidx.compose.ui.graphics.Color.White,
                     fontWeight = FontWeight.Bold, fontSize = 20.sp)
             }
             Spacer(Modifier.size(16.dp))
