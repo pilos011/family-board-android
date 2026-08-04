@@ -1,27 +1,35 @@
 package com.familyboard.app.ui.dday
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
@@ -56,6 +64,7 @@ import com.familyboard.app.data.FamilyBirthdays
 import com.familyboard.app.data.model.DDayBoard
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
+import com.familyboard.app.ui.bucket.BucketIcons
 import java.time.Instant
 import java.time.LocalDate
 import java.time.MonthDay
@@ -73,6 +82,7 @@ private data class DRow(
     val dday: Int,
     val sub: String,
     val isBirthday: Boolean,
+    val icon: String = "",  // 사용자 항목 꾸미기 아이콘 키
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,10 +154,10 @@ fun DDayScreen(
     if (showAdd) {
         DDayEditDialog(
             initial = null,
-            onSave = { title, date, yearly ->
+            onSave = { title, date, yearly, icon ->
                 vm.addItem(
                     ListItem(text = title, board = DDayBoard.BOARD, createdBy = me,
-                        dateIso = date.toString(), yearly = yearly)
+                        dateIso = date.toString(), yearly = yearly, icon = icon)
                 )
                 showAdd = false
             },
@@ -157,8 +167,8 @@ fun DDayScreen(
     editItem?.let { item ->
         DDayEditDialog(
             initial = item,
-            onSave = { title, date, yearly ->
-                vm.updateItem(item.copy(text = title, dateIso = date.toString(), yearly = yearly))
+            onSave = { title, date, yearly, icon ->
+                vm.updateItem(item.copy(text = title, dateIso = date.toString(), yearly = yearly, icon = icon))
                 editItem = null
             },
             onDelete = { vm.deleteItem(item.id); editItem = null },
@@ -183,6 +193,14 @@ private fun DDayCard(row: DRow, onClick: (() -> Unit)?) {
                 contentAlignment = Alignment.Center,
             ) { Text(row.title.take(1), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
             Spacer(Modifier.size(12.dp))
+        } else {
+            BucketIcons.of(row.icon)?.let { iv ->
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(Color(0x1A5C7CFA)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(iv, null, tint = Color(0xFF5C7CFA), modifier = Modifier.size(20.dp)) }
+                Spacer(Modifier.size(12.dp))
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(
@@ -203,7 +221,7 @@ private fun DDayCard(row: DRow, onClick: (() -> Unit)?) {
 @Composable
 private fun DDayEditDialog(
     initial: ListItem?,
-    onSave: (String, LocalDate, Boolean) -> Unit,
+    onSave: (String, LocalDate, Boolean, String) -> Unit,
     onDelete: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
@@ -214,6 +232,8 @@ private fun DDayEditDialog(
         )
     }
     var yearly by remember { mutableStateOf(initial?.yearly ?: false) }
+    var icon by remember { mutableStateOf(initial?.icon ?: "") }
+    var showIcons by remember { mutableStateOf(false) }
     var showDate by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -223,7 +243,7 @@ private fun DDayEditDialog(
             Column {
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text("제목 (예: 준호 수능)") }, singleLine = true,
+                    label = { Text("제목 (예: 크루즈 탑승)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
@@ -244,12 +264,36 @@ private fun DDayEditDialog(
                     Text("매년 반복", Modifier.weight(1f))
                     Switch(checked = yearly, onCheckedChange = { yearly = it })
                 }
+
+                // 아이콘: 기본은 접힌 상태, 탭하면 펼쳐서 선택
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    Modifier.fillMaxWidth().clickable { showIcons = !showIcons }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("아이콘", Modifier.weight(1f), color = Ink.copy(alpha = 0.8f))
+                    BucketIcons.of(icon)?.let { iv ->
+                        Icon(iv, null, tint = Color(0xFF5C7CFA), modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.size(6.dp))
+                    }
+                    Text(
+                        if (showIcons) "접기" else if (icon.isBlank()) "추가" else "변경",
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium,
+                    )
+                    Icon(
+                        if (showIcons) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        null, tint = Ink.copy(alpha = 0.6f),
+                    )
+                }
+                if (showIcons) {
+                    DDayIconPicker(selected = icon, onSelect = { icon = if (icon == it) "" else it })
+                }
             }
         },
         confirmButton = {
             TextButton(
                 enabled = title.isNotBlank(),
-                onClick = { onSave(title.trim(), date, yearly) },
+                onClick = { onSave(title.trim(), date, yearly, icon) },
             ) { Text("저장") }
         },
         dismissButton = {
@@ -283,6 +327,37 @@ private fun DDayEditDialog(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DDayIconPicker(selected: String, onSelect: (String) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 200.dp).verticalScroll(rememberScrollState()),
+    ) {
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            BucketIcons.all.forEach { (key, iv) ->
+                val on = key == selected
+                Box(
+                    Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
+                        .background(if (on) Color(0xFF5C7CFA) else Color(0xFFF1F3F5))
+                        .border(
+                            width = if (on) 0.dp else 1.dp,
+                            color = Color(0xFFE0E0E0), shape = RoundedCornerShape(12.dp),
+                        )
+                        .clickable { onSelect(key) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(iv, key, tint = if (on) Color.White else Ink.copy(alpha = 0.7f),
+                        modifier = Modifier.size(21.dp))
+                }
+            }
+        }
+    }
+}
+
 // ─────────────────────────── 계산 helpers ───────────────────────────
 
 private fun ListItem.toUserRow(today: LocalDate): DRow? {
@@ -293,7 +368,7 @@ private fun ListItem.toUserRow(today: LocalDate): DRow? {
         append(krFullDate(target))
         if (yearly) append(" · 매년")
     }
-    return DRow(id = id, title = text.ifBlank { "(제목 없음)" }, target = target, dday = dday, sub = sub, isBirthday = false)
+    return DRow(id = id, title = text.ifBlank { "(제목 없음)" }, target = target, dday = dday, sub = sub, isBirthday = false, icon = icon)
 }
 
 private fun birthdayRow(memberId: String, birth: LocalDate, today: LocalDate): DRow {
