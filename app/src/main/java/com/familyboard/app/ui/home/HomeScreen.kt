@@ -115,6 +115,8 @@ fun HomeScreen(
     var showMaker by remember { mutableStateOf(false) }
     // 타이틀 아래 '만든이' 라벨은 잠깐 보였다 사라짐
     LaunchedEffect(showMaker) { if (showMaker) { kotlinx.coroutines.delay(1800); showMaker = false } }
+    // 앱 시작뿐 아니라 홈 화면으로 진입할 때마다 업데이트 재확인
+    LaunchedEffect(Unit) { vm.refreshUpdate() }
 
     val checkedNotices = remember(notices) { notices.filter { it.checked }.take(4) }
 
@@ -281,7 +283,7 @@ private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit, onTitleCli
         }
         if (updateAvailable) {
             Box(
-                Modifier.align(Alignment.CenterEnd).offset(x = 6.dp),
+                Modifier.align(Alignment.CenterEnd).offset(x = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 UpdateBell(onClick = onUpdate)

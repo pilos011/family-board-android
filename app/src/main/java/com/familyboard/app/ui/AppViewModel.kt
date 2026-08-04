@@ -134,6 +134,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
     }
 
+    /** 홈 화면 진입 등에서 업데이트를 다시 확인(최신이거나 확인 실패 시 배지 사라짐). */
+    fun refreshUpdate() = viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
+
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
         BoardType.TODO.key -> todoItems
         BoardType.NOTICE.key -> noticeItems
