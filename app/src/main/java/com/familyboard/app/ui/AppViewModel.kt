@@ -169,6 +169,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun addItem(item: ListItem) = viewModelScope.launch { board.upsertItem(item) }
     fun updateItem(item: ListItem) = viewModelScope.launch { board.upsertItem(item) }
 
+    /** 할 일 추가 + 태깅된 담당자에게 등록 알림(등록자 제외). 장보기 등 다른 보드는 사용하지 않음. */
+    fun addTodoWithNotify(item: ListItem) = viewModelScope.launch {
+        board.upsertItem(item)
+        val actor = item.createdBy
+        val targets = (if (item.memberIds.contains(Family.ALL_ID)) Family.members.map { it.id } else item.memberIds)
+            .filter { it != actor }
+            .distinct()
+        if (targets.isEmpty()) return@launch
+        val body = "\"${item.text}\" 할 일이 등록됐어요\n등록: ${Family.nameOf(actor)}"
+        runCatching { NotifyApi.notify(actor, targets, "✅ 새 할 일", body) }
+    }
+
     fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { board.setChecked(id, checked) }
     fun deleteItem(id: String) = viewModelScope.launch { board.deleteItem(id) }
 

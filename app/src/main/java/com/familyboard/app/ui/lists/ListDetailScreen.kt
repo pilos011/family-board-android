@@ -69,16 +69,15 @@ fun ListDetailScreen(
 
     fun add() {
         if (input.isBlank()) return
-        // 장보기는 담당 없이 공용, 할 일은 선택한 담당자. 알림은 보내지 않음.
-        vm.addItem(
-            ListItem(
-                text = input.trim(),
-                checked = false,
-                board = board.key,
-                createdBy = currentMemberId ?: Family.ALL_ID,
-                memberIds = if (simpleList) listOf(Family.ALL_ID) else tagIds,
-            )
+        // 장보기·공지사항은 담당 없이 공용(알림 없음), 할 일은 선택한 담당자에게 등록 알림.
+        val item = ListItem(
+            text = input.trim(),
+            checked = false,
+            board = board.key,
+            createdBy = currentMemberId ?: Family.ALL_ID,
+            memberIds = if (simpleList) listOf(Family.ALL_ID) else tagIds,
         )
+        if (board == BoardType.TODO) vm.addTodoWithNotify(item) else vm.addItem(item)
         input = ""
     }
 
