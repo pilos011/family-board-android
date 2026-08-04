@@ -172,6 +172,7 @@ fun EmergencySendScreen(
                             putExtra(EmergencyActivity.EXTRA_SENDER, spouse)
                             putExtra(EmergencyActivity.EXTRA_MESSAGE, buildBody(message, wantLoc))
                             putExtra(EmergencyActivity.EXTRA_WANT_LOC, wantLoc)
+                            putExtra(EmergencyActivity.EXTRA_TEST, true)
                         }
                     )
                 },

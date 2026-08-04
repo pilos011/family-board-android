@@ -2,6 +2,7 @@ package com.familyboard.app.ui.emergency
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
@@ -10,8 +11,15 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.familyboard.app.R
+import com.familyboard.app.notif.ReminderScheduler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,7 +69,10 @@ class EmergencyActivity : ComponentActivity() {
         const val EXTRA_SENDER = "sender"
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_WANT_LOC = "wantLoc"
+        const val EXTRA_TEST = "test"
     }
+
+    private var testMode = false
 
     private val locPermLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -88,6 +99,8 @@ class EmergencyActivity : ComponentActivity() {
         senderId = intent.getStringExtra(EXTRA_SENDER).orEmpty()
         val message = intent.getStringExtra(EXTRA_MESSAGE).orEmpty()
         val wantLoc = intent.getBooleanExtra(EXTRA_WANT_LOC, false)
+        testMode = intent.getBooleanExtra(EXTRA_TEST, false)
+        vibrateAlarm()
 
         setContent {
             EmergencyContent(
@@ -118,6 +131,12 @@ class EmergencyActivity : ComponentActivity() {
         lifecycleScope.launch {
             val loc = fetchLocation()
             if (loc == null) { toast("위치를 가져오지 못했어요"); return@launch }
+            if (testMode) {
+                // 혼자 테스트: 내 폰에 '위치 공유됨' 알림을 띄우고, 탭하면 지도앱으로 연다.
+                postLocalLocation(loc.latitude, loc.longitude)
+                toast("테스트: 위치 알림을 보냈어요. 알림을 탭해 지도로 확인하세요")
+                return@launch
+            }
             val me = CurrentUserStore(applicationContext).currentMemberId.first().orEmpty()
             runCatching {
                 NotifyApi.notifyData(
@@ -130,6 +149,45 @@ class EmergencyActivity : ComponentActivity() {
                 )
             }
             toast("위치를 보냈어요")
+        }
+    }
+
+    /** 테스트용: 내 폰에 위치 공유 알림을 직접 띄운다(탭하면 지도앱). */
+    private fun postLocalLocation(lat: Double, lng: Double) {
+        ReminderScheduler.ensureChannel(this)
+        val geo = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode("공유된 위치")})")
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(this, 8100, Intent(Intent.ACTION_VIEW, geo), flags)
+        val n = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("📍 위치 공유 (테스트)")
+            .setContentText("탭하면 지도에서 위치를 봅니다")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        val ok = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            androidx.core.app.ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (ok) NotificationManagerCompat.from(this).notify(8100, n)
+    }
+
+    private fun vibrateAlarm() {
+        val pattern = longArrayOf(0, 600, 300, 600, 300, 600)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vm.defaultVibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            } else {
+                @Suppress("DEPRECATION")
+                val v = getSystemService(VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    v.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                } else {
+                    @Suppress("DEPRECATION") v.vibrate(pattern, -1)
+                }
+            }
         }
     }
 
