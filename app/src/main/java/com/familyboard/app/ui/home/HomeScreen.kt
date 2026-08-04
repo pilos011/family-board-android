@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -164,14 +165,21 @@ fun HomeScreen(
 
 @Composable
 private fun TitleSign() {
-    // 사용자가 제작한 타이틀 이미지 사용
-    val shape = RoundedCornerShape(18.dp)
-    Image(
-        painter = painterResource(R.drawable.jun_title),
-        contentDescription = "준준가족 보드",
-        modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape),
-        contentScale = ContentScale.FillWidth,
-    )
+    // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩
+    val shape = RoundedCornerShape(12.dp)
+    Box(Modifier.fillMaxWidth()) {
+        // 옆면(두께) — 앞면보다 살짝 아래
+        Box(
+            Modifier.matchParentSize().offset(y = 5.dp).clip(shape).background(Color(0xFF4A3018)),
+        )
+        // 앞면
+        Image(
+            painter = painterResource(R.drawable.jun_title),
+            contentDescription = "준준가족 보드",
+            modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape),
+            contentScale = ContentScale.FillWidth,
+        )
+    }
 }
 
 @Composable
