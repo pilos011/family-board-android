@@ -1,5 +1,6 @@
 package com.familyboard.app.ui.emergency
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -50,6 +52,14 @@ import com.familyboard.app.data.Family
 import com.familyboard.app.ui.AppViewModel
 
 private val EmergencyRed = Color(0xFFD6293E)
+private const val DEFAULT_MSG = "급한데 연락이 안되어 보내니, 이 알림을 보면 바로 전화 줘!"
+private const val LOC_SUFFIX = "위치도 공유해주면 더 안심이 되겠어."
+
+/** 최종 발송 문구: 비어 있으면 기본 문구, 위치요청이면 하단에 위치 문구 추가 */
+private fun buildBody(input: String, wantLoc: Boolean): String {
+    val base = input.trim().ifBlank { DEFAULT_MSG }
+    return if (wantLoc) "$base\n$LOC_SUFFIX" else base
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -111,9 +121,10 @@ fun EmergencySendScreen(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = message, onValueChange = { if (it.length <= 200) message = it },
-                placeholder = { Text("예: 급한 일이야. 이거 보면 바로 전화 줘!") },
+                placeholder = { Text(DEFAULT_MSG) },
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
-                minLines = 3, supportingText = { Text("${message.length}/200") },
+                minLines = 3,
+                supportingText = { Text("비워두면 위 예시 문구가 그대로 전송돼요 · ${message.length}/200") },
             )
 
             Spacer(Modifier.height(4.dp))
@@ -135,17 +146,39 @@ fun EmergencySendScreen(
             Spacer(Modifier.height(28.dp))
             Button(
                 onClick = {
-                    vm.sendEmergency(targets, message.trim(), wantLoc)
+                    vm.sendEmergency(targets, buildBody(message, wantLoc), wantLoc)
                     Toast.makeText(context, "긴급 연락을 보냈어요", Toast.LENGTH_SHORT).show()
                     onBack()
                 },
-                enabled = targets.isNotEmpty() && message.isNotBlank(),
+                enabled = targets.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = EmergencyRed),
             ) {
                 Icon(Icons.Default.Send, null); Spacer(Modifier.size(8.dp))
                 Text("긴급 연락 보내기", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = {
+                    // 혼자 테스트: FCM 없이 내 폰에 전체화면을 바로 띄워본다(보낸이=배우자로 가정)
+                    val spouse = when (currentMemberId) {
+                        "seonil" -> "eunseon"; "eunseon" -> "seonil"; else -> currentMemberId ?: "seonil"
+                    }
+                    context.startActivity(
+                        Intent(context, EmergencyActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            putExtra(EmergencyActivity.EXTRA_SENDER, spouse)
+                            putExtra(EmergencyActivity.EXTRA_MESSAGE, buildBody(message, wantLoc))
+                            putExtra(EmergencyActivity.EXTRA_WANT_LOC, wantLoc)
+                        }
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text("테스트: 내 폰에 전체화면 미리보기", fontWeight = FontWeight.Medium)
             }
         }
     }
