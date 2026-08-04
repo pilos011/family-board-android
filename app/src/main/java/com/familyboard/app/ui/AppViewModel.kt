@@ -73,6 +73,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.DDayBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // 사용자 커스텀 체크리스트 정의(board="customlists"). 본인만 화면에 표시.
+    val customLists: StateFlow<List<ListItem>> =
+        board.items("customlists")
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 임의 보드 키의 항목 스트림(커스텀 리스트 포함). */
+    fun boardItems(boardKey: String): kotlinx.coroutines.flow.Flow<List<ListItem>> = board.items(boardKey)
+
     val allowanceJunyoung: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNYOUNG)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

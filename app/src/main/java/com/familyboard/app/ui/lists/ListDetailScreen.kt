@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -60,24 +61,30 @@ fun ListDetailScreen(
     currentMemberId: String?,
     onBack: () -> Unit,
 ) {
-    val board = remember(boardKey) { BoardType.fromKey(boardKey) }
-    // 장보기·가족 공지사항: 담당 없이 등록자만 표시하는 단순 목록
-    val simpleList = board == BoardType.SHOPPING || board == BoardType.NOTICE
-    val items by vm.itemsFor(boardKey).collectAsStateWithLifecycle()
+    // 고정 보드(장보기/할일/공지) 또는 사용자 커스텀 리스트
+    val knownBoard = remember(boardKey) { BoardType.entries.firstOrNull { it.key == boardKey } }
+    val isCustom = knownBoard == null
+    val customLists by vm.customLists.collectAsStateWithLifecycle()
+    val customDef = customLists.firstOrNull { it.id == boardKey }
+    val title = knownBoard?.title ?: customDef?.text ?: "목록"
+    // 장보기·공지·커스텀(본인 전용): 담당 없이 등록자만 표시하는 단순 목록
+    val simpleList = isCustom || knownBoard == BoardType.SHOPPING || knownBoard == BoardType.NOTICE
+    val items by remember(boardKey) { vm.boardItems(boardKey) }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     var input by remember { mutableStateOf("") }
     var tagIds by remember { mutableStateOf(listOf(Family.ALL_ID)) }
 
     fun add() {
         if (input.isBlank()) return
-        // 장보기·공지사항은 담당 없이 공용(알림 없음), 할 일은 선택한 담당자에게 등록 알림.
+        // 장보기·공지·커스텀은 담당 없이(알림 없음), 할 일은 선택한 담당자에게 등록 알림.
         val item = ListItem(
             text = input.trim(),
             checked = false,
-            board = board.key,
+            board = boardKey,
             createdBy = currentMemberId ?: Family.ALL_ID,
             memberIds = if (simpleList) listOf(Family.ALL_ID) else tagIds,
         )
-        if (board == BoardType.TODO) vm.addTodoWithNotify(item) else vm.addItem(item)
+        if (knownBoard == BoardType.TODO) vm.addTodoWithNotify(item) else vm.addItem(item)
         input = ""
     }
 
@@ -85,10 +92,17 @@ fun ListDetailScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(board.title) },
+                title = { Text(title) },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
+                },
+                actions = {
+                    if (isCustom && customDef != null) {
+                        IconButton(onClick = { vm.deleteItem(boardKey); onBack() }) {
+                            Icon(Icons.Default.Delete, "리스트 삭제")
+                        }
+                    }
                 },
             )
         },

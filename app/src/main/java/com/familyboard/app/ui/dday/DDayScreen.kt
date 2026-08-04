@@ -266,12 +266,6 @@ private fun DDayEditDialog(
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Repeat, null, tint = Ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(8.dp))
-                    Text("매년 반복", Modifier.weight(1f))
-                    Switch(checked = yearly, onCheckedChange = { yearly = it })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Home, null, tint = Ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(8.dp))
                     Text("홈 화면에 게시", Modifier.weight(1f))
@@ -298,6 +292,13 @@ private fun DDayEditDialog(
                     Text("선택한 가족에게 일주일 전·1일 전 알림", color = Ink.copy(alpha = 0.5f), fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
                     DDayNotifyPicker(selected = notifyIds, onSelect = { notifyIds = it })
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Repeat, null, tint = Ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("매년 반복", Modifier.weight(1f))
+                    Switch(checked = yearly, onCheckedChange = { yearly = it })
                 }
 
                 // 아이콘: 기본은 접힌 상태, 탭하면 펼쳐서 선택
