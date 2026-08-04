@@ -56,7 +56,8 @@ object AllowanceBoards {
 /** 리스트 보드 종류. */
 enum class BoardType(val key: String, val title: String) {
     SHOPPING("shopping", "장보기"),
-    TODO("todo", "할 일");
+    TODO("todo", "할 일"),
+    NOTICE("notice", "가족 공지사항"); // 부모(선일/은선) 전용
 
     companion object {
         fun fromKey(key: String?): BoardType = entries.firstOrNull { it.key == key } ?: SHOPPING

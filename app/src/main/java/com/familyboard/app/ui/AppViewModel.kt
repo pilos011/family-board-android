@@ -63,6 +63,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(BoardType.TODO.key)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // 가족 공지사항 (부모 전용)
+    val noticeItems: StateFlow<List<ListItem>> =
+        board.items(BoardType.NOTICE.key)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val allowanceJunyoung: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNYOUNG)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -105,8 +110,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
     }
 
-    fun itemsFor(boardKey: String): StateFlow<List<ListItem>> =
-        if (boardKey == BoardType.TODO.key) todoItems else shoppingItems
+    fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
+        BoardType.TODO.key -> todoItems
+        BoardType.NOTICE.key -> noticeItems
+        else -> shoppingItems
+    }
 
     fun selectMember(id: String) = viewModelScope.launch {
         container.currentUserStore.setCurrentMember(id)

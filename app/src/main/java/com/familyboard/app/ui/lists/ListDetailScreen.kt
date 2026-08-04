@@ -61,7 +61,8 @@ fun ListDetailScreen(
     onBack: () -> Unit,
 ) {
     val board = remember(boardKey) { BoardType.fromKey(boardKey) }
-    val isShopping = board == BoardType.SHOPPING
+    // 장보기·가족 공지사항: 담당 없이 등록자만 표시하는 단순 목록
+    val simpleList = board == BoardType.SHOPPING || board == BoardType.NOTICE
     val items by vm.itemsFor(boardKey).collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var tagIds by remember { mutableStateOf(listOf(Family.ALL_ID)) }
@@ -75,7 +76,7 @@ fun ListDetailScreen(
                 checked = false,
                 board = board.key,
                 createdBy = currentMemberId ?: Family.ALL_ID,
-                memberIds = if (isShopping) listOf(Family.ALL_ID) else tagIds,
+                memberIds = if (simpleList) listOf(Family.ALL_ID) else tagIds,
             )
         )
         input = ""
@@ -95,8 +96,8 @@ fun ListDetailScreen(
         bottomBar = {
             Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    // 담당자 태깅 선택 (할 일 전용, 장보기는 담당 없음)
-                    if (!isShopping) {
+                    // 담당자 태깅 선택 (할 일 전용, 장보기·공지사항은 담당 없음)
+                    if (!simpleList) {
                         Text("담당", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                         Spacer(Modifier.size(4.dp))
                         MemberChips(selected = tagIds, onSelect = { tagIds = it })
@@ -139,8 +140,8 @@ fun ListDetailScreen(
                 items(sorted, key = { it.id }) { itm ->
                     ItemRow(
                         item = itm,
-                        // 장보기: 추가한 사람 표시 / 할 일: 담당자 표시
-                        rightIds = if (isShopping) listOf(itm.createdBy) else itm.memberIds,
+                        // 장보기·공지사항: 추가한 사람 표시 / 할 일: 담당자 표시
+                        rightIds = if (simpleList) listOf(itm.createdBy) else itm.memberIds,
                         onToggle = { vm.toggleItem(itm.id, it) },
                         onDelete = { vm.deleteItem(itm.id) },
                     )

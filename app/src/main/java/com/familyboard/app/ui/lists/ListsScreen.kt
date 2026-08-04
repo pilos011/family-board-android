@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,9 +51,12 @@ fun ListsScreen(
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
+    val notices by vm.noticeItems.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
+    // 가족 공지사항은 부모(선일/은선)에게만 노출
+    val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
 
     Column(
         modifier
@@ -80,9 +84,40 @@ fun ListsScreen(
                 modifier = Modifier.weight(1f),
             ) { onOpenBoard(BoardType.TODO.key) }
         }
+        if (isParent) {
+            Spacer(Modifier.height(16.dp))
+            NoticeWideCard(count = notices.size) { onOpenBoard(BoardType.NOTICE.key) }
+        }
         if (showBucket) {
             Spacer(Modifier.height(16.dp))
             BucketWideCard(spouseName = spouse, onClick = onOpenBucket)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NoticeWideCard(count: Int, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(96.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8A13A)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Row(
+            Modifier.fillMaxSize().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("가족 공지사항", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${count}개 · 선일·은선 전용",
+                    color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.Medium,
+                )
+            }
+            Icon(Icons.Default.PushPin, null, tint = Color.White, modifier = Modifier.height(44.dp))
         }
     }
 }
