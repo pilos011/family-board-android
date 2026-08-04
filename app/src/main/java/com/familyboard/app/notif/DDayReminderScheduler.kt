@@ -36,17 +36,27 @@ object DDayReminderScheduler {
         val now = System.currentTimeMillis()
         val alarms = mutableListOf<Alarm>()
 
-        // 1) 가족 생일 (모두)
+        // 1) 가족 생일
+        //    - 당사자: 당일(D-DAY)에만 축하 알림
+        //    - 나머지 가족: 일주일 전·1일 전 알림
         FamilyBirthdays.list.forEach { (id, birth) ->
             val next = nextAnniversary(birth, today)
             val name = Family.nameOf(id)
-            addPair(
-                alarms, zone, now, keyBase = "bday_$id",
-                target = next,
-                d7Title = "🎂 ${name}님 생일 일주일 전",
-                d1Title = "🎂 내일은 ${name}님 생일!",
-                text = "${next.monthValue}월 ${next.dayOfDay()}일 (${krDow(next)})",
-            )
+            val dateText = "${next.monthValue}월 ${next.dayOfDay()}일 (${krDow(next)})"
+            if (id == currentMemberId) {
+                addOne(
+                    alarms, zone, now, key = "bday_${id}_0", date = next,
+                    title = "🎉 생일 축하해요!", text = "오늘은 ${name}님의 생일이에요 🎂",
+                )
+            } else {
+                addPair(
+                    alarms, zone, now, keyBase = "bday_$id",
+                    target = next,
+                    d7Title = "🎂 ${name}님 생일 일주일 전",
+                    d1Title = "🎂 내일은 ${name}님 생일!",
+                    text = dateText,
+                )
+            }
         }
 
         // 2) 사용자 D-Day (내가 알림 대상일 때만)
@@ -93,10 +103,16 @@ object DDayReminderScheduler {
         target: LocalDate, d7Title: String, d1Title: String, text: String,
     ) {
         listOf(7 to d7Title, 1 to d1Title).forEach { (daysBefore, title) ->
-            val at = LocalDateTime.of(target.minusDays(daysBefore.toLong()), NOTIFY_HOUR)
-                .atZone(zone).toInstant().toEpochMilli()
-            if (at > now) alarms.add(Alarm("${keyBase}_$daysBefore", at, title, text))
+            addOne(alarms, zone, now, "${keyBase}_$daysBefore", target.minusDays(daysBefore.toLong()), title, text)
         }
+    }
+
+    private fun addOne(
+        alarms: MutableList<Alarm>, zone: ZoneId, now: Long,
+        key: String, date: LocalDate, title: String, text: String,
+    ) {
+        val at = LocalDateTime.of(date, NOTIFY_HOUR).atZone(zone).toInstant().toEpochMilli()
+        if (at > now) alarms.add(Alarm(key, at, title, text))
     }
 
     private fun pi(context: Context, key: String, title: String, text: String): android.app.PendingIntent {
