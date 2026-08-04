@@ -165,20 +165,20 @@ fun HomeScreen(
 
 @Composable
 private fun TitleSign() {
-    // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩
+    // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩. 비율 유지 75% 크기, 가운데.
     val shape = RoundedCornerShape(12.dp)
-    Box(Modifier.fillMaxWidth()) {
-        // 옆면(두께) — 앞면보다 살짝 아래
-        Box(
-            Modifier.matchParentSize().offset(y = 5.dp).clip(shape).background(Color(0xFF4A3018)),
-        )
-        // 앞면
-        Image(
-            painter = painterResource(R.drawable.jun_title),
-            contentDescription = "준준가족 보드",
-            modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape),
-            contentScale = ContentScale.FillWidth,
-        )
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth(0.75f)) {
+            // 옆면(두께) — 앞면보다 살짝 아래
+            Box(Modifier.matchParentSize().offset(y = 4.dp).clip(shape).background(Color(0xFF4A3018)))
+            // 앞면
+            Image(
+                painter = painterResource(R.drawable.jun_title),
+                contentDescription = "준준가족 보드",
+                modifier = Modifier.fillMaxWidth().shadow(6.dp, shape).clip(shape),
+                contentScale = ContentScale.FillWidth,
+            )
+        }
     }
 }
 
