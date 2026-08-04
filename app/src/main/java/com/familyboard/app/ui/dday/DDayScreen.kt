@@ -299,8 +299,8 @@ private fun ListItem.toUserRow(today: LocalDate): DRow? {
 private fun birthdayRow(memberId: String, birth: LocalDate, today: LocalDate): DRow {
     val next = nextAnniversary(birth, today)
     val dday = ChronoUnit.DAYS.between(today, next).toInt()
-    val age = next.year - birth.year
-    val sub = "${next.monthValue}월 ${next.dayOfMonth}일 (${KrDow[next.dayOfWeek.value - 1]}) · 만 ${age}세"
+    val currentAge = java.time.Period.between(birth, today).years // 오늘 기준 현재 만 나이
+    val sub = "${next.monthValue}월 ${next.dayOfMonth}일 (${KrDow[next.dayOfWeek.value - 1]}) · 만 ${currentAge}세"
     return DRow(id = null, title = Family.nameOf(memberId), target = next, dday = dday, sub = sub, isBirthday = true)
 }
 
