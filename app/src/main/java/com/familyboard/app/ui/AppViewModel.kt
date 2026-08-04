@@ -131,8 +131,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val actor = e.createdBy
         val targets = notifyTargets.filter { it != actor }.distinct()
         if (targets.isEmpty()) return
-        val body = "${Family.nameOf(actor)}님이 새 일정을 등록했어요 🙂\n${eventWhenText(e)}"
-        runCatching { NotifyApi.notify(actor, targets, e.title, body) }
+        val title = "📌 ${Family.nameOf(actor)}님이 일정을 등록했어요"
+        val body = "\"${e.title}\"\n📅 ${eventWhenText(e)}"
+        runCatching { NotifyApi.notify(actor, targets, title, body) }
     }
     fun updateEvent(event: CalendarEvent) = viewModelScope.launch { board.upsertEvent(event) }
     fun deleteEvent(id: String) = viewModelScope.launch { board.deleteEvent(id) }
