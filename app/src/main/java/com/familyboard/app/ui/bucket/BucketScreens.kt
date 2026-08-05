@@ -399,6 +399,8 @@ fun BucketViewScreen(
     var note by remember { mutableStateOf("") }
     var editIndex by remember { mutableStateOf(-1) }
     var editText by remember { mutableStateOf("") }
+    var confirmDeleteItem by remember { mutableStateOf(false) }
+    var deleteHistoryIndex by remember { mutableStateOf(-1) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -493,10 +495,7 @@ fun BucketViewScreen(
                                 Icon(Icons.Default.Edit, "이력 수정", tint = Ink.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
                             }
                             IconButton(
-                                onClick = {
-                                    val next = item.progress.toMutableList().also { it.removeAt(i) }
-                                    vm.updateItem(item.copy(progress = next))
-                                },
+                                onClick = { deleteHistoryIndex = i },
                                 modifier = Modifier.size(32.dp),
                             ) {
                                 Icon(Icons.Default.Delete, "이력 삭제", tint = Ink.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
@@ -511,7 +510,7 @@ fun BucketViewScreen(
                 OutlinedButton(onClick = { onEdit(itemId) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Edit, null); Spacer(Modifier.size(6.dp)); Text("수정")
                 }
-                OutlinedButton(onClick = { vm.deleteItem(itemId); onBack() }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { confirmDeleteItem = true }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Delete, null); Spacer(Modifier.size(6.dp)); Text("삭제")
                 }
             }
@@ -539,6 +538,39 @@ fun BucketViewScreen(
                 }) { Text("저장") }
             },
             dismissButton = { TextButton(onClick = { editIndex = -1 }) { Text("취소") } },
+        )
+    }
+
+    // 버킷 항목 삭제 확인
+    if (confirmDeleteItem) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteItem = false },
+            title = { Text("삭제") },
+            text = { Text("\"${item?.text ?: "이 항목"}\" 항목을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { confirmDeleteItem = false; vm.deleteItem(itemId); onBack() }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteItem = false }) { Text("취소") } },
+        )
+    }
+
+    // 진행 이력 삭제 확인
+    if (deleteHistoryIndex >= 0 && item != null && deleteHistoryIndex < item.progress.size) {
+        val idx = deleteHistoryIndex
+        AlertDialog(
+            onDismissRequest = { deleteHistoryIndex = -1 },
+            title = { Text("진행 이력 삭제") },
+            text = { Text("이 진행 이력을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val next = item.progress.toMutableList().also { it.removeAt(idx) }
+                    vm.updateItem(item.copy(progress = next))
+                    deleteHistoryIndex = -1
+                }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteHistoryIndex = -1 }) { Text("취소") } },
         )
     }
 }

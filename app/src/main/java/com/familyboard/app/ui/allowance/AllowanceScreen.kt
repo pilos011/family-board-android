@@ -104,6 +104,7 @@ private fun AllowanceSection(
     var editing by remember { mutableStateOf<ListItem?>(null) }
     var showSettle by remember { mutableStateOf(false) }
     var showNudge by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
 
     fun add() {
         val amt = amountInput.filter { it.isDigit() }.toLongOrNull() ?: 0L
@@ -182,7 +183,7 @@ private fun AllowanceSection(
                     canEdit = canEdit,
                     onToggle = { vm.toggleItem(itm.id, it) },
                     onEdit = { editing = itm },
-                    onDelete = { vm.deleteItem(itm.id) },
+                    onDelete = { pendingDelete = itm },
                 )
             }
         }
@@ -256,8 +257,22 @@ private fun AllowanceSection(
         EditDialog(
             item = item,
             onSave = { t, a -> vm.updateItem(item.copy(text = t, amount = a)); editing = null },
-            onDelete = { vm.deleteItem(item.id); editing = null },
+            onDelete = { editing = null; pendingDelete = item },
             onDismiss = { editing = null },
+        )
+    }
+
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("항목 삭제") },
+            text = { Text("\"${target.text}\" 항목을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteItem(target.id); pendingDelete = null }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
         )
     }
 }

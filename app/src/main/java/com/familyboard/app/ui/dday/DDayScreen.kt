@@ -98,6 +98,7 @@ fun DDayScreen(
     val today = remember { LocalDate.now() }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
 
     val userRows = remember(items, today) {
         items.mapNotNull { it.toUserRow(today) }
@@ -175,8 +176,21 @@ fun DDayScreen(
                     icon = icon, notifyIds = notifyIds, homePinned = homePinned))
                 editItem = null
             },
-            onDelete = { vm.deleteItem(item.id); editItem = null },
+            onDelete = { editItem = null; pendingDelete = item },
             onDismiss = { editItem = null },
+        )
+    }
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("삭제") },
+            text = { Text("\"${target.text}\" 항목을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteItem(target.id); pendingDelete = null }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
         )
     }
 }
