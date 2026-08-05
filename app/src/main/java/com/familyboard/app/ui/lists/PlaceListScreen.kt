@@ -103,6 +103,9 @@ fun PlaceListScreen(
     var myLoc by remember { mutableStateOf<Location?>(null) }
     var ratingConfirm by remember { mutableStateOf<Pair<ListItem, Int>?>(null) }
     var editComment by remember { mutableStateOf<Triple<ListItem, Int, String>?>(null) }
+    // 삭제 확인용: 삭제하려는 장소 / 삭제하려는 댓글(장소+인덱스)
+    var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
+    var commentDelete by remember { mutableStateOf<Pair<ListItem, Int>?>(null) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
@@ -192,9 +195,9 @@ fun PlaceListScreen(
                             onRateRequest = { n -> ratingConfirm = place to n },
                             onAddComment = { t -> vm.addPlaceComment(place, t) },
                             onEditComment = { i, t -> editComment = Triple(place, i, t) },
-                            onDeleteComment = { i -> vm.deletePlaceComment(place, i) },
+                            onDeleteComment = { i -> commentDelete = place to i },
                             onEdit = { editItem = place },
-                            onDelete = { vm.deleteItem(place.id) },
+                            onDelete = { pendingDelete = place },
                         )
                     }
                     item { Spacer(Modifier.height(90.dp)) }
@@ -233,6 +236,34 @@ fun PlaceListScreen(
             text = { OutlinedTextField(value = t, onValueChange = { t = it }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) },
             confirmButton = { TextButton(enabled = t.isNotBlank(), onClick = { vm.updatePlaceComment(item, idx, t); editComment = null }) { Text("저장") } },
             dismissButton = { TextButton(onClick = { editComment = null }) { Text("취소") } },
+        )
+    }
+    // 장소 삭제 확인
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("삭제") },
+            text = { Text("\"${target.text.ifBlank { "이 장소" }}\" 항목을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteItem(target.id); pendingDelete = null }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
+        )
+    }
+    // 댓글 삭제 확인
+    commentDelete?.let { (item, idx) ->
+        AlertDialog(
+            onDismissRequest = { commentDelete = null },
+            title = { Text("댓글 삭제") },
+            text = { Text("이 댓글을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { vm.deletePlaceComment(item, idx); commentDelete = null }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { commentDelete = null }) { Text("취소") } },
         )
     }
 }
