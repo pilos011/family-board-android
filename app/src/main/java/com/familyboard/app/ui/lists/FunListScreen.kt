@@ -23,9 +23,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -202,29 +206,26 @@ fun FunListScreen(
                     )
                 }
             } else {
-                LazyColumn(
-                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(4),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 88.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(shown.chunked(4)) { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            rowItems.forEach { post ->
-                                FunCell(post, Modifier.weight(1f),
-                                    viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
-                                    onClick = {
-                                        vm.markFunViewed(post)
-                                        when {
-                                            isVideo(post.link) -> playUrl = post.link
-                                            post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls
-                                            else -> open(post.link)
-                                        }
-                                    },
-                                    onLongPress = { actionItem = post })
-                            }
-                            repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                        }
+                    gridItems(shown, key = { it.id }) { post ->
+                        FunCell(post, Modifier,
+                            viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
+                            onClick = {
+                                vm.markFunViewed(post)
+                                when {
+                                    isVideo(post.link) -> playUrl = post.link
+                                    post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls
+                                    else -> open(post.link)
+                                }
+                            },
+                            onLongPress = { actionItem = post })
                     }
-                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
         }
