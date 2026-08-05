@@ -268,7 +268,7 @@ fun FunListScreen(
                         },
                         modifier = Modifier.fillMaxWidth().offset(y = (-10).dp),
                     ) { Text(transferLabel) }
-                    Row {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                         TextButton(onClick = { actionItem = null }) { Text("취소") }
                         TextButton(onClick = { shareItem(it0); actionItem = null }) { Text("공유") }
