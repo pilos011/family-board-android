@@ -222,6 +222,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return listOf(fromMime, hintExt).mapNotNull { it?.lowercase() }
             .firstOrNull { it.matches(valid) } ?: "mp4"
     }
+    /** 재미진 곳 항목을 내 재미진 곳(비공개)으로 복사. */
+    fun copyToMyFun(item: ListItem) = viewModelScope.launch {
+        runCatching {
+            board.upsertItem(ListItem(
+                text = item.text, link = item.link, photoUrls = item.photoUrls,
+                board = com.familyboard.app.data.model.FunBoard.PRIVATE,
+                createdBy = currentMemberId.value.orEmpty(), createdAt = System.currentTimeMillis()))
+        }
+    }
     /** 재미진 곳 항목을 현재 사용자가 봤다고 표시(중복 방지, arrayUnion). */
     fun markFunViewed(item: ListItem) {
         val me = currentMemberId.value.orEmpty()

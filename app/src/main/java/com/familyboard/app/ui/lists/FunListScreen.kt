@@ -252,20 +252,23 @@ fun FunListScreen(
         val editable = canEdit(it0)
         AlertDialog(
             onDismissRequest = { actionItem = null },
-            title = { Text(it0.text.ifBlank { "게시물" }) },
-            text = { Text("이 게시물을 어떻게 할까요?") },
-            confirmButton = {
-                Row {
-                    TextButton(onClick = { shareItem(it0); actionItem = null }) { Text("공유") }
-                    if (editable) TextButton(onClick = { editItem = it0; actionItem = null }) { Text("수정") }
+            title = { Text(it0.text.ifBlank { "게시물" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    Text("이 게시물을 어떻게 할까요?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Spacer(Modifier.height(6.dp))
+                    if (boardKey != FunBoard.PRIVATE) {
+                        TextButton(onClick = { vm.copyToMyFun(it0); Toast.makeText(context, "내 재미진 곳에 담았어요", Toast.LENGTH_SHORT).show(); actionItem = null },
+                            modifier = Modifier.fillMaxWidth()) { Text("내 재미진 곳으로 전달", modifier = Modifier.fillMaxWidth()) }
+                    }
+                    TextButton(onClick = { shareItem(it0); actionItem = null }, modifier = Modifier.fillMaxWidth()) { Text("공유", modifier = Modifier.fillMaxWidth()) }
+                    if (editable) TextButton(onClick = { editItem = it0; actionItem = null }, modifier = Modifier.fillMaxWidth()) { Text("수정", modifier = Modifier.fillMaxWidth()) }
+                    if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }, modifier = Modifier.fillMaxWidth()) {
+                        Text("삭제", color = Color(0xFFE03131), modifier = Modifier.fillMaxWidth())
+                    }
                 }
             },
-            dismissButton = {
-                Row {
-                    if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
-                    TextButton(onClick = { actionItem = null }) { Text("취소") }
-                }
-            },
+            confirmButton = { TextButton(onClick = { actionItem = null }) { Text("취소") } },
         )
     }
 }
