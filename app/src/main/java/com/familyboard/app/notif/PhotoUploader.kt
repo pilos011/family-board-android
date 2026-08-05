@@ -22,46 +22,21 @@ object PhotoUploader {
     }
 
     private const val MAX_VIDEO = 60_000_000
-    private const val MAX_DIM_HI = 3000
-    private const val HI_TARGET = 9_000_000
+    const val MAX_UPLOAD = 55_000_000 // 이보다 크면 업로드 실패(무단 축소하지 않음)
 
-    /** 재미진 곳용 고화질 업로드: 12MB 이하 원본은 그대로(가장 또렷), 초과 시 최대 3000px·q92로만 살짝 줄임. */
+    /**
+     * 재미진 곳용 원본 업로드: 압축·리사이즈 없이 원본 그대로 올린다(화질 보존).
+     * 55MB 초과면 null(=사용자에게 안내). 원본 품질을 임의로 줄이지 않는다.
+     */
     suspend fun uploadImageHiQ(context: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
         val original = runCatching { context.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }.getOrNull()
             ?: return@withContext null
+        if (original.size > MAX_UPLOAD) return@withContext null
         val mime = context.contentResolver.getType(uri).orEmpty()
         val ext = when {
             mime.contains("png") -> "png"; mime.contains("webp") -> "webp"; mime.contains("gif") -> "gif"; else -> "jpg"
         }
-        val useOriginal = original.size <= 12_000_000
-        val bytes = if (useOriginal) original else (runCatching { compressHiQ(original) }.getOrNull() ?: original)
-        if (bytes.size > MAX_VIDEO) return@withContext null
-        NotifyApi.uploadFile(bytes, if (useOriginal) ext else "jpg")
-    }
-
-    private fun compressHiQ(original: ByteArray): ByteArray {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(original, 0, original.size, bounds)
-        val opts = BitmapFactory.Options().apply {
-            var s = 1; var w = bounds.outWidth; var h = bounds.outHeight
-            while (w / 2 >= MAX_DIM_HI || h / 2 >= MAX_DIM_HI) { w /= 2; h /= 2; s *= 2 }
-            inSampleSize = s
-        }
-        val decoded = BitmapFactory.decodeByteArray(original, 0, original.size, opts) ?: return original
-        val maxSide = maxOf(decoded.width, decoded.height)
-        val bmp: Bitmap = if (maxSide > MAX_DIM_HI) {
-            val scale = MAX_DIM_HI.toFloat() / maxSide
-            val scaled = Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt(), (decoded.height * scale).toInt(), true)
-            if (scaled !== decoded) decoded.recycle(); scaled
-        } else decoded
-        var quality = 92
-        var out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
-        while (out.size() > HI_TARGET && quality > 75) {
-            quality -= 7; out = ByteArrayOutputStream(); bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
-        }
-        bmp.recycle()
-        return out.toByteArray()
+        NotifyApi.uploadFile(original, ext)
     }
 
     /** 원본 파일(영상 등)을 그대로 업로드. 60MB 초과 시 null. */
