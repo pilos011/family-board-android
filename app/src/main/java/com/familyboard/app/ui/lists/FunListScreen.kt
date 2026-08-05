@@ -101,6 +101,22 @@ fun FunListScreen(
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
+    // 영상은 명시적 MIME으로 열어 브라우저 다운로드가 아니라 동영상 플레이어로 재생
+    fun playVideo(link: String) {
+        if (link.isBlank()) return
+        val l = link.substringBefore('?').lowercase()
+        val mime = when {
+            l.endsWith(".mp4") -> "video/mp4"
+            l.endsWith(".mov") -> "video/quicktime"
+            l.endsWith(".webm") -> "video/webm"
+            l.endsWith(".mkv") -> "video/x-matroska"
+            l.endsWith(".3gp") -> "video/3gpp"
+            else -> "video/*"
+        }
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(link), mime))
+        }.onFailure { Toast.makeText(context, "재생할 수 있는 앱이 없어요", Toast.LENGTH_SHORT).show() }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -147,8 +163,11 @@ fun FunListScreen(
                                     viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
                                     onClick = {
                                         vm.markFunViewed(post)
-                                        if (post.link.isBlank() && post.photoUrls.isNotEmpty()) viewerImages = post.photoUrls
-                                        else open(post.link)
+                                        when {
+                                            post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls
+                                            isVideo(post.link) -> playVideo(post.link)
+                                            else -> open(post.link)
+                                        }
                                     },
                                     onLongPress = { if (canEdit(post)) actionItem = post })
                             }
