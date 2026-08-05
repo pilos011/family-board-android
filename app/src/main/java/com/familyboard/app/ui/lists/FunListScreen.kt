@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,10 +57,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.familyboard.app.data.model.FunBoard
 import com.familyboard.app.data.model.ListItem
@@ -85,6 +91,7 @@ fun FunListScreen(
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var actionItem by remember { mutableStateOf<ListItem?>(null) }
     var viewerImages by remember { mutableStateOf<List<String>?>(null) }
+    var playUrl by remember { mutableStateOf<String?>(null) }
     var youtubeOn by remember { mutableStateOf(true) }
     var websiteOn by remember { mutableStateOf(true) }
     var oldestFirst by remember { mutableStateOf(false) }
@@ -100,22 +107,6 @@ fun FunListScreen(
         if (link.isBlank()) return
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
-    }
-    // 영상은 명시적 MIME으로 열어 브라우저 다운로드가 아니라 동영상 플레이어로 재생
-    fun playVideo(link: String) {
-        if (link.isBlank()) return
-        val l = link.substringBefore('?').lowercase()
-        val mime = when {
-            l.endsWith(".mp4") -> "video/mp4"
-            l.endsWith(".mov") -> "video/quicktime"
-            l.endsWith(".webm") -> "video/webm"
-            l.endsWith(".mkv") -> "video/x-matroska"
-            l.endsWith(".3gp") -> "video/3gpp"
-            else -> "video/*"
-        }
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(link), mime))
-        }.onFailure { Toast.makeText(context, "재생할 수 있는 앱이 없어요", Toast.LENGTH_SHORT).show() }
     }
 
     Scaffold(
@@ -164,8 +155,8 @@ fun FunListScreen(
                                     onClick = {
                                         vm.markFunViewed(post)
                                         when {
+                                            isVideo(post.link) -> playUrl = post.link
                                             post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls
-                                            isVideo(post.link) -> playVideo(post.link)
                                             else -> open(post.link)
                                         }
                                     },
@@ -195,6 +186,8 @@ fun FunListScreen(
         }
     }
 
+    playUrl?.let { url -> VideoPlayerDialog(url) { playUrl = null } }
+
     if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(boardKey, t, l, if (img.isBlank()) emptyList() else listOf(img)); showAdd = false }, onDismiss = { showAdd = false })
     editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img -> vm.updateFun(it0, t, l, img); editItem = null }, onDismiss = { editItem = null }) }
     actionItem?.let { it0 ->
@@ -210,6 +203,30 @@ fun FunListScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun VideoPlayerDialog(url: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val player = remember(url) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(url))
+            prepare()
+            playWhenReady = true
+        }
+    }
+    DisposableEffect(url) { onDispose { player.release() } }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            AndroidView(
+                factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
+                modifier = Modifier.fillMaxSize(),
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+                Icon(Icons.Default.Close, "닫기", tint = Color.White)
+            }
+        }
     }
 }
 
