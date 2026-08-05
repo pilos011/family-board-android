@@ -37,6 +37,11 @@ data class ListItem(
     val yearly: Boolean = false,   // D-Day 매년 반복 여부
     val notifyIds: List<String> = emptyList(), // D-Day 알림 대상(모두=4인). 비었으면 알림 없음
     val homePinned: Boolean = false, // D-Day를 홈 화면 카운트다운에 게시할지
+    val link: String = "",         // 장소 북마크 링크(네이버 플레이스 등). 맛집/가볼 곳 보드
+    val rating: Long = 0,          // 장소 별점 0~5 (0=미방문). 맛집/가볼 곳 보드
+    val address: String = "",      // 장소 전체 도로명 주소(네비 연동용). 맛집/가볼 곳 보드
+    // 댓글은 progress(ProgressNote: text/by/dateIso)를 재사용
+    // 파싱 요약(종목·별점·영업시간)은 description 을 재사용
 )
 
 /** 버킷 진행 이력 메모 */
@@ -54,6 +59,18 @@ object BucketBoards {
 /** D-Day(카운트다운) 보드 키. 가족 모두 사용. */
 object DDayBoard {
     const val BOARD = "dday"
+}
+
+/** 장소 북마크 보드(맛집/가볼 곳). 링크·별점(0~5)·댓글 지원, 가족 공용. */
+object PlaceBoards {
+    const val RESTAURANT = "restaurant"
+    const val VISIT = "visit"
+    fun titleOf(board: String): String = when (board) {
+        RESTAURANT -> "맛집"
+        VISIT -> "가볼 곳"
+        else -> "장소"
+    }
+    fun isPlace(board: String?): Boolean = board == RESTAURANT || board == VISIT
 }
 
 /** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */

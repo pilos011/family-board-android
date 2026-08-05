@@ -16,7 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,6 +62,7 @@ import com.familyboard.app.R
 import com.familyboard.app.data.BucketLife
 import com.familyboard.app.data.model.BoardType
 import com.familyboard.app.data.model.ListItem
+import com.familyboard.app.data.model.PlaceBoards
 import com.familyboard.app.ui.AppViewModel
 import com.familyboard.app.ui.bucket.BucketIcons
 import com.familyboard.app.ui.theme.ShoppingBlue
@@ -72,9 +75,12 @@ fun ListsScreen(
     onOpenBoard: (String) -> Unit,
     onOpenBucket: () -> Unit,
     onOpenDday: () -> Unit,
+    onOpenPlace: (String) -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
+    val restaurant by vm.restaurantItems.collectAsStateWithLifecycle()
+    val visit by vm.visitItems.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
@@ -92,23 +98,12 @@ fun ListsScreen(
                 BucketWideCard(spouseName = spouse, onClick = onOpenBucket)
                 Spacer(Modifier.height(16.dp))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                BoardCard(
-                    title = BoardType.SHOPPING.title,
-                    count = shopping.size,
-                    done = shopping.count { it.checked },
-                    color = ShoppingBlue,
-                    icon = Icons.Default.ShoppingCart,
-                    modifier = Modifier.weight(1f),
-                ) { onOpenBoard(BoardType.SHOPPING.key) }
-                BoardCard(
-                    title = BoardType.TODO.title,
-                    count = todo.size,
-                    done = todo.count { it.checked },
-                    color = TodoGreen,
-                    icon = Icons.Default.CheckCircle,
-                    modifier = Modifier.weight(1f),
-                ) { onOpenBoard(BoardType.TODO.key) }
+            // 4개 카테고리를 한 줄(버킷 카드와 같은 118dp 높이)로 컴팩트하게
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CompactBoardCard("장보기", shopping.size, ShoppingBlue, Icons.Default.ShoppingCart, Modifier.weight(1f)) { onOpenBoard(BoardType.SHOPPING.key) }
+                CompactBoardCard("할 일", todo.size, TodoGreen, Icons.Default.CheckCircle, Modifier.weight(1f)) { onOpenBoard(BoardType.TODO.key) }
+                CompactBoardCard("맛집", restaurant.size, RestaurantColor, Icons.Default.Restaurant, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.RESTAURANT) }
+                CompactBoardCard("가볼 곳", visit.size, VisitColor, Icons.Default.Place, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.VISIT) }
             }
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
@@ -289,12 +284,14 @@ private fun BucketWideCard(spouseName: String?, onClick: () -> Unit) {
     }
 }
 
+private val RestaurantColor = Color(0xFFFF922B)
+private val VisitColor = Color(0xFF22B8CF)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BoardCard(
+private fun CompactBoardCard(
     title: String,
     count: Int,
-    done: Int,
     color: Color,
     icon: ImageVector,
     modifier: Modifier = Modifier,
@@ -302,24 +299,21 @@ private fun BoardCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.aspectRatio(0.95f),
-        shape = RoundedCornerShape(24.dp),
+        modifier = modifier.height(118.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = color),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
-        Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "${count}개 항목" + if (count > 0) " · $done 완료" else "",
-                color = Color.White.copy(alpha = 0.9f),
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
-                Icon(icon, null, tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.height(64.dp))
-            }
+        Column(
+            Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(30.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Text("${count}개", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
         }
     }
 }

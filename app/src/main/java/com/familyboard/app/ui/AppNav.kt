@@ -1,6 +1,7 @@
 package com.familyboard.app.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +18,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -38,7 +41,9 @@ import com.familyboard.app.ui.bucket.BucketViewScreen
 import com.familyboard.app.ui.dday.DDayScreen
 import com.familyboard.app.ui.emergency.EmergencySendScreen
 import com.familyboard.app.ui.home.HomeScreen
+import com.familyboard.app.data.model.PlaceBoards
 import com.familyboard.app.ui.lists.ListDetailScreen
+import com.familyboard.app.ui.lists.PlaceListScreen
 import com.familyboard.app.ui.manage.ManageScreen
 import com.familyboard.app.ui.lists.ListsScreen
 import com.familyboard.app.ui.onboarding.OnboardingScreen
@@ -55,6 +60,7 @@ private object Routes {
     const val EDIT_EVENT = "editEvent/{eventId}"
     const val VIEW_EVENT = "viewEvent/{eventId}/{dateIso}"
     const val LIST_DETAIL = "listDetail/{board}"
+    const val PLACE = "place/{board}"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -68,6 +74,7 @@ private object Routes {
     fun editEvent(eventId: String) = "editEvent/$eventId"
     fun viewEvent(eventId: String, dateIso: String) = "viewEvent/$eventId/$dateIso"
     fun listDetail(board: String) = "listDetail/$board"
+    fun place(board: String) = "place/$board"
 }
 
 @Composable
@@ -91,6 +98,7 @@ private fun MainScaffold(vm: AppViewModel) {
         route == Routes.ALLOWANCE || route == Routes.MANAGE
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
+    val pendingShare by vm.pendingShare.collectAsStateWithLifecycle()
 
     Scaffold(
         bottomBar = {
@@ -163,6 +171,15 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenBoard = { nav.navigate(Routes.listDetail(it)) },
                     onOpenBucket = { nav.navigate(Routes.BUCKET_HOME) },
                     onOpenDday = { nav.navigate(Routes.DDAY) },
+                    onOpenPlace = { nav.navigate(Routes.place(it)) },
+                )
+            }
+            composable(Routes.PLACE) { entry ->
+                PlaceListScreen(
+                    vm = vm,
+                    boardKey = entry.arguments?.getString("board").orEmpty(),
+                    currentMemberId = currentMemberId,
+                    onBack = { nav.popBackStack() },
                 )
             }
             composable(Routes.DDAY) {
@@ -250,6 +267,31 @@ private fun MainScaffold(vm: AppViewModel) {
                 )
             }
         }
+    }
+
+    // 네이버 플레이스 등에서 공유받았을 때: 맛집/가볼 곳 중 저장 위치 선택
+    pendingShare?.let { sp ->
+        val body = if (sp.loading) "네이버에서 정보 가져오는 중…"
+        else listOf(sp.name, sp.description, if (sp.address.isNotBlank()) "📍 ${sp.address}" else "")
+            .filter { it.isNotBlank() }.joinToString("\n")
+        AlertDialog(
+            onDismissRequest = { vm.clearPendingShare() },
+            title = { Text("어디에 저장할까요?") },
+            text = { Text(body) },
+            confirmButton = {
+                TextButton(enabled = !sp.loading, onClick = {
+                    vm.savePlace(PlaceBoards.RESTAURANT); nav.navigate(Routes.place(PlaceBoards.RESTAURANT))
+                }) { Text("맛집") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(enabled = !sp.loading, onClick = {
+                        vm.savePlace(PlaceBoards.VISIT); nav.navigate(Routes.place(PlaceBoards.VISIT))
+                    }) { Text("가볼 곳") }
+                    TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
+                }
+            },
+        )
     }
 }
 

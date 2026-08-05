@@ -34,6 +34,16 @@ sealed interface UserState {
     data class Selected(val id: String) : UserState
 }
 
+/** 공유로 받은 장소(이름/링크/파싱요약/주소). 저장 위치(맛집/가볼 곳) 선택 대기용. */
+data class SharedPlace(
+    val name: String,
+    val link: String,
+    val description: String = "",
+    val address: String = "",
+    val image: String = "",
+    val loading: Boolean = false,
+)
+
 /**
  * 앱 전역 상태/동작 허브. 화면들은 이 VM 을 공유한다(activity 스코프).
  */
@@ -80,6 +90,99 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 임의 보드 키의 항목 스트림(커스텀 리스트 포함). */
     fun boardItems(boardKey: String): kotlinx.coroutines.flow.Flow<List<ListItem>> = board.items(boardKey)
+
+    // 장소 북마크 보드(맛집/가볼 곳)
+    val restaurantItems: StateFlow<List<ListItem>> =
+        board.items(com.familyboard.app.data.model.PlaceBoards.RESTAURANT)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val visitItems: StateFlow<List<ListItem>> =
+        board.items(com.familyboard.app.data.model.PlaceBoards.VISIT)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun placeItems(boardKey: String): StateFlow<List<ListItem>> =
+        if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
+
+    /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
+    val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)
+
+    /** 공유 텍스트에서 링크·이름 추출 → 저장 대기. 네이버 링크면 서버로 상세정보 파싱. */
+    fun handleSharedText(raw: String?, subject: String?) {
+        val text = raw?.trim().orEmpty()
+        if (text.isBlank()) return
+        val url = Regex("https?://\\S+").find(text)?.value?.trimEnd('.', ',', ')', ']') ?: ""
+        var name = text.replace(url, " ").split('\n').map { it.trim() }
+            .firstOrNull { it.isNotBlank() && it != "[네이버지도]" }.orEmpty()
+        if (name.isBlank()) name = subject?.trim().orEmpty()
+        val isNaver = url.contains("naver", ignoreCase = true)
+        pendingShare.value = SharedPlace(
+            name = name.ifBlank { if (isNaver) "장소 불러오는 중…" else "새 장소" },
+            link = url, loading = isNaver && url.isNotBlank(),
+        )
+        if (isNaver && url.isNotBlank()) viewModelScope.launch {
+            val info = com.familyboard.app.notif.NotifyApi.parsePlace(url)
+            val cur = pendingShare.value ?: return@launch
+            pendingShare.value = if (info != null && info.name.isNotBlank())
+                cur.copy(name = info.name, description = buildPlaceDesc(info), address = info.address,
+                    image = info.image, loading = false)
+            else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
+        }
+    }
+    private fun buildPlaceDesc(i: com.familyboard.app.notif.PlaceInfo): String {
+        val lines = mutableListOf<String>()
+        val head = buildString {
+            if (i.category.isNotBlank()) append(i.category)
+            if (i.score != null) {
+                if (isNotEmpty()) append(" · ")
+                append("★${i.score}")
+                if (i.reviews != null) append(" (리뷰 ${i.reviews})")
+            }
+        }
+        if (head.isNotBlank()) lines.add(head)
+        if (i.hours.isNotBlank()) lines.add("영업 ${i.hours}")
+        return lines.joinToString("\n")
+    }
+    fun savePlace(boardKey: String) {
+        val s = pendingShare.value ?: return
+        if (s.loading) return
+        val nm = s.name.trim().let { if (it.isBlank() || it == "장소 불러오는 중…") "새 장소" else it }
+        addPlace(boardKey, nm, s.link, s.description, s.address, s.image)
+        pendingShare.value = null
+    }
+    fun clearPendingShare() { pendingShare.value = null }
+
+    fun addPlace(boardKey: String, name: String, link: String, description: String = "", address: String = "", image: String = "") = viewModelScope.launch {
+        if (name.isBlank()) return@launch
+        runCatching {
+            board.upsertItem(ListItem(text = name.trim(), link = link.trim(), description = description,
+                address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image),
+                board = boardKey, createdBy = currentMemberId.value.orEmpty()))
+        }
+    }
+    fun updatePlace(item: ListItem, name: String, link: String,
+                    description: String = item.description, address: String = item.address,
+                    image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
+        runCatching {
+            board.upsertItem(item.copy(text = name.trim(), link = link.trim(), description = description,
+                address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image)))
+        }
+    }
+    /** 편집 다이얼로그에서 네이버 링크로 정보 가져오기(콜백으로 결과 전달). */
+    fun fetchPlaceInfo(url: String, onResult: (com.familyboard.app.notif.PlaceInfo?) -> Unit) = viewModelScope.launch {
+        onResult(com.familyboard.app.notif.NotifyApi.parsePlace(url))
+    }
+    fun describePlace(info: com.familyboard.app.notif.PlaceInfo): String = buildPlaceDesc(info)
+    fun setPlaceRating(item: ListItem, rating: Int) = viewModelScope.launch {
+        runCatching { board.upsertItem(item.copy(rating = rating.toLong().coerceIn(0L, 5L))) }
+    }
+    fun addPlaceComment(item: ListItem, text: String) = viewModelScope.launch {
+        if (text.isBlank()) return@launch
+        val note = com.familyboard.app.data.model.ProgressNote(
+            text = text.trim(), by = currentMemberId.value.orEmpty(), dateIso = LocalDate.now().toString())
+        runCatching { board.upsertItem(item.copy(progress = item.progress + note)) }
+    }
+    fun deletePlaceComment(item: ListItem, index: Int) = viewModelScope.launch {
+        if (index < 0 || index >= item.progress.size) return@launch
+        runCatching { board.upsertItem(item.copy(progress = item.progress.filterIndexed { i, _ -> i != index })) }
+    }
 
     val allowanceJunyoung: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNYOUNG)

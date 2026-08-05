@@ -17,11 +17,16 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import com.familyboard.app.ui.AppRoot
+import com.familyboard.app.ui.AppViewModel
 import com.familyboard.app.ui.theme.FamilyBoardTheme
 
 class MainActivity : ComponentActivity() {
+
+    // AppRoot 의 viewModel() 과 동일 인스턴스(액티비티 스코프) — 공유 인텐트를 여기서 넣는다.
+    private val vm: AppViewModel by viewModels()
 
     // 시스템 글자 크기(폰트 스케일)와 무관하게 앱 내부는 항상 '기본(1.0)'으로 강제.
     // (은선폰처럼 시스템 글자 크기를 최대로 둔 경우 UI가 넘치는 문제 방지)
@@ -55,10 +60,27 @@ class MainActivity : ComponentActivity() {
             permStep = 0
             nextPermStep()
         }
+        handleShareIntent(intent)
         setContent {
             FamilyBoardTheme(darkTheme = false) {
                 AppRoot()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShareIntent(intent)
+    }
+
+    /** 네이버 플레이스 등에서 '공유 → 준준가족 보드'로 들어온 텍스트 처리. */
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            vm.handleSharedText(
+                intent.getStringExtra(Intent.EXTRA_TEXT),
+                intent.getStringExtra(Intent.EXTRA_SUBJECT),
+            )
         }
     }
 

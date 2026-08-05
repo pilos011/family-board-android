@@ -15,6 +15,17 @@ import java.net.URL
  *  - notify: 특정 멤버들에게 등록 알림 발송 요청 (서버가 actor 제외 후 FCM 발송)
  * 서버 주소/시크릿은 local.properties → BuildConfig 로 주입.
  */
+/** 네이버 플레이스 파싱 결과 */
+data class PlaceInfo(
+    val name: String = "",
+    val category: String = "",
+    val address: String = "",
+    val score: Double? = null,
+    val reviews: Int? = null,
+    val hours: String = "",
+    val image: String = "",
+)
+
 object NotifyApi {
     private const val TAG = "NotifyApi"
     private val base get() = BuildConfig.NOTIFY_BASE_URL.trimEnd('/')
@@ -48,6 +59,39 @@ object NotifyApi {
             json.put("data", d)
         }
         post("/notify", json)
+    }
+
+    /** 네이버 플레이스 공유 링크에서 상호/종목/영업시간/주소 파싱(서버 위임). 실패 시 null. */
+    suspend fun parsePlace(url: String): PlaceInfo? {
+        if (!enabled() || url.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL("$base/place/parse").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 10000
+                    readTimeout = 15000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+                }
+                conn.outputStream.use { it.write(JSONObject().put("url", url).toString().toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code !in 200..299) return@runCatching null
+                val o = JSONObject(text)
+                PlaceInfo(
+                    name = o.optString("name"),
+                    category = o.optString("category"),
+                    address = o.optString("address"),
+                    score = if (o.isNull("score")) null else o.optDouble("score"),
+                    reviews = if (o.isNull("reviews")) null else o.optInt("reviews"),
+                    hours = o.optString("hours"),
+                    image = o.optString("image"),
+                )
+            }.onFailure { Log.w(TAG, "parsePlace 실패", it) }.getOrNull()
+        }
     }
 
     /** 사진 바이트 업로드 → 공개 URL 반환(실패 시 null) */
