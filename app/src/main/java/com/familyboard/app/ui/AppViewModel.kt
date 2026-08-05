@@ -203,16 +203,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else null
         }
     }
-    /** 공유받은 영상(mp4 등) → 업로드 + 썸네일. */
-    fun handleSharedVideo(uri: android.net.Uri, ext: String) {
+    /** 공유받은 영상(mp4 등) → 업로드 + 썸네일. 확장자는 실제 mime에서 판별(기본 mp4). */
+    fun handleSharedVideo(uri: android.net.Uri, hintExt: String) {
         pendingShare.value = SharedPlace(name = "영상 올리는 중…", link = "", loading = true, isFun = true)
         viewModelScope.launch {
-            val videoUrl = com.familyboard.app.notif.PhotoUploader.uploadRaw(getApplication(), uri, ext.ifBlank { "mp4" })
+            val ext = resolveVideoExt(uri, hintExt)
+            val videoUrl = com.familyboard.app.notif.PhotoUploader.uploadRaw(getApplication(), uri, ext)
             val cur = pendingShare.value ?: return@launch
             if (videoUrl == null) { pendingShare.value = null; return@launch }
             val thumb = com.familyboard.app.notif.PhotoUploader.uploadVideoThumb(getApplication(), uri).orEmpty()
             pendingShare.value = cur.copy(name = "공유 영상", link = videoUrl, image = thumb, loading = false)
         }
+    }
+    private fun resolveVideoExt(uri: android.net.Uri, hintExt: String): String {
+        val valid = Regex("[a-z0-9]{1,5}")
+        val cr = getApplication<android.app.Application>().contentResolver
+        val fromMime = cr.getType(uri)?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        return listOf(fromMime, hintExt).mapNotNull { it?.lowercase() }
+            .firstOrNull { it.matches(valid) } ?: "mp4"
     }
     /** 재미진 곳 항목을 현재 사용자가 봤다고 표시(중복 방지, arrayUnion). */
     fun markFunViewed(item: ListItem) {
