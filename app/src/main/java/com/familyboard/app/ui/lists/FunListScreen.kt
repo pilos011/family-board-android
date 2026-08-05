@@ -3,15 +3,15 @@ package com.familyboard.app.ui.lists
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,6 +72,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.familyboard.app.data.model.FunBoard
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
@@ -175,10 +179,16 @@ fun FunListScreen(
         }
     }
 
-    // 이미지 전체보기: 좌우로 넘기며 핀치 확대/축소·이동·더블탭 줌. Coil 디스크 캐시.
+    // 이미지 전체보기. 한 장이면 바로 확대뷰, 여러 장이면 세로로 훑어보고 탭하면 확대뷰.
     viewerImages?.let { urls ->
         Dialog(onDismissRequest = { viewerImages = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            ImageGallery(urls) { viewerImages = null }
+            if (urls.size == 1) {
+                ZoomOverlay(urls.first()) { viewerImages = null }
+            } else {
+                var zoomUrl by remember { mutableStateOf<String?>(null) }
+                StackViewer(urls, onTap = { zoomUrl = it }, onClose = { viewerImages = null })
+                zoomUrl?.let { u -> ZoomOverlay(u) { zoomUrl = null } }
+            }
         }
     }
 
@@ -202,54 +212,70 @@ fun FunListScreen(
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+/** 여러 장 훑어보기: 세로로 이어 가로 꽉차게. 탭하면 확대뷰로. */
 @Composable
-private fun ImageGallery(urls: List<String>, onClose: () -> Unit) {
-    val pager = rememberPagerState(pageCount = { urls.size })
-    var swipeEnabled by remember { mutableStateOf(true) }
+private fun StackViewer(urls: List<String>, onTap: (String) -> Unit, onClose: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        HorizontalPager(state = pager, userScrollEnabled = swipeEnabled, modifier = Modifier.fillMaxSize()) { page ->
-            ZoomableImage(urls[page]) { s -> if (page == pager.currentPage) swipeEnabled = s <= 1.01f }
+        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(urls) { u ->
+                AsyncImage(model = u, contentDescription = null, contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth().clickable { onTap(u) })
+            }
+            item { Spacer(Modifier.height(40.dp)) }
         }
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             Icon(Icons.Default.Close, "닫기", tint = Color.White)
         }
-        if (urls.size > 1) {
-            Text("${pager.currentPage + 1} / ${urls.size}", color = Color.White, fontSize = 13.sp,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
-                    .background(Color(0x88000000), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
-        }
     }
 }
 
+/** 단일 이미지 확대뷰: 원본 해상도 로드(또렷), 세로 이미지는 가로 꽉차게 시작, 핀치/드래그/더블탭. */
 @Composable
-private fun ZoomableImage(url: String, onScale: (Float) -> Unit) {
+private fun ZoomOverlay(url: String, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val painter = rememberAsyncImagePainter(
+        ImageRequest.Builder(context).data(url).size(coil.size.Size.ORIGINAL).build(),
+    )
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    Box(
-        Modifier.fillMaxSize()
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(1f, 5f)
-                    offset = if (scale > 1f) offset + pan else Offset.Zero
-                    onScale(scale)
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        val vpW = constraints.maxWidth.toFloat()
+        val vpH = constraints.maxHeight.toFloat()
+        val isz = painter.intrinsicSize
+        val aspect = if (isz.isSpecified && isz.height > 0f) isz.width / isz.height else vpW / vpH.coerceAtLeast(1f)
+        val baseW = vpW
+        val baseH = vpW / aspect // 가로 꽉참 기준 높이
+
+        fun clamp(o: Offset, s: Float): Offset {
+            val maxX = ((baseW * s - vpW) / 2f).coerceAtLeast(0f)
+            val maxY = ((baseH * s - vpH) / 2f).coerceAtLeast(0f)
+            return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
+        }
+        // 세로로 긴 이미지는 처음에 상단이 보이도록(중앙정렬 기준 아래로 이동)
+        LaunchedEffect(aspect, vpH) {
+            if (aspect > 0f && baseH > vpH) offset = clamp(Offset(0f, (baseH - vpH) / 2f), 1f)
+        }
+
+        Image(
+            painter = painter, contentDescription = null, contentScale = ContentScale.FillWidth,
+            modifier = Modifier.fillMaxWidth().aspectRatio(aspect)
+                .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y)
+                .pointerInput(url) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 6f)
+                        offset = clamp(offset + pan, scale)
+                    }
                 }
-            }
-            .pointerInput(Unit) {
-                detectTapGestures(onDoubleTap = {
-                    scale = if (scale > 1f) 1f else 2.5f
-                    if (scale <= 1f) offset = Offset.Zero
-                    onScale(scale)
-                })
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        AsyncImage(
-            model = url, contentDescription = null, contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize().graphicsLayer(
-                scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y,
-            ),
+                .pointerInput(url) {
+                    detectTapGestures(onDoubleTap = {
+                        scale = if (scale > 1f) 1f else 2.5f
+                        offset = clamp(if (scale > 1f) offset else Offset.Zero, scale)
+                    })
+                },
         )
+        IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+            Icon(Icons.Default.Close, "닫기", tint = Color.White)
+        }
     }
 }
 
