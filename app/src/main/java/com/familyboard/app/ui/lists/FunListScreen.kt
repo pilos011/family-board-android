@@ -233,7 +233,7 @@ fun FunListScreen(
                 ZoomOverlay(urls.first()) { viewerImages = null }
             } else {
                 var zoomUrl by remember { mutableStateOf<String?>(null) }
-                StackViewer(urls, onTap = { zoomUrl = it }, onClose = { viewerImages = null })
+                StackViewer(urls, onLongOpen = { zoomUrl = it }, onClose = { viewerImages = null })
                 zoomUrl?.let { u -> ZoomOverlay(u) { zoomUrl = null } }
             }
         }
@@ -267,12 +267,17 @@ fun FunListScreen(
 
 /** 여러 장 훑어보기: 세로로 이어 가로 꽉차게. 탭하면 확대뷰로. */
 @Composable
-private fun StackViewer(urls: List<String>, onTap: (String) -> Unit, onClose: () -> Unit) {
+private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClose: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            item {
+                Text("이미지를 길게 누르면 확대돼요", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
             items(urls) { u ->
+                // 스크롤 중 오터치 방지: 탭이 아니라 롱클릭으로 확대
                 AsyncImage(model = u, contentDescription = null, contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth().clickable { onTap(u) })
+                    modifier = Modifier.fillMaxWidth().pointerInput(u) { detectTapGestures(onLongPress = { onLongOpen(u) }) })
             }
             item { Spacer(Modifier.height(40.dp)) }
         }
