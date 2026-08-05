@@ -112,6 +112,7 @@ fun FunListScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var actionItem by remember { mutableStateOf<ListItem?>(null) }
+    var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
     var viewerImages by remember { mutableStateOf<List<String>?>(null) }
     var playUrl by remember { mutableStateOf<String?>(null) }
     var youtubeOn by remember { mutableStateOf(true) }
@@ -269,13 +270,27 @@ fun FunListScreen(
                         modifier = Modifier.fillMaxWidth().offset(y = (-10).dp),
                     ) { Text(transferLabel) }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
+                        if (editable) TextButton(onClick = { pendingDelete = it0; actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                         TextButton(onClick = { actionItem = null }) { Text("취소") }
                         TextButton(onClick = { shareItem(it0); actionItem = null }) { Text("공유") }
                         if (editable) TextButton(onClick = { editItem = it0; actionItem = null }) { Text("수정") }
                     }
                 }
             },
+        )
+    }
+    // 삭제 확인
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("삭제") },
+            text = { Text("이 게시물을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteItem(target.id); pendingDelete = null }) {
+                    Text("삭제", color = Color(0xFFE03131))
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
         )
     }
 }
