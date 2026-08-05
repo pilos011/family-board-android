@@ -42,6 +42,12 @@ class InMemoryBoardRepository : BoardRepository {
         itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(checked = checked) else it }
     }
 
+    override suspend fun markViewed(id: String, memberId: String) {
+        itemsFlow.value = itemsFlow.value.map {
+            if (it.id == id && !it.viewedBy.contains(memberId)) it.copy(viewedBy = it.viewedBy + memberId) else it
+        }
+    }
+
     override suspend fun deleteItem(id: String) {
         itemsFlow.value = itemsFlow.value.filter { it.id != id }
     }

@@ -184,6 +184,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 createdAt = System.currentTimeMillis()))
         }
     }
+    /** 재미진 곳 항목을 현재 사용자가 봤다고 표시(중복 방지, arrayUnion). */
+    fun markFunViewed(item: ListItem) {
+        val me = currentMemberId.value.orEmpty()
+        if (me.isBlank() || item.viewedBy.contains(me)) return
+        viewModelScope.launch { runCatching { board.markViewed(item.id, me) } }
+    }
     fun updateFun(item: ListItem, title: String, link: String, image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
         runCatching {
             board.upsertItem(item.copy(text = title.trim(), link = link.trim(),

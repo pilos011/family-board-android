@@ -44,6 +44,7 @@ data class ListItem(
     val lat: Double = 0.0,         // 위도(거리 정렬용)
     val lng: Double = 0.0,         // 경도(거리 정렬용)
     val createdAt: Long = 0,       // 생성 시각(epoch millis). 등록순 정렬용(재미진 곳 등)
+    val viewedBy: List<String> = emptyList(), // 이 항목을 본(클릭한) 멤버 id 목록(재미진 곳)
     // 댓글은 progress(ProgressNote: text/by/dateIso)를 재사용
     // 파싱 요약(종목·별점·영업시간)은 description 을 재사용
 )

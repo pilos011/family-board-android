@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -78,9 +80,11 @@ fun FunListScreen(
     var youtubeOn by remember { mutableStateOf(true) }
     var websiteOn by remember { mutableStateOf(true) }
     var oldestFirst by remember { mutableStateOf(false) }
+    var hideViewed by remember { mutableStateOf(false) }
 
-    val shown = remember(items, youtubeOn, websiteOn, oldestFirst) {
-        val f = items.filter { val yt = isYoutube(it.link); (youtubeOn && yt) || (websiteOn && !yt) }
+    val shown = remember(items, youtubeOn, websiteOn, oldestFirst, hideViewed, currentMemberId) {
+        var f = items.filter { val yt = isYoutube(it.link); (youtubeOn && yt) || (websiteOn && !yt) }
+        if (hideViewed) f = f.filter { !it.viewedBy.contains(currentMemberId) }
         if (oldestFirst) f.sortedBy { it.createdAt } else f.sortedByDescending { it.createdAt }
     }
 
@@ -108,12 +112,13 @@ fun FunListScreen(
         Column(Modifier.padding(padding).fillMaxSize()) {
             // 필터/정렬 토글(동시 동작): 유튜브 · 웹사이트(필터) + 등록순(정렬)
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TogglePill("유튜브", youtubeOn) { youtubeOn = !youtubeOn }
                 TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn }
                 TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
+                TogglePill("이미 본 게시물 제외", hideViewed) { hideViewed = !hideViewed }
             }
             if (shown.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -133,7 +138,8 @@ fun FunListScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             rowItems.forEach { post ->
                                 FunCell(post, Modifier.weight(1f),
-                                    onClick = { open(post.link) },
+                                    viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
+                                    onClick = { open(post.link); vm.markFunViewed(post) },
                                     onLongPress = { if (canEdit(post)) actionItem = post })
                             }
                             repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
@@ -178,7 +184,7 @@ private fun TogglePill(label: String, on: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun FunCell(item: ListItem, modifier: Modifier, onClick: () -> Unit, onLongPress: () -> Unit) {
+private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
     Column(
         modifier.pointerInput(item.id) {
             detectTapGestures(onTap = { onClick() }, onLongPress = { onLongPress() })
@@ -187,7 +193,7 @@ private fun FunCell(item: ListItem, modifier: Modifier, onClick: () -> Unit, onL
         val photo = item.photoUrls.firstOrNull()
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFFECECEC)),
+                .background(Color(0xFFECECEC)).alpha(if (viewed) 0.35f else 1f),
             contentAlignment = Alignment.Center,
         ) {
             if (!photo.isNullOrBlank()) {
@@ -199,7 +205,8 @@ private fun FunCell(item: ListItem, modifier: Modifier, onClick: () -> Unit, onL
         }
         Spacer(Modifier.height(4.dp))
         Text(item.text.ifBlank { "제목 없음" }, fontSize = 11.sp, lineHeight = 13.sp,
-            maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+            maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
+            color = if (viewed) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface)
     }
 }
 
