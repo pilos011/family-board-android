@@ -56,8 +56,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -287,9 +290,9 @@ private fun WaitingContent(
         }
 
         Column(
-            Modifier.fillMaxSize().padding(top = 36.dp),
+            Modifier.fillMaxSize().padding(top = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.Top,
         ) {
             Image(
                 painter = painterResource(com.familyboard.app.R.drawable.call_wait),
@@ -299,8 +302,14 @@ private fun WaitingContent(
             )
             Spacer(Modifier.height(6.dp))
             Text("빠른 연락 요청", color = WarmInk, fontSize = 28.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(4.dp))
-            Text("${senderName}님이 애타게 기다리고 있어요", color = WarmInk.copy(alpha = 0.7f), fontSize = 15.sp)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = WarmAccent, fontWeight = FontWeight.Black, fontSize = 26.sp)) { append(senderName) }
+                    append("님이 애타게 기다리고 있어요")
+                },
+                color = WarmInk, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            )
             Spacer(Modifier.height(24.dp))
             Box(
                 Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
