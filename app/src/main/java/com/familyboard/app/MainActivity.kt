@@ -75,26 +75,36 @@ class MainActivity : ComponentActivity() {
         handleShareIntent(intent)
     }
 
-    /** '공유 → 준준가족 보드'로 들어온 텍스트/이미지 처리. */
+    /** '공유 → 준준가족 보드'로 들어온 텍스트/이미지/영상 처리. */
     private fun handleShareIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent == null) return
         val type = intent.type ?: ""
-        when {
-            type == "text/plain" -> {
-                vm.handleSharedText(intent.getStringExtra(Intent.EXTRA_TEXT), intent.getStringExtra(Intent.EXTRA_SUBJECT))
-                if (vm.pendingShare.value == null) {
-                    Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
+        when (intent.action) {
+            Intent.ACTION_SEND -> when {
+                type == "text/plain" -> {
+                    vm.handleSharedText(intent.getStringExtra(Intent.EXTRA_TEXT), intent.getStringExtra(Intent.EXTRA_SUBJECT))
+                    if (vm.pendingShare.value == null) Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
                 }
+                type.startsWith("image/") -> singleStream(intent)?.let { vm.handleSharedImage(it) }
+                    ?: Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
+                type.startsWith("video/") -> singleStream(intent)?.let { vm.handleSharedVideo(it, type.substringAfter('/')) }
+                    ?: Toast.makeText(this, "영상을 읽지 못했어요", Toast.LENGTH_SHORT).show()
             }
-            type.startsWith("image/") -> {
-                val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                if (uri != null) vm.handleSharedImage(uri)
+            Intent.ACTION_SEND_MULTIPLE -> if (type.startsWith("image/")) {
+                val uris = multiStream(intent)
+                if (uris.isNotEmpty()) vm.handleSharedImages(uris)
                 else Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
             }
         }
     }
+
+    private fun singleStream(intent: Intent): Uri? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
+
+    private fun multiStream(intent: Intent): List<Uri> =
+        (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)) ?: emptyList()
 
     /** 다음 미허용 권한을 하나씩 요청. 각 요청이 끝나면 콜백에서 다시 호출된다. */
     private fun nextPermStep() {

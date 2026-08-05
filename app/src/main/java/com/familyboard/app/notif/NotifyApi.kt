@@ -126,6 +126,31 @@ object NotifyApi {
         }
     }
 
+    /** 대용량 파일(영상 등) 업로드 → 공개 URL 반환. ext 확장자로 저장(예: "mp4"). 실패 시 null. */
+    suspend fun uploadFile(bytes: ByteArray, ext: String): String? {
+        if (!enabled()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL("$base/uploadfile").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 15000
+                    readTimeout = 60000
+                    doOutput = true
+                    setFixedLengthStreamingMode(bytes.size)
+                    setRequestProperty("Content-Type", "application/octet-stream")
+                    setRequestProperty("X-FB-Ext", ext)
+                    if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+                }
+                conn.outputStream.use { it.write(bytes) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code in 200..299) JSONObject(text).optString("url").ifBlank { null } else null
+            }.onFailure { Log.w(TAG, "uploadFile 실패", it) }.getOrNull()
+        }
+    }
+
     /** 사진 바이트 업로드 → 공개 URL 반환(실패 시 null) */
     suspend fun uploadPhoto(bytes: ByteArray): String? {
         if (!enabled()) return null

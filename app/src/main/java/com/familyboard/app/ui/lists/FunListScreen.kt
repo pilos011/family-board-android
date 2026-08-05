@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -83,7 +84,7 @@ fun FunListScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var actionItem by remember { mutableStateOf<ListItem?>(null) }
-    var viewerImage by remember { mutableStateOf<String?>(null) }
+    var viewerImages by remember { mutableStateOf<List<String>?>(null) }
     var youtubeOn by remember { mutableStateOf(true) }
     var websiteOn by remember { mutableStateOf(true) }
     var oldestFirst by remember { mutableStateOf(false) }
@@ -146,7 +147,7 @@ fun FunListScreen(
                                     viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
                                     onClick = {
                                         vm.markFunViewed(post)
-                                        if (post.link.isBlank() && post.photoUrls.isNotEmpty()) viewerImage = post.photoUrls.first()
+                                        if (post.link.isBlank() && post.photoUrls.isNotEmpty()) viewerImages = post.photoUrls
                                         else open(post.link)
                                     },
                                     onLongPress = { if (canEdit(post)) actionItem = post })
@@ -160,16 +161,22 @@ fun FunListScreen(
         }
     }
 
-    // 이미지 전체보기(Coil 디스크 캐시 → 두 번째부터 재다운로드 없음)
-    viewerImage?.let { url ->
-        Dialog(onDismissRequest = { viewerImage = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Box(Modifier.fillMaxSize().background(Color.Black).clickable { viewerImage = null }, contentAlignment = Alignment.Center) {
-                AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+    // 이미지 전체보기: 여러 장은 상하로 이어서 스크롤. Coil 디스크 캐시로 두 번째부터 재다운로드 없음.
+    viewerImages?.let { urls ->
+        Dialog(onDismissRequest = { viewerImages = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Column(
+                Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState())
+                    .clickable { viewerImages = null },
+            ) {
+                urls.forEach { u ->
+                    AsyncImage(model = u, contentDescription = null, contentScale = ContentScale.FillWidth,
+                        modifier = Modifier.fillMaxWidth())
+                }
             }
         }
     }
 
-    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(boardKey, t, l, img); showAdd = false }, onDismiss = { showAdd = false })
+    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(boardKey, t, l, if (img.isBlank()) emptyList() else listOf(img)); showAdd = false }, onDismiss = { showAdd = false })
     editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img -> vm.updateFun(it0, t, l, img); editItem = null }, onDismiss = { editItem = null }) }
     actionItem?.let { it0 ->
         AlertDialog(
@@ -188,6 +195,10 @@ fun FunListScreen(
 }
 
 private fun isYoutube(link: String) = link.contains("youtu.be", true) || link.contains("youtube.com", true)
+private fun isVideo(link: String): Boolean {
+    val l = link.substringBefore('?').lowercase()
+    return l.endsWith(".mp4") || l.endsWith(".mov") || l.endsWith(".webm") || l.endsWith(".mkv") || l.endsWith(".3gp")
+}
 
 @Composable
 private fun TogglePill(label: String, on: Boolean, onToggle: () -> Unit) {
@@ -209,6 +220,7 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
         },
     ) {
         val photo = item.photoUrls.firstOrNull()
+        val video = isVideo(item.link)
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFFECECEC)).alpha(if (viewed) 0.35f else 1f),
@@ -218,6 +230,12 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
                 AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
                 Icon(Icons.Default.PlayCircle, null, tint = Color(0xFFB0B0B0), modifier = Modifier.size(30.dp))
+            }
+            if (video) Icon(Icons.Default.PlayCircle, "영상", tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(34.dp))
+            if (item.photoUrls.size > 1) {
+                Text("+${item.photoUrls.size - 1}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                        .background(Color(0x99000000), RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
             }
         }
         Spacer(Modifier.height(4.dp))

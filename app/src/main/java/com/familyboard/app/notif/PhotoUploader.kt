@@ -21,6 +21,33 @@ object PhotoUploader {
         NotifyApi.uploadPhoto(bytes)
     }
 
+    private const val MAX_VIDEO = 60_000_000
+
+    /** 원본 파일(영상 등)을 그대로 업로드. 60MB 초과 시 null. */
+    suspend fun uploadRaw(context: Context, uri: Uri, ext: String): String? = withContext(Dispatchers.IO) {
+        val bytes = runCatching { context.contentResolver.openInputStream(uri)!!.use { it.readBytes() } }.getOrNull()
+            ?: return@withContext null
+        if (bytes.size > MAX_VIDEO) return@withContext null
+        NotifyApi.uploadFile(bytes, ext)
+    }
+
+    /** 영상 첫 프레임을 썸네일로 추출·업로드(실패 시 null). */
+    suspend fun uploadVideoThumb(context: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+        val bytes = runCatching {
+            val r = android.media.MediaMetadataRetriever()
+            r.setDataSource(context, uri)
+            val bmp = r.getFrameAtTime(0) ?: r.frameAtTime
+            r.release()
+            if (bmp == null) null else {
+                val out = ByteArrayOutputStream()
+                bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                bmp.recycle()
+                out.toByteArray()
+            }
+        }.getOrNull() ?: return@withContext null
+        NotifyApi.uploadPhoto(bytes)
+    }
+
     private fun readAndCompress(context: Context, uri: Uri): ByteArray {
         val original = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         if (original.size < ONE_MB) return original // 1MB 미만이면 원본 그대로

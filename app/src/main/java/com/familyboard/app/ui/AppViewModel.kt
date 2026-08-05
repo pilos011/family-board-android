@@ -41,11 +41,12 @@ data class SharedPlace(
     val description: String = "",
     val address: String = "",
     val image: String = "",
+    val images: List<String> = emptyList(), // 여러 장 묶음(재미진 곳)
     val naverScore: Double = 0.0,
     val lat: Double = 0.0,
     val lng: Double = 0.0,
     val loading: Boolean = false,
-    val isFun: Boolean = false, // true=재미진 곳(유튜브/웹), false=장소(맛집/가볼곳)
+    val isFun: Boolean = false, // true=재미진 곳(유튜브/웹/이미지/영상), false=장소(맛집/가볼곳)
 )
 
 /**
@@ -177,17 +178,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveFun(boardKey: String) {
         val s = pendingShare.value ?: return
         if (s.loading) return
-        val isImage = s.link.isBlank() && s.image.isNotBlank()
-        val nm = s.name.trim().let { if (it.isBlank() || it == "불러오는 중…" || it == "이미지 올리는 중…") (if (isImage) "이미지" else "링크") else it }
-        addFun(boardKey, nm, s.link, s.image)
+        val photos = if (s.images.isNotEmpty()) s.images else if (s.image.isNotBlank()) listOf(s.image) else emptyList()
+        val isImage = s.link.isBlank() && photos.isNotEmpty()
+        val nm = s.name.trim().let { if (it.isBlank() || it.endsWith("중…")) (if (isImage) "이미지" else "링크") else it }
+        addFun(boardKey, nm, s.link, photos)
         pendingShare.value = null
     }
-    fun addFun(boardKey: String, title: String, link: String, image: String = "") = viewModelScope.launch {
+    fun addFun(boardKey: String, title: String, link: String, photoUrls: List<String> = emptyList()) = viewModelScope.launch {
         runCatching {
-            board.upsertItem(ListItem(text = title.trim(), link = link.trim(),
-                photoUrls = if (image.isBlank()) emptyList() else listOf(image),
+            board.upsertItem(ListItem(text = title.trim(), link = link.trim(), photoUrls = photoUrls,
                 board = boardKey, createdBy = currentMemberId.value.orEmpty(),
                 createdAt = System.currentTimeMillis()))
+        }
+    }
+    /** 공유받은 이미지 여러 장 → 한 항목으로. */
+    fun handleSharedImages(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
+        if (uris.size == 1) { handleSharedImage(uris[0]); return }
+        pendingShare.value = SharedPlace(name = "이미지 올리는 중…", link = "", loading = true, isFun = true)
+        viewModelScope.launch {
+            val urls = uris.mapNotNull { com.familyboard.app.notif.PhotoUploader.compressAndUpload(getApplication(), it) }
+            val cur = pendingShare.value ?: return@launch
+            pendingShare.value = if (urls.isNotEmpty()) cur.copy(name = "이미지 ${urls.size}장", images = urls, link = "", loading = false)
+            else null
+        }
+    }
+    /** 공유받은 영상(mp4 등) → 업로드 + 썸네일. */
+    fun handleSharedVideo(uri: android.net.Uri, ext: String) {
+        pendingShare.value = SharedPlace(name = "영상 올리는 중…", link = "", loading = true, isFun = true)
+        viewModelScope.launch {
+            val videoUrl = com.familyboard.app.notif.PhotoUploader.uploadRaw(getApplication(), uri, ext.ifBlank { "mp4" })
+            val cur = pendingShare.value ?: return@launch
+            if (videoUrl == null) { pendingShare.value = null; return@launch }
+            val thumb = com.familyboard.app.notif.PhotoUploader.uploadVideoThumb(getApplication(), uri).orEmpty()
+            pendingShare.value = cur.copy(name = "공유 영상", link = videoUrl, image = thumb, loading = false)
         }
     }
     /** 재미진 곳 항목을 현재 사용자가 봤다고 표시(중복 방지, arrayUnion). */
@@ -197,11 +221,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { runCatching { board.markViewed(item.id, me) } }
     }
     fun updateFun(item: ListItem, title: String, link: String, image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
+        // 여러 장 묶음은 대표 이미지가 그대로면 전체 보존, 바뀌면 그 이미지로 대체
+        val photos = when {
+            image.isBlank() -> item.photoUrls
+            item.photoUrls.size > 1 && item.photoUrls.firstOrNull() == image -> item.photoUrls
+            else -> listOf(image)
+        }
         runCatching {
-            board.updateFields(item.id, mapOf(
-                "text" to title.trim(), "link" to link.trim(),
-                "photoUrls" to (if (image.isBlank()) emptyList<String>() else listOf(image)),
-            ))
+            board.updateFields(item.id, mapOf("text" to title.trim(), "link" to link.trim(), "photoUrls" to photos))
         }
     }
     /** 공유받은 이미지 → 서버 업로드 후 저장 대기(재미진 곳). */
