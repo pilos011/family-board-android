@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -102,8 +103,11 @@ fun PlaceListScreen(
     var myLoc by remember { mutableStateOf<Location?>(null) }
     var ratingConfirm by remember { mutableStateOf<Pair<ListItem, Int>?>(null) }
     var editComment by remember { mutableStateOf<Triple<ListItem, Int, String>?>(null) }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
+    // 정렬을 바꾸면 항상 맨 위(최상위 항목)로 이동
+    LaunchedEffect(sortMode) { listState.scrollToItem(0) }
 
     val sorted = remember(items, sortMode, myLoc) {
         when (sortMode) {
@@ -175,6 +179,7 @@ fun PlaceListScreen(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(sorted, key = { it.id }) { place ->
