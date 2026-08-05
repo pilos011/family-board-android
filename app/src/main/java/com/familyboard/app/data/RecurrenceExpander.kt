@@ -29,7 +29,8 @@ object RecurrenceExpander {
             val end = runCatching { LocalDate.parse(e.endDateIso) }.getOrNull() ?: start
             val duration = ChronoUnit.DAYS.between(start, end).coerceAtLeast(0)
             when (e.repeat) {
-                "weekly" -> expandWeekly(map, e, start, duration, winStart, winEnd)
+                "weekly" -> expandWeekly(map, e, start, duration, winStart, winEnd, 1)
+                "biweekly" -> expandWeekly(map, e, start, duration, winStart, winEnd, 2)
                 "monthly" -> expandMonthly(map, e, start, duration, winStart, winEnd)
                 "yearly" -> if (e.lunar) expandLunarYearly(map, e, start, duration, winStart, winEnd)
                             else expandYearly(map, e, start, duration, winStart, winEnd)
@@ -69,19 +70,22 @@ object RecurrenceExpander {
         }
     }
 
+    /** stepWeeks=1 매주, 2 격주. 회차 위상은 start 기준으로 유지. */
     private fun expandWeekly(
         map: HashMap<String, MutableList<DayEvent>>,
         e: CalendarEvent, start: LocalDate, duration: Long, winStart: LocalDate, winEnd: LocalDate,
+        stepWeeks: Long,
     ) {
         val earliest = winStart.minusDays(duration)
         val daysFromStart = ChronoUnit.DAYS.between(start, earliest)
-        val n0 = if (daysFromStart <= 0) 0L else (daysFromStart + 6) / 7
-        var occ = start.plusWeeks(n0)
+        val periodDays = stepWeeks * 7
+        val n0 = if (daysFromStart <= 0) 0L else (daysFromStart + periodDays - 1) / periodDays
+        var occ = start.plusWeeks(n0 * stepWeeks)
         var guard = 0
         while (!occ.isAfter(winEnd) && guard < 300) {
             if (!occ.isBefore(start) && !excluded(e, occ, duration))
                 placeSpan(map, e, occ, duration, winStart, winEnd)
-            occ = occ.plusWeeks(1); guard++
+            occ = occ.plusWeeks(stepWeeks); guard++
         }
     }
 

@@ -464,7 +464,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @Composable
 private fun RepeatPicker(selected: String, onSelect: (String) -> Unit) {
-    val options = listOf("weekly" to "매주", "monthly" to "매월", "yearly" to "매년")
+    val options = listOf("weekly" to "매주", "biweekly" to "격주", "monthly" to "매월", "yearly" to "매년")
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         options.forEach { (key, label) ->
             val on = selected == key

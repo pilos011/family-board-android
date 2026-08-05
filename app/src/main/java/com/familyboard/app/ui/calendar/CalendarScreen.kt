@@ -850,6 +850,7 @@ internal fun DetailRow(label: String, value: String) {
 
 internal fun repeatLabel(key: String): String = when (key) {
     "weekly" -> "매주"
+    "biweekly" -> "격주"
     "monthly" -> "매월"
     "yearly" -> "매년"
     else -> ""
