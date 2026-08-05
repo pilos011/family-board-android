@@ -6,7 +6,10 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -50,7 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -171,18 +175,10 @@ fun FunListScreen(
         }
     }
 
-    // 이미지 전체보기: 여러 장은 상하로 이어서 스크롤. Coil 디스크 캐시로 두 번째부터 재다운로드 없음.
+    // 이미지 전체보기: 좌우로 넘기며 핀치 확대/축소·이동·더블탭 줌. Coil 디스크 캐시.
     viewerImages?.let { urls ->
         Dialog(onDismissRequest = { viewerImages = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Column(
-                Modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState())
-                    .clickable { viewerImages = null },
-            ) {
-                urls.forEach { u ->
-                    AsyncImage(model = u, contentDescription = null, contentScale = ContentScale.FillWidth,
-                        modifier = Modifier.fillMaxWidth())
-                }
-            }
+            ImageGallery(urls) { viewerImages = null }
         }
     }
 
@@ -202,6 +198,57 @@ fun FunListScreen(
                     TextButton(onClick = { actionItem = null }) { Text("취소") }
                 }
             },
+        )
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ImageGallery(urls: List<String>, onClose: () -> Unit) {
+    val pager = rememberPagerState(pageCount = { urls.size })
+    var swipeEnabled by remember { mutableStateOf(true) }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        HorizontalPager(state = pager, userScrollEnabled = swipeEnabled, modifier = Modifier.fillMaxSize()) { page ->
+            ZoomableImage(urls[page]) { s -> if (page == pager.currentPage) swipeEnabled = s <= 1.01f }
+        }
+        IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+            Icon(Icons.Default.Close, "닫기", tint = Color.White)
+        }
+        if (urls.size > 1) {
+            Text("${pager.currentPage + 1} / ${urls.size}", color = Color.White, fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
+                    .background(Color(0x88000000), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+        }
+    }
+}
+
+@Composable
+private fun ZoomableImage(url: String, onScale: (Float) -> Unit) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        Modifier.fillMaxSize()
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    scale = (scale * zoom).coerceIn(1f, 5f)
+                    offset = if (scale > 1f) offset + pan else Offset.Zero
+                    onScale(scale)
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = {
+                    scale = if (scale > 1f) 1f else 2.5f
+                    if (scale <= 1f) offset = Offset.Zero
+                    onScale(scale)
+                })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = url, contentDescription = null, contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().graphicsLayer(
+                scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y,
+            ),
         )
     }
 }
