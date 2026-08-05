@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -77,6 +79,9 @@ fun ListDetailScreen(
     }
     var input by remember { mutableStateOf("") }
     var tagIds by remember { mutableStateOf(listOf(Family.ALL_ID)) }
+    // 삭제 확인용: 삭제하려는 항목(개별) / 리스트 자체 삭제 여부
+    var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
+    var confirmListDelete by remember { mutableStateOf(false) }
 
     fun add() {
         if (input.isBlank()) return
@@ -103,7 +108,7 @@ fun ListDetailScreen(
                 },
                 actions = {
                     if (isCustom && customDef != null) {
-                        IconButton(onClick = { vm.deleteCustomList(boardKey); onBack() }) {
+                        IconButton(onClick = { confirmListDelete = true }) {
                             Icon(Icons.Default.Delete, "리스트 삭제")
                         }
                     }
@@ -160,11 +165,46 @@ fun ListDetailScreen(
                         // 장보기·공지사항: 추가한 사람 표시 / 할 일: 담당자 표시
                         rightIds = if (simpleList) listOf(itm.createdBy) else itm.memberIds,
                         onToggle = { vm.toggleItem(itm.id, it) },
-                        onDelete = { vm.deleteItem(itm.id) },
+                        onDelete = { pendingDelete = itm },
                     )
                 }
             }
         }
+    }
+
+    // 개별 항목 삭제 확인
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("항목 삭제") },
+            text = { Text("\"${target.text}\" 항목을 삭제할까요?") },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteItem(target.id); pendingDelete = null }) {
+                    Text("삭제", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("취소") }
+            },
+        )
+    }
+
+    // 커스텀 리스트 자체 삭제 확인
+    if (confirmListDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmListDelete = false },
+            title = { Text("리스트 삭제") },
+            text = { Text("\"$title\" 리스트를 삭제할까요?\n안에 있는 항목도 함께 사라져요.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmListDelete = false
+                    vm.deleteCustomList(boardKey); onBack()
+                }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmListDelete = false }) { Text("취소") }
+            },
+        )
     }
 }
 
