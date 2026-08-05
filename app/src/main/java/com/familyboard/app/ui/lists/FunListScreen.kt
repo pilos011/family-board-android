@@ -275,9 +275,13 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             items(urls) { u ->
-                // 스크롤 중 오터치 방지: 탭이 아니라 롱클릭으로 확대
-                AsyncImage(model = u, contentDescription = null, contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth().pointerInput(u) { detectTapGestures(onLongPress = { onLongOpen(u) }) })
+                // 스크롤 중 오터치 방지: 탭이 아니라 롱클릭으로 확대. 표시는 화면폭 수준으로 디코드(스크롤 부드럽게)
+                val ctx = LocalContext.current
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx).data(u).size(1280).build(),
+                    contentDescription = null, contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth().pointerInput(u) { detectTapGestures(onLongPress = { onLongOpen(u) }) },
+                )
             }
             item { Spacer(Modifier.height(40.dp)) }
         }
@@ -291,8 +295,9 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
 @Composable
 private fun ZoomOverlay(url: String, onClose: () -> Unit) {
     val context = LocalContext.current
+    // 저장 파일은 원본 그대로. 표시는 2560px로 디코드(폰 화면에서 충분히 선명 + GPU 텍스처 한계 내 → 부드러운 팬)
     val painter = rememberAsyncImagePainter(
-        ImageRequest.Builder(context).data(url).size(coil.size.Size.ORIGINAL).build(),
+        ImageRequest.Builder(context).data(url).size(2560).build(),
     )
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
@@ -392,13 +397,18 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
     ) {
         val photo = item.photoUrls.firstOrNull()
         val video = isVideo(item.link)
+        val ctx = LocalContext.current
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFFECECEC)).alpha(if (viewed) 0.35f else 1f),
             contentAlignment = Alignment.Center,
         ) {
             if (!photo.isNullOrBlank()) {
-                AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                // 썸네일은 작게 디코드(그리드 스크롤 부드럽게)
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx).data(photo).size(400).build(),
+                    contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 Icon(Icons.Default.PlayCircle, null, tint = Color(0xFFB0B0B0), modifier = Modifier.size(30.dp))
             }

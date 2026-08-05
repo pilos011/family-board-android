@@ -169,13 +169,15 @@ fun HomeScreen(
             if (showMaker) {
                 Spacer(Modifier.height(6.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "만든이 : 김선일",
-                        fontFamily = NanumGothic, fontSize = 13.sp, color = Color.White,
-                        modifier = Modifier
-                            .background(Color(0x99000000), RoundedCornerShape(10.dp))
+                    Column(
+                        Modifier.background(Color(0x99000000), RoundedCornerShape(10.dp))
                             .padding(horizontal = 12.dp, vertical = 5.dp),
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("버전 ${com.familyboard.app.BuildConfig.VERSION_NAME}",
+                            fontFamily = NanumGothic, fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
+                        Text("만든이 : 김선일", fontFamily = NanumGothic, fontSize = 13.sp, color = Color.White)
+                    }
                 }
             }
             Spacer(Modifier.height(20.dp))
