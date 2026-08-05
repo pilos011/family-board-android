@@ -317,7 +317,11 @@ private fun ZoomOverlay(url: String, onClose: () -> Unit) {
         Image(
             painter = painter, contentDescription = null, contentScale = ContentScale.FillWidth,
             modifier = Modifier.fillMaxWidth().aspectRatio(aspect)
-                .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y)
+                // 람다형 graphicsLayer: 팬/줌 시 리컴포지션 없이 레이어만 갱신 → 부드러운 이동
+                .graphicsLayer {
+                    scaleX = scale; scaleY = scale
+                    translationX = offset.x; translationY = offset.y
+                }
                 .pointerInput(url) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         scale = (scale * zoom).coerceIn(1f, 6f)
