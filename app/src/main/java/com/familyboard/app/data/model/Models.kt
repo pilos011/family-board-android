@@ -43,6 +43,7 @@ data class ListItem(
     val naverScore: Double = 0.0,  // 네이버 평점(정렬용). 맛집/가볼 곳
     val lat: Double = 0.0,         // 위도(거리 정렬용)
     val lng: Double = 0.0,         // 경도(거리 정렬용)
+    val createdAt: Long = 0,       // 생성 시각(epoch millis). 등록순 정렬용(재미진 곳 등)
     // 댓글은 progress(ProgressNote: text/by/dateIso)를 재사용
     // 파싱 요약(종목·별점·영업시간)은 description 을 재사용
 )

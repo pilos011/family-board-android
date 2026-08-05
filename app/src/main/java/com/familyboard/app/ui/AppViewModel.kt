@@ -180,7 +180,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runCatching {
             board.upsertItem(ListItem(text = title.trim(), link = link.trim(),
                 photoUrls = if (image.isBlank()) emptyList() else listOf(image),
-                board = com.familyboard.app.data.model.FunBoard.BOARD, createdBy = currentMemberId.value.orEmpty()))
+                board = com.familyboard.app.data.model.FunBoard.BOARD, createdBy = currentMemberId.value.orEmpty(),
+                createdAt = System.currentTimeMillis()))
         }
     }
     fun updateFun(item: ListItem, title: String, link: String, image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +74,15 @@ fun FunListScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var actionItem by remember { mutableStateOf<ListItem?>(null) }
+    // 필터/정렬 토글(동시 동작). 기본: 유튜브·웹사이트 ON, 등록순 OFF(최신순)
+    var youtubeOn by remember { mutableStateOf(true) }
+    var websiteOn by remember { mutableStateOf(true) }
+    var oldestFirst by remember { mutableStateOf(false) }
+
+    val shown = remember(items, youtubeOn, websiteOn, oldestFirst) {
+        val f = items.filter { val yt = isYoutube(it.link); (youtubeOn && yt) || (websiteOn && !yt) }
+        if (oldestFirst) f.sortedBy { it.createdAt } else f.sortedByDescending { it.createdAt }
+    }
 
     fun open(link: String) {
         if (link.isBlank()) return
@@ -95,30 +105,42 @@ fun FunListScreen(
             }
         },
     ) { padding ->
-        if (items.isEmpty()) {
-            Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "아직 게시물이 없어요.\n유튜브·웹페이지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요.",
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                )
-            }
-        } else {
-            // 한 행에 4개
-            Column(
-                Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            // 필터/정렬 토글(동시 동작): 유튜브 · 웹사이트(필터) + 등록순(정렬)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items.chunked(4).forEach { rowItems ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        rowItems.forEach { post ->
-                            FunCell(post, Modifier.weight(1f),
-                                onClick = { open(post.link) },
-                                onLongPress = { if (canEdit(post)) actionItem = post })
-                        }
-                        repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                    }
+                TogglePill("유튜브", youtubeOn) { youtubeOn = !youtubeOn }
+                TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn }
+                TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
+            }
+            if (shown.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (items.isEmpty()) "아직 게시물이 없어요.\n유튜브·웹페이지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요."
+                        else "표시할 항목이 없어요. (필터 확인)",
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    )
                 }
-                Spacer(Modifier.height(80.dp))
+            } else {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Spacer(Modifier.height(0.dp))
+                    shown.chunked(4).forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            rowItems.forEach { post ->
+                                FunCell(post, Modifier.weight(1f),
+                                    onClick = { open(post.link) },
+                                    onLongPress = { if (canEdit(post)) actionItem = post })
+                            }
+                            repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                    Spacer(Modifier.height(80.dp))
+                }
             }
         }
     }
@@ -139,6 +161,20 @@ fun FunListScreen(
             },
         )
     }
+}
+
+private fun isYoutube(link: String) = link.contains("youtu.be", true) || link.contains("youtube.com", true)
+
+@Composable
+private fun TogglePill(label: String, on: Boolean, onToggle: () -> Unit) {
+    Text(
+        label, fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+        color = if (on) Color.White else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+            .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+            .clickable { onToggle() }
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    )
 }
 
 @Composable
