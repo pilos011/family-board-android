@@ -28,6 +28,9 @@ data class PlaceInfo(
     val lng: Double? = null,
 )
 
+/** 범용 링크(유튜브/웹) 미리보기 파싱 결과 */
+data class LinkInfo(val title: String = "", val image: String = "", val url: String = "")
+
 object NotifyApi {
     private const val TAG = "NotifyApi"
     private val base get() = BuildConfig.NOTIFY_BASE_URL.trimEnd('/')
@@ -95,6 +98,31 @@ object NotifyApi {
                     lng = if (o.isNull("lng")) null else o.optDouble("lng"),
                 )
             }.onFailure { Log.w(TAG, "parsePlace 실패", it) }.getOrNull()
+        }
+    }
+
+    /** 유튜브/웹 링크에서 제목·썸네일(og) 파싱(서버 위임). 실패 시 null. */
+    suspend fun parseLink(url: String): LinkInfo? {
+        if (!enabled() || url.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL("$base/link/parse").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 10000
+                    readTimeout = 15000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+                }
+                conn.outputStream.use { it.write(JSONObject().put("url", url).toString().toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code !in 200..299) return@runCatching null
+                val o = JSONObject(text)
+                LinkInfo(title = o.optString("title"), image = o.optString("image"), url = o.optString("url").ifBlank { url })
+            }.onFailure { Log.w(TAG, "parseLink 실패", it) }.getOrNull()
         }
     }
 

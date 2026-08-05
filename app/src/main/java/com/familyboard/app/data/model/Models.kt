@@ -76,6 +76,12 @@ object PlaceBoards {
     fun isPlace(board: String?): Boolean = board == RESTAURANT || board == VISIT
 }
 
+/** 재미진 곳: 유튜브 동영상/웹페이지 링크 공유 게시판. 가족 공용. text=제목, link=URL, photoUrls[0]=썸네일. */
+object FunBoard {
+    const val BOARD = "fun"
+    const val TITLE = "재미진 곳"
+}
+
 /** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */
 object AllowanceBoards {
     const val JUNYOUNG = "allowance_junyoung"

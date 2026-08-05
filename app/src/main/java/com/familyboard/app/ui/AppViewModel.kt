@@ -45,6 +45,7 @@ data class SharedPlace(
     val lat: Double = 0.0,
     val lng: Double = 0.0,
     val loading: Boolean = false,
+    val isFun: Boolean = false, // true=재미진 곳(유튜브/웹), false=장소(맛집/가볼곳)
 )
 
 /**
@@ -104,10 +105,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun placeItems(boardKey: String): StateFlow<List<ListItem>> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
+    // 재미진 곳(유튜브/웹 링크 게시판)
+    val funItems: StateFlow<List<ListItem>> =
+        board.items(com.familyboard.app.data.model.FunBoard.BOARD)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
     val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)
 
-    /** 공유 텍스트에서 링크·이름 추출 → 저장 대기. 네이버 링크면 서버로 상세정보 파싱. */
+    /** 공유 텍스트 처리. 네이버 플레이스 링크 → 장소(맛집/가볼곳), 그 외 링크 → 재미진 곳. 서버로 정보 파싱. */
     fun handleSharedText(raw: String?, subject: String?) {
         val text = raw?.trim().orEmpty()
         if (text.isBlank()) return
@@ -115,19 +121,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         var name = text.replace(url, " ").split('\n').map { it.trim() }
             .firstOrNull { it.isNotBlank() && it != "[네이버지도]" }.orEmpty()
         if (name.isBlank()) name = subject?.trim().orEmpty()
-        val isNaver = url.contains("naver", ignoreCase = true)
-        pendingShare.value = SharedPlace(
-            name = name.ifBlank { if (isNaver) "장소 불러오는 중…" else "새 장소" },
-            link = url, loading = isNaver && url.isNotBlank(),
-        )
-        if (isNaver && url.isNotBlank()) viewModelScope.launch {
-            val info = com.familyboard.app.notif.NotifyApi.parsePlace(url)
-            val cur = pendingShare.value ?: return@launch
-            pendingShare.value = if (info != null && info.name.isNotBlank())
-                cur.copy(name = info.name, description = buildPlaceDesc(info), address = info.address,
-                    image = info.image, naverScore = info.score ?: 0.0,
-                    lat = info.lat ?: 0.0, lng = info.lng ?: 0.0, loading = false)
-            else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
+        val isNaverPlace = url.contains("naver.me") || url.contains("map.naver.com") || url.contains("place.naver.com")
+
+        if (isNaverPlace) {
+            pendingShare.value = SharedPlace(name.ifBlank { "장소 불러오는 중…" }, url, loading = true, isFun = false)
+            viewModelScope.launch {
+                val info = com.familyboard.app.notif.NotifyApi.parsePlace(url)
+                val cur = pendingShare.value ?: return@launch
+                pendingShare.value = if (info != null && info.name.isNotBlank())
+                    cur.copy(name = info.name, description = buildPlaceDesc(info), address = info.address,
+                        image = info.image, naverScore = info.score ?: 0.0,
+                        lat = info.lat ?: 0.0, lng = info.lng ?: 0.0, loading = false)
+                else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
+            }
+        } else if (url.isNotBlank()) {
+            // 유튜브/웹 링크 → 재미진 곳
+            pendingShare.value = SharedPlace(name.ifBlank { "불러오는 중…" }, url, loading = true, isFun = true)
+            viewModelScope.launch {
+                val info = com.familyboard.app.notif.NotifyApi.parseLink(url)
+                val cur = pendingShare.value ?: return@launch
+                pendingShare.value = if (info != null && (info.title.isNotBlank() || info.image.isNotBlank()))
+                    cur.copy(name = info.title.ifBlank { name.ifBlank { "링크" } }, image = info.image, loading = false, isFun = true)
+                else cur.copy(name = name.ifBlank { "링크" }, loading = false, isFun = true)
+            }
         }
     }
     private fun buildPlaceDesc(i: com.familyboard.app.notif.PlaceInfo): String {
@@ -152,6 +168,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pendingShare.value = null
     }
     fun clearPendingShare() { pendingShare.value = null }
+
+    fun saveFun() {
+        val s = pendingShare.value ?: return
+        if (s.loading) return
+        val nm = s.name.trim().let { if (it.isBlank() || it == "불러오는 중…") "링크" else it }
+        addFun(nm, s.link, s.image)
+        pendingShare.value = null
+    }
+    fun addFun(title: String, link: String, image: String = "") = viewModelScope.launch {
+        runCatching {
+            board.upsertItem(ListItem(text = title.trim(), link = link.trim(),
+                photoUrls = if (image.isBlank()) emptyList() else listOf(image),
+                board = com.familyboard.app.data.model.FunBoard.BOARD, createdBy = currentMemberId.value.orEmpty()))
+        }
+    }
+    fun updateFun(item: ListItem, title: String, link: String, image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
+        runCatching {
+            board.upsertItem(item.copy(text = title.trim(), link = link.trim(),
+                photoUrls = if (image.isBlank()) emptyList() else listOf(image)))
+        }
+    }
 
     fun addPlace(boardKey: String, name: String, link: String, description: String = "", address: String = "",
                  image: String = "", naverScore: Double = 0.0, lat: Double = 0.0, lng: Double = 0.0) = viewModelScope.launch {
@@ -178,6 +215,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onResult(com.familyboard.app.notif.NotifyApi.parsePlace(url))
     }
     fun describePlace(info: com.familyboard.app.notif.PlaceInfo): String = buildPlaceDesc(info)
+    fun fetchLinkInfo(url: String, onResult: (com.familyboard.app.notif.LinkInfo?) -> Unit) = viewModelScope.launch {
+        onResult(com.familyboard.app.notif.NotifyApi.parseLink(url))
+    }
     fun setPlaceRating(item: ListItem, rating: Int) = viewModelScope.launch {
         runCatching { board.upsertItem(item.copy(rating = rating.toLong().coerceIn(0L, 5L))) }
     }

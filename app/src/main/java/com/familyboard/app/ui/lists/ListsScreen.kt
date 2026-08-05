@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -76,11 +77,13 @@ fun ListsScreen(
     onOpenBucket: () -> Unit,
     onOpenDday: () -> Unit,
     onOpenPlace: (String) -> Unit,
+    onOpenFun: () -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
     val restaurant by vm.restaurantItems.collectAsStateWithLifecycle()
     val visit by vm.visitItems.collectAsStateWithLifecycle()
+    val funPosts by vm.funItems.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
@@ -104,6 +107,12 @@ fun ListsScreen(
                 CompactBoardCard("할 일", todo.size, TodoGreen, Icons.Default.CheckCircle, Modifier.weight(1f)) { onOpenBoard(BoardType.TODO.key) }
                 CompactBoardCard("맛집", restaurant.size, RestaurantColor, Icons.Default.Restaurant, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.RESTAURANT) }
                 CompactBoardCard("가볼 곳", visit.size, VisitColor, Icons.Default.Place, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.VISIT) }
+            }
+            Spacer(Modifier.height(10.dp))
+            // 둘째 행(향후 카드 추가 가능). 현재: 재미진 곳
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CompactBoardCard("재미진 곳", funPosts.size, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
+                Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
             }
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
@@ -286,6 +295,7 @@ private fun BucketWideCard(spouseName: String?, onClick: () -> Unit) {
 
 private val RestaurantColor = Color(0xFFFF922B)
 private val VisitColor = Color(0xFF22B8CF)
+private val FunColor = Color(0xFFF06595)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

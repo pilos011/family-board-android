@@ -42,6 +42,7 @@ import com.familyboard.app.ui.dday.DDayScreen
 import com.familyboard.app.ui.emergency.EmergencySendScreen
 import com.familyboard.app.ui.home.HomeScreen
 import com.familyboard.app.data.model.PlaceBoards
+import com.familyboard.app.ui.lists.FunListScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.lists.PlaceListScreen
 import com.familyboard.app.ui.manage.ManageScreen
@@ -61,6 +62,7 @@ private object Routes {
     const val VIEW_EVENT = "viewEvent/{eventId}/{dateIso}"
     const val LIST_DETAIL = "listDetail/{board}"
     const val PLACE = "place/{board}"
+    const val FUN = "fun"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -172,7 +174,11 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenBucket = { nav.navigate(Routes.BUCKET_HOME) },
                     onOpenDday = { nav.navigate(Routes.DDAY) },
                     onOpenPlace = { nav.navigate(Routes.place(it)) },
+                    onOpenFun = { nav.navigate(Routes.FUN) },
                 )
+            }
+            composable(Routes.FUN) {
+                FunListScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.PLACE) { entry ->
                 PlaceListScreen(
@@ -271,27 +277,40 @@ private fun MainScaffold(vm: AppViewModel) {
 
     // 네이버 플레이스 등에서 공유받았을 때: 맛집/가볼 곳 중 저장 위치 선택
     pendingShare?.let { sp ->
-        val body = if (sp.loading) "네이버에서 정보 가져오는 중…"
-        else listOf(sp.name, sp.description, if (sp.address.isNotBlank()) "📍 ${sp.address}" else "")
-            .filter { it.isNotBlank() }.joinToString("\n")
-        AlertDialog(
-            onDismissRequest = { vm.clearPendingShare() },
-            title = { Text("어디에 저장할까요?") },
-            text = { Text(body) },
-            confirmButton = {
-                TextButton(enabled = !sp.loading, onClick = {
-                    vm.savePlace(PlaceBoards.RESTAURANT); nav.navigate(Routes.place(PlaceBoards.RESTAURANT))
-                }) { Text("맛집") }
-            },
-            dismissButton = {
-                Row {
+        if (sp.isFun) {
+            val body = if (sp.loading) "링크 정보 가져오는 중…" else sp.name
+            AlertDialog(
+                onDismissRequest = { vm.clearPendingShare() },
+                title = { Text("재미진 곳에 담을까요?") },
+                text = { Text(body) },
+                confirmButton = {
+                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(); nav.navigate(Routes.FUN) }) { Text("담기") }
+                },
+                dismissButton = { TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") } },
+            )
+        } else {
+            val body = if (sp.loading) "네이버에서 정보 가져오는 중…"
+            else listOf(sp.name, sp.description, if (sp.address.isNotBlank()) "📍 ${sp.address}" else "")
+                .filter { it.isNotBlank() }.joinToString("\n")
+            AlertDialog(
+                onDismissRequest = { vm.clearPendingShare() },
+                title = { Text("어디에 저장할까요?") },
+                text = { Text(body) },
+                confirmButton = {
                     TextButton(enabled = !sp.loading, onClick = {
-                        vm.savePlace(PlaceBoards.VISIT); nav.navigate(Routes.place(PlaceBoards.VISIT))
-                    }) { Text("가볼 곳") }
-                    TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
-                }
-            },
-        )
+                        vm.savePlace(PlaceBoards.RESTAURANT); nav.navigate(Routes.place(PlaceBoards.RESTAURANT))
+                    }) { Text("맛집") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(enabled = !sp.loading, onClick = {
+                            vm.savePlace(PlaceBoards.VISIT); nav.navigate(Routes.place(PlaceBoards.VISIT))
+                        }) { Text("가볼 곳") }
+                        TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
+                    }
+                },
+            )
+        }
     }
 }
 
