@@ -187,7 +187,7 @@ fun FunListScreen(
                 TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn }
                 TogglePill("이미지", imageOn) { imageOn = !imageOn }
                 TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
-                TogglePill("이미 본 게시물 제외", hideViewed) { hideViewed = !hideViewed }
+                TogglePill("안 본", hideViewed) { hideViewed = !hideViewed }
             }
             if (shown.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
