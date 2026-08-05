@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -55,6 +55,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.familyboard.app.data.model.FunBoard
@@ -65,10 +67,15 @@ import com.familyboard.app.ui.AppViewModel
 @Composable
 fun FunListScreen(
     vm: AppViewModel,
+    boardKey: String,
+    isPrivate: Boolean,
     currentMemberId: String?,
     onBack: () -> Unit,
 ) {
-    val items by vm.funItems.collectAsStateWithLifecycle()
+    val all by vm.funBoardItems(boardKey).collectAsStateWithLifecycle()
+    val items = remember(all, isPrivate, currentMemberId) {
+        if (isPrivate) all.filter { it.createdBy == currentMemberId } else all
+    }
     val context = LocalContext.current
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     fun canEdit(it: ListItem) = it.createdBy == currentMemberId || isParent
@@ -76,7 +83,7 @@ fun FunListScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var actionItem by remember { mutableStateOf<ListItem?>(null) }
-    // 필터/정렬 토글(동시 동작). 기본: 유튜브·웹사이트 ON, 등록순 OFF(최신순)
+    var viewerImage by remember { mutableStateOf<String?>(null) }
     var youtubeOn by remember { mutableStateOf(true) }
     var websiteOn by remember { mutableStateOf(true) }
     var oldestFirst by remember { mutableStateOf(false) }
@@ -98,7 +105,7 @@ fun FunListScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(FunBoard.TITLE) },
+                title = { Text(FunBoard.titleOf(boardKey) + if (isPrivate) " · 나만 볼 수 있어요" else "") },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") } },
             )
@@ -110,7 +117,6 @@ fun FunListScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            // 필터/정렬 토글(동시 동작): 유튜브 · 웹사이트(필터) + 등록순(정렬)
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -123,35 +129,47 @@ fun FunListScreen(
             if (shown.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        if (items.isEmpty()) "아직 게시물이 없어요.\n유튜브·웹페이지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요."
+                        if (items.isEmpty()) "아직 게시물이 없어요.\n유튜브·웹·이미지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요."
                         else "표시할 항목이 없어요. (필터 확인)",
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                     )
                 }
             } else {
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+                LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Spacer(Modifier.height(0.dp))
-                    shown.chunked(4).forEach { rowItems ->
+                    items(shown.chunked(4)) { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             rowItems.forEach { post ->
                                 FunCell(post, Modifier.weight(1f),
                                     viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
-                                    onClick = { open(post.link); vm.markFunViewed(post) },
+                                    onClick = {
+                                        vm.markFunViewed(post)
+                                        if (post.link.isBlank() && post.photoUrls.isNotEmpty()) viewerImage = post.photoUrls.first()
+                                        else open(post.link)
+                                    },
                                     onLongPress = { if (canEdit(post)) actionItem = post })
                             }
                             repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                    Spacer(Modifier.height(80.dp))
+                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
         }
     }
 
-    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(t, l, img); showAdd = false }, onDismiss = { showAdd = false })
+    // 이미지 전체보기(Coil 디스크 캐시 → 두 번째부터 재다운로드 없음)
+    viewerImage?.let { url ->
+        Dialog(onDismissRequest = { viewerImage = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(Modifier.fillMaxSize().background(Color.Black).clickable { viewerImage = null }, contentAlignment = Alignment.Center) {
+                AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+
+    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(boardKey, t, l, img); showAdd = false }, onDismiss = { showAdd = false })
     editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img -> vm.updateFun(it0, t, l, img); editItem = null }, onDismiss = { editItem = null }) }
     actionItem?.let { it0 ->
         AlertDialog(
@@ -197,8 +215,7 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
             contentAlignment = Alignment.Center,
         ) {
             if (!photo.isNullOrBlank()) {
-                AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize())
+                AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
                 Icon(Icons.Default.PlayCircle, null, tint = Color(0xFFB0B0B0), modifier = Modifier.size(30.dp))
             }
@@ -240,7 +257,8 @@ private fun FunEditDialog(vm: AppViewModel, item: ListItem?, onSave: (String, St
             }
         },
         confirmButton = {
-            TextButton(enabled = link.isNotBlank(), onClick = { onSave(title.trim().ifBlank { "링크" }, link.trim(), image) }) { Text("저장") }
+            TextButton(enabled = link.isNotBlank() || image.isNotBlank(),
+                onClick = { onSave(title.trim().ifBlank { "링크" }, link.trim(), image) }) { Text("저장") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )

@@ -41,6 +41,7 @@ import com.familyboard.app.ui.bucket.BucketViewScreen
 import com.familyboard.app.ui.dday.DDayScreen
 import com.familyboard.app.ui.emergency.EmergencySendScreen
 import com.familyboard.app.ui.home.HomeScreen
+import com.familyboard.app.data.model.FunBoard
 import com.familyboard.app.data.model.PlaceBoards
 import com.familyboard.app.ui.lists.FunListScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
@@ -63,6 +64,7 @@ private object Routes {
     const val LIST_DETAIL = "listDetail/{board}"
     const val PLACE = "place/{board}"
     const val FUN = "fun"
+    const val MYFUN = "myfun"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -175,10 +177,16 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenDday = { nav.navigate(Routes.DDAY) },
                     onOpenPlace = { nav.navigate(Routes.place(it)) },
                     onOpenFun = { nav.navigate(Routes.FUN) },
+                    onOpenMyFun = { nav.navigate(Routes.MYFUN) },
                 )
             }
             composable(Routes.FUN) {
-                FunListScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
+                FunListScreen(vm = vm, boardKey = FunBoard.BOARD, isPrivate = false,
+                    currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.MYFUN) {
+                FunListScreen(vm = vm, boardKey = FunBoard.PRIVATE, isPrivate = true,
+                    currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.PLACE) { entry ->
                 PlaceListScreen(
@@ -278,15 +286,20 @@ private fun MainScaffold(vm: AppViewModel) {
     // 네이버 플레이스 등에서 공유받았을 때: 맛집/가볼 곳 중 저장 위치 선택
     pendingShare?.let { sp ->
         if (sp.isFun) {
-            val body = if (sp.loading) "링크 정보 가져오는 중…" else sp.name
+            val body = if (sp.loading) "정보 가져오는 중…" else sp.name
             AlertDialog(
                 onDismissRequest = { vm.clearPendingShare() },
-                title = { Text("재미진 곳에 담을까요?") },
+                title = { Text("어디에 담을까요?") },
                 text = { Text(body) },
                 confirmButton = {
-                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(); nav.navigate(Routes.FUN) }) { Text("담기") }
+                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.BOARD); nav.navigate(Routes.FUN) }) { Text("재미진 곳") }
                 },
-                dismissButton = { TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") } },
+                dismissButton = {
+                    Row {
+                        TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.PRIVATE); nav.navigate(Routes.MYFUN) }) { Text("내 재미진 곳") }
+                        TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
+                    }
+                },
             )
         } else {
             val body = if (sp.loading) "네이버에서 정보 가져오는 중…"

@@ -42,6 +42,29 @@ class InMemoryBoardRepository : BoardRepository {
         itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(checked = checked) else it }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    override suspend fun updateFields(id: String, fields: Map<String, Any>) {
+        itemsFlow.value = itemsFlow.value.map { item ->
+            if (item.id != id) item else {
+                var x = item
+                fields.forEach { (k, v) ->
+                    x = when (k) {
+                        "text" -> x.copy(text = v as String)
+                        "link" -> x.copy(link = v as String)
+                        "photoUrls" -> x.copy(photoUrls = v as List<String>)
+                        "description" -> x.copy(description = v as String)
+                        "address" -> x.copy(address = v as String)
+                        "naverScore" -> x.copy(naverScore = (v as Number).toDouble())
+                        "lat" -> x.copy(lat = (v as Number).toDouble())
+                        "lng" -> x.copy(lng = (v as Number).toDouble())
+                        else -> x
+                    }
+                }
+                x
+            }
+        }
+    }
+
     override suspend fun markViewed(id: String, memberId: String) {
         itemsFlow.value = itemsFlow.value.map {
             if (it.id == id && !it.viewedBy.contains(memberId)) it.copy(viewedBy = it.viewedBy + memberId) else it

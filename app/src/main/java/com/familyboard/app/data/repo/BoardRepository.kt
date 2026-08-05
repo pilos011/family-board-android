@@ -17,6 +17,7 @@ interface BoardRepository {
     fun items(board: String): Flow<List<ListItem>>
     suspend fun upsertItem(item: ListItem)
     suspend fun setChecked(id: String, checked: Boolean)
+    suspend fun updateFields(id: String, fields: Map<String, Any>)
     suspend fun markViewed(id: String, memberId: String)
     suspend fun deleteItem(id: String)
     suspend fun deleteByBoard(board: String)

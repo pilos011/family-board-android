@@ -63,6 +63,11 @@ class FirestoreBoardRepository(
         itemsCol.document(id).update("checked", checked).await()
     }
 
+    override suspend fun updateFields(id: String, fields: Map<String, Any>) {
+        if (fields.isEmpty()) return
+        itemsCol.document(id).update(fields).await()
+    }
+
     override suspend fun markViewed(id: String, memberId: String) {
         itemsCol.document(id)
             .update("viewedBy", com.google.firebase.firestore.FieldValue.arrayUnion(memberId)).await()

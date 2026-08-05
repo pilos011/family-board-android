@@ -105,10 +105,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun placeItems(boardKey: String): StateFlow<List<ListItem>> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
-    // 재미진 곳(유튜브/웹 링크 게시판)
+    // 재미진 곳(유튜브/웹/이미지 게시판). BOARD=공용, PRIVATE=내것(화면에서 createdBy 필터)
     val funItems: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.FunBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val myFunItems: StateFlow<List<ListItem>> =
+        board.items(com.familyboard.app.data.model.FunBoard.PRIVATE)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun funBoardItems(boardKey: String): StateFlow<List<ListItem>> =
+        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunItems else funItems
 
     /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
     val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)
@@ -169,18 +174,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun clearPendingShare() { pendingShare.value = null }
 
-    fun saveFun() {
+    fun saveFun(boardKey: String) {
         val s = pendingShare.value ?: return
         if (s.loading) return
-        val nm = s.name.trim().let { if (it.isBlank() || it == "불러오는 중…") "링크" else it }
-        addFun(nm, s.link, s.image)
+        val isImage = s.link.isBlank() && s.image.isNotBlank()
+        val nm = s.name.trim().let { if (it.isBlank() || it == "불러오는 중…" || it == "이미지 올리는 중…") (if (isImage) "이미지" else "링크") else it }
+        addFun(boardKey, nm, s.link, s.image)
         pendingShare.value = null
     }
-    fun addFun(title: String, link: String, image: String = "") = viewModelScope.launch {
+    fun addFun(boardKey: String, title: String, link: String, image: String = "") = viewModelScope.launch {
         runCatching {
             board.upsertItem(ListItem(text = title.trim(), link = link.trim(),
                 photoUrls = if (image.isBlank()) emptyList() else listOf(image),
-                board = com.familyboard.app.data.model.FunBoard.BOARD, createdBy = currentMemberId.value.orEmpty(),
+                board = boardKey, createdBy = currentMemberId.value.orEmpty(),
                 createdAt = System.currentTimeMillis()))
         }
     }
@@ -192,8 +198,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun updateFun(item: ListItem, title: String, link: String, image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
         runCatching {
-            board.upsertItem(item.copy(text = title.trim(), link = link.trim(),
-                photoUrls = if (image.isBlank()) emptyList() else listOf(image)))
+            board.updateFields(item.id, mapOf(
+                "text" to title.trim(), "link" to link.trim(),
+                "photoUrls" to (if (image.isBlank()) emptyList<String>() else listOf(image)),
+            ))
+        }
+    }
+    /** 공유받은 이미지 → 서버 업로드 후 저장 대기(재미진 곳). */
+    fun handleSharedImage(uri: android.net.Uri) {
+        pendingShare.value = SharedPlace(name = "이미지 올리는 중…", link = "", loading = true, isFun = true)
+        viewModelScope.launch {
+            val url = com.familyboard.app.notif.PhotoUploader.compressAndUpload(getApplication(), uri)
+            val cur = pendingShare.value ?: return@launch
+            pendingShare.value = if (url != null) cur.copy(name = "공유 이미지", image = url, link = "", loading = false, isFun = true)
+            else null // 업로드 실패 시 대기 취소
         }
     }
 
@@ -209,12 +227,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun updatePlace(item: ListItem, name: String, link: String,
                     description: String = item.description, address: String = item.address,
-                    image: String = item.photoUrls.firstOrNull().orEmpty(),
-                    naverScore: Double = item.naverScore, lat: Double = item.lat, lng: Double = item.lng) = viewModelScope.launch {
+                    image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
         runCatching {
-            board.upsertItem(item.copy(text = name.trim(), link = link.trim(), description = description,
-                address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image),
-                naverScore = naverScore, lat = lat, lng = lng))
+            board.updateFields(item.id, mapOf(
+                "text" to name.trim(), "link" to link.trim(), "description" to description, "address" to address,
+                "photoUrls" to (if (image.isBlank()) emptyList<String>() else listOf(image)),
+            ))
         }
     }
     /** 편집 다이얼로그에서 네이버 링크로 정보 가져오기(콜백으로 결과 전달). */

@@ -78,10 +78,14 @@ object PlaceBoards {
     fun isPlace(board: String?): Boolean = board == RESTAURANT || board == VISIT
 }
 
-/** 재미진 곳: 유튜브 동영상/웹페이지 링크 공유 게시판. 가족 공용. text=제목, link=URL, photoUrls[0]=썸네일. */
+/** 재미진 곳: 유튜브/웹/이미지 공유 게시판. text=제목, link=URL(이미지는 빈값), photoUrls[0]=썸네일/이미지.
+ *  BOARD=가족 공용, PRIVATE=내 것만(작성자 본인만 조회). */
 object FunBoard {
     const val BOARD = "fun"
+    const val PRIVATE = "myfun"
     const val TITLE = "재미진 곳"
+    const val TITLE_PRIVATE = "내 재미진 곳"
+    fun titleOf(board: String) = if (board == PRIVATE) TITLE_PRIVATE else TITLE
 }
 
 /** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */

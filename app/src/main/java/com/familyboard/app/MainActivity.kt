@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -74,13 +75,24 @@ class MainActivity : ComponentActivity() {
         handleShareIntent(intent)
     }
 
-    /** 네이버 플레이스 등에서 '공유 → 준준가족 보드'로 들어온 텍스트 처리. */
+    /** '공유 → 준준가족 보드'로 들어온 텍스트/이미지 처리. */
     private fun handleShareIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            vm.handleSharedText(
-                intent.getStringExtra(Intent.EXTRA_TEXT),
-                intent.getStringExtra(Intent.EXTRA_SUBJECT),
-            )
+        if (intent?.action != Intent.ACTION_SEND) return
+        val type = intent.type ?: ""
+        when {
+            type == "text/plain" -> {
+                vm.handleSharedText(intent.getStringExtra(Intent.EXTRA_TEXT), intent.getStringExtra(Intent.EXTRA_SUBJECT))
+                if (vm.pendingShare.value == null) {
+                    Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
+                }
+            }
+            type.startsWith("image/") -> {
+                val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
+                if (uri != null) vm.handleSharedImage(uri)
+                else Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
