@@ -257,25 +257,19 @@ fun FunListScreen(
         AlertDialog(
             onDismissRequest = { actionItem = null },
             title = { Text(it0.text.ifBlank { "게시물" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            text = {
-                Column {
-                    Text("이 게시물을 어떻게 할까요?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            text = { Text("이 게시물을 어떻게 할까요?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = {
                         vm.copyFunTo(it0, transferTarget)
                         Toast.makeText(context, transferMsg, Toast.LENGTH_SHORT).show(); actionItem = null
                     }) { Text(transferLabel) }
-                }
-            },
-            confirmButton = {
-                Row {
-                    TextButton(onClick = { shareItem(it0); actionItem = null }) { Text("공유") }
-                    if (editable) TextButton(onClick = { editItem = it0; actionItem = null }) { Text("수정") }
-                }
-            },
-            dismissButton = {
-                Row {
-                    if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
-                    TextButton(onClick = { actionItem = null }) { Text("취소") }
+                    Row {
+                        if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
+                        TextButton(onClick = { actionItem = null }) { Text("취소") }
+                        TextButton(onClick = { shareItem(it0); actionItem = null }) { Text("공유") }
+                        if (editable) TextButton(onClick = { editItem = it0; actionItem = null }) { Text("수정") }
+                    }
                 }
             },
         )
