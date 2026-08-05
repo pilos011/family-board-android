@@ -191,13 +191,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 createdAt = System.currentTimeMillis()))
         }
     }
-    /** 공유받은 이미지 여러 장 → 한 항목으로. */
+    /** 공유받은 이미지 여러 장 → 한 항목으로(고화질 업로드). */
     fun handleSharedImages(uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
         if (uris.size == 1) { handleSharedImage(uris[0]); return }
         pendingShare.value = SharedPlace(name = "이미지 올리는 중…", link = "", loading = true, isFun = true)
         viewModelScope.launch {
-            val urls = uris.mapNotNull { com.familyboard.app.notif.PhotoUploader.compressAndUpload(getApplication(), it) }
+            val urls = uris.mapNotNull { com.familyboard.app.notif.PhotoUploader.uploadImageHiQ(getApplication(), it) }
             val cur = pendingShare.value ?: return@launch
             pendingShare.value = if (urls.isNotEmpty()) cur.copy(name = "이미지 ${urls.size}장", images = urls, link = "", loading = false)
             else null
@@ -239,11 +239,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             board.updateFields(item.id, mapOf("text" to title.trim(), "link" to link.trim(), "photoUrls" to photos))
         }
     }
-    /** 공유받은 이미지 → 서버 업로드 후 저장 대기(재미진 곳). */
+    /** 공유받은 이미지 → 서버 업로드(고화질) 후 저장 대기(재미진 곳). */
     fun handleSharedImage(uri: android.net.Uri) {
         pendingShare.value = SharedPlace(name = "이미지 올리는 중…", link = "", loading = true, isFun = true)
         viewModelScope.launch {
-            val url = com.familyboard.app.notif.PhotoUploader.compressAndUpload(getApplication(), uri)
+            val url = com.familyboard.app.notif.PhotoUploader.uploadImageHiQ(getApplication(), uri)
             val cur = pendingShare.value ?: return@launch
             pendingShare.value = if (url != null) cur.copy(name = "공유 이미지", image = url, link = "", loading = false, isFun = true)
             else null // 업로드 실패 시 대기 취소
