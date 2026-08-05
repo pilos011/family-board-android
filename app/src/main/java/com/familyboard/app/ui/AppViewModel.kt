@@ -41,6 +41,9 @@ data class SharedPlace(
     val description: String = "",
     val address: String = "",
     val image: String = "",
+    val naverScore: Double = 0.0,
+    val lat: Double = 0.0,
+    val lng: Double = 0.0,
     val loading: Boolean = false,
 )
 
@@ -122,7 +125,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val cur = pendingShare.value ?: return@launch
             pendingShare.value = if (info != null && info.name.isNotBlank())
                 cur.copy(name = info.name, description = buildPlaceDesc(info), address = info.address,
-                    image = info.image, loading = false)
+                    image = info.image, naverScore = info.score ?: 0.0,
+                    lat = info.lat ?: 0.0, lng = info.lng ?: 0.0, loading = false)
             else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
         }
     }
@@ -144,25 +148,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val s = pendingShare.value ?: return
         if (s.loading) return
         val nm = s.name.trim().let { if (it.isBlank() || it == "장소 불러오는 중…") "새 장소" else it }
-        addPlace(boardKey, nm, s.link, s.description, s.address, s.image)
+        addPlace(boardKey, nm, s.link, s.description, s.address, s.image, s.naverScore, s.lat, s.lng)
         pendingShare.value = null
     }
     fun clearPendingShare() { pendingShare.value = null }
 
-    fun addPlace(boardKey: String, name: String, link: String, description: String = "", address: String = "", image: String = "") = viewModelScope.launch {
+    fun addPlace(boardKey: String, name: String, link: String, description: String = "", address: String = "",
+                 image: String = "", naverScore: Double = 0.0, lat: Double = 0.0, lng: Double = 0.0) = viewModelScope.launch {
         if (name.isBlank()) return@launch
         runCatching {
             board.upsertItem(ListItem(text = name.trim(), link = link.trim(), description = description,
                 address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image),
+                naverScore = naverScore, lat = lat, lng = lng,
                 board = boardKey, createdBy = currentMemberId.value.orEmpty()))
         }
     }
     fun updatePlace(item: ListItem, name: String, link: String,
                     description: String = item.description, address: String = item.address,
-                    image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
+                    image: String = item.photoUrls.firstOrNull().orEmpty(),
+                    naverScore: Double = item.naverScore, lat: Double = item.lat, lng: Double = item.lng) = viewModelScope.launch {
         runCatching {
             board.upsertItem(item.copy(text = name.trim(), link = link.trim(), description = description,
-                address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image)))
+                address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image),
+                naverScore = naverScore, lat = lat, lng = lng))
         }
     }
     /** 편집 다이얼로그에서 네이버 링크로 정보 가져오기(콜백으로 결과 전달). */
@@ -182,6 +190,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deletePlaceComment(item: ListItem, index: Int) = viewModelScope.launch {
         if (index < 0 || index >= item.progress.size) return@launch
         runCatching { board.upsertItem(item.copy(progress = item.progress.filterIndexed { i, _ -> i != index })) }
+    }
+    fun updatePlaceComment(item: ListItem, index: Int, text: String) = viewModelScope.launch {
+        if (index < 0 || index >= item.progress.size || text.isBlank()) return@launch
+        val updated = item.progress.mapIndexed { i, n -> if (i == index) n.copy(text = text.trim()) else n }
+        runCatching { board.upsertItem(item.copy(progress = updated)) }
     }
 
     val allowanceJunyoung: StateFlow<List<ListItem>> =

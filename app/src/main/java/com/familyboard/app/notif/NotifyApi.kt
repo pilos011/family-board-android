@@ -24,6 +24,8 @@ data class PlaceInfo(
     val reviews: Int? = null,
     val hours: String = "",
     val image: String = "",
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 object NotifyApi {
@@ -89,6 +91,8 @@ object NotifyApi {
                     reviews = if (o.isNull("reviews")) null else o.optInt("reviews"),
                     hours = o.optString("hours"),
                     image = o.optString("image"),
+                    lat = if (o.isNull("lat")) null else o.optDouble("lat"),
+                    lng = if (o.isNull("lng")) null else o.optDouble("lng"),
                 )
             }.onFailure { Log.w(TAG, "parsePlace 실패", it) }.getOrNull()
         }
