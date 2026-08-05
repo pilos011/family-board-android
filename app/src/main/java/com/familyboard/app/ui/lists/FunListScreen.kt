@@ -6,8 +6,11 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -291,55 +295,50 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
     }
 }
 
-/** 단일 이미지 확대뷰: 원본 해상도 로드(또렷), 세로 이미지는 가로 꽉차게 시작, 핀치/드래그/더블탭. */
+/**
+ * 단일 이미지 확대뷰. 원본 해상도 로드.
+ * - 기본(배율 1): 세로 스크롤(네이티브 플링)로 상하 빠르고 부드럽게 이동, 가로 꽉참.
+ * - 두 손가락 핀치로 확대, 확대 중엔 한 손가락 드래그로 이동, 더블탭 토글.
+ */
 @Composable
 private fun ZoomOverlay(url: String, onClose: () -> Unit) {
     val context = LocalContext.current
-    // 저장 파일은 원본 그대로. 표시는 2560px로 디코드(폰 화면에서 충분히 선명 + GPU 텍스처 한계 내 → 부드러운 팬)
     val painter = rememberAsyncImagePainter(
-        ImageRequest.Builder(context).data(url).size(2560).build(),
+        ImageRequest.Builder(context).data(url).size(coil.size.Size.ORIGINAL).build(),
     )
+    val scroll = rememberScrollState()
     var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        val vpW = constraints.maxWidth.toFloat()
-        val vpH = constraints.maxHeight.toFloat()
-        val isz = painter.intrinsicSize
-        val aspect = if (isz.isSpecified && isz.height > 0f) isz.width / isz.height else vpW / vpH.coerceAtLeast(1f)
-        val baseW = vpW
-        val baseH = vpW / aspect // 가로 꽉참 기준 높이
-
-        fun clamp(o: Offset, s: Float): Offset {
-            val maxX = ((baseW * s - vpW) / 2f).coerceAtLeast(0f)
-            val maxY = ((baseH * s - vpH) / 2f).coerceAtLeast(0f)
-            return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
-        }
-        // 세로로 긴 이미지는 처음에 상단이 보이도록(중앙정렬 기준 아래로 이동)
-        LaunchedEffect(aspect, vpH) {
-            if (aspect > 0f && baseH > vpH) offset = clamp(Offset(0f, (baseH - vpH) / 2f), 1f)
-        }
-
-        Image(
-            painter = painter, contentDescription = null, contentScale = ContentScale.FillWidth,
-            modifier = Modifier.fillMaxWidth().aspectRatio(aspect)
-                // 람다형 graphicsLayer: 팬/줌 시 리컴포지션 없이 레이어만 갱신 → 부드러운 이동
-                .graphicsLayer {
-                    scaleX = scale; scaleY = scale
-                    translationX = offset.x; translationY = offset.y
-                }
-                .pointerInput(url) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 6f)
-                        offset = clamp(offset + pan, scale)
+    var tx by remember { mutableStateOf(0f) }
+    var ty by remember { mutableStateOf(0f) }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll, enabled = scale <= 1f)) {
+            Image(
+                painter = painter, contentDescription = null, contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth()
+                    .pointerInput(url) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            do {
+                                val e = awaitPointerEvent()
+                                if (e.changes.size >= 2) {
+                                    scale = (scale * e.calculateZoom()).coerceIn(1f, 5f)
+                                    val p = e.calculatePan(); tx += p.x; ty += p.y
+                                    e.changes.forEach { it.consume() }
+                                } else if (scale > 1f) {
+                                    val p = e.calculatePan(); tx += p.x; ty += p.y
+                                    e.changes.forEach { it.consume() }
+                                }
+                                // 배율 1 + 한 손가락: 소비하지 않음 → 부모 verticalScroll이 플링 처리
+                            } while (e.changes.any { it.pressed })
+                            if (scale <= 1f) { tx = 0f; ty = 0f }
+                        }
                     }
-                }
-                .pointerInput(url) {
-                    detectTapGestures(onDoubleTap = {
-                        scale = if (scale > 1f) 1f else 2.5f
-                        offset = clamp(if (scale > 1f) offset else Offset.Zero, scale)
-                    })
-                },
-        )
+                    .pointerInput(url) {
+                        detectTapGestures(onDoubleTap = { scale = if (scale > 1f) 1f else 2.5f; tx = 0f; ty = 0f })
+                    }
+                    .graphicsLayer { scaleX = scale; scaleY = scale; translationX = tx; translationY = ty },
+            )
+        }
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             Icon(Icons.Default.Close, "닫기", tint = Color.White)
         }

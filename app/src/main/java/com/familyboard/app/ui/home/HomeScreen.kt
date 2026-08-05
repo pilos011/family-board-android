@@ -176,6 +176,7 @@ fun HomeScreen(
                     ) {
                         Text("버전 ${com.familyboard.app.BuildConfig.VERSION_NAME}",
                             fontFamily = NanumGothic, fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
+                        Spacer(Modifier.height(6.dp))
                         Text("만든이 : 김선일", fontFamily = NanumGothic, fontSize = 13.sp, color = Color.White)
                     }
                 }
