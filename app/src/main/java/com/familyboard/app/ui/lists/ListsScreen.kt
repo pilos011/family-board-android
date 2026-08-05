@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.border
@@ -320,15 +321,16 @@ private fun CompactBoardCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
         Column(
-            Modifier.fillMaxSize().padding(8.dp),
+            Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(30.dp))
-            Spacer(Modifier.height(8.dp))
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+            Icon(icon, null, tint = Color.White, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.height(6.dp))
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.5.sp,
+                lineHeight = 14.sp, maxLines = 2, textAlign = TextAlign.Center)
             Spacer(Modifier.height(2.dp))
-            Text("${count}개", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+            Text("${count}개", color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp)
         }
     }
 }

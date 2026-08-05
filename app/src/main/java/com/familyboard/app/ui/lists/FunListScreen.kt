@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +76,9 @@ import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.familyboard.app.data.model.FunBoard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
 
@@ -92,6 +96,7 @@ fun FunListScreen(
         if (isPrivate) all.filter { it.createdBy == currentMemberId } else all
     }
     val context = LocalContext.current
+    val shareScope = rememberCoroutineScope()
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     fun canEdit(it: ListItem) = it.createdBy == currentMemberId || isParent
 
@@ -102,11 +107,17 @@ fun FunListScreen(
     var playUrl by remember { mutableStateOf<String?>(null) }
     var youtubeOn by remember { mutableStateOf(true) }
     var websiteOn by remember { mutableStateOf(true) }
+    var imageOn by remember { mutableStateOf(true) }
     var oldestFirst by remember { mutableStateOf(false) }
     var hideViewed by remember { mutableStateOf(false) }
 
-    val shown = remember(items, youtubeOn, websiteOn, oldestFirst, hideViewed, currentMemberId) {
-        var f = items.filter { val yt = isYoutube(it.link); (youtubeOn && yt) || (websiteOn && !yt) }
+    val shown = remember(items, youtubeOn, websiteOn, imageOn, oldestFirst, hideViewed, currentMemberId) {
+        var f = items.filter {
+            val yt = isYoutube(it.link)
+            val img = it.link.isBlank() && it.photoUrls.isNotEmpty()
+            val web = !yt && !img
+            (youtubeOn && yt) || (imageOn && img) || (websiteOn && web)
+        }
         if (hideViewed) f = f.filter { !it.viewedBy.contains(currentMemberId) }
         if (oldestFirst) f.sortedBy { it.createdAt } else f.sortedByDescending { it.createdAt }
     }
@@ -115,6 +126,41 @@ fun FunListScreen(
         if (link.isBlank()) return
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+    }
+    fun shareText(text: String) {
+        runCatching {
+            context.startActivity(Intent.createChooser(
+                Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "공유"))
+        }.onFailure { Toast.makeText(context, "공유할 수 없어요", Toast.LENGTH_SHORT).show() }
+    }
+    // 안드로이드 표준 공유. 이미지 항목은 실제 파일을, 그 외(유튜브/웹/영상)는 링크를 공유.
+    fun shareItem(item: ListItem) {
+        val isImg = item.link.isBlank() && item.photoUrls.isNotEmpty()
+        if (!isImg) {
+            shareText(listOf(item.text, item.link).filter { it.isNotBlank() }.joinToString("\n")); return
+        }
+        shareScope.launch {
+            val uris = withContext(Dispatchers.IO) {
+                item.photoUrls.mapIndexedNotNull { i, url ->
+                    runCatching {
+                        val ext = url.substringBefore('?').substringAfterLast('.', "jpg").take(4).ifBlank { "jpg" }
+                        val f = java.io.File(context.cacheDir, "share_$i.$ext")
+                        java.net.URL(url).openStream().use { input -> f.outputStream().use { input.copyTo(it) } }
+                        androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", f)
+                    }.getOrNull()
+                }
+            }
+            if (uris.isEmpty()) { shareText(listOf(item.text).plus(item.photoUrls).filter { it.isNotBlank() }.joinToString("\n")); return@launch }
+            val send = if (uris.size == 1)
+                Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0])
+            else
+                Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            send.type = "image/*"
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (item.text.isNotBlank()) send.putExtra(Intent.EXTRA_TEXT, item.text)
+            runCatching { context.startActivity(Intent.createChooser(send, "공유")) }
+                .onFailure { Toast.makeText(context, "공유할 수 없어요", Toast.LENGTH_SHORT).show() }
+        }
     }
 
     Scaffold(
@@ -139,6 +185,7 @@ fun FunListScreen(
             ) {
                 TogglePill("유튜브", youtubeOn) { youtubeOn = !youtubeOn }
                 TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn }
+                TogglePill("이미지", imageOn) { imageOn = !imageOn }
                 TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
                 TogglePill("이미 본 게시물 제외", hideViewed) { hideViewed = !hideViewed }
             }
@@ -168,7 +215,7 @@ fun FunListScreen(
                                             else -> open(post.link)
                                         }
                                     },
-                                    onLongPress = { if (canEdit(post)) actionItem = post })
+                                    onLongPress = { actionItem = post })
                             }
                             repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                         }
@@ -197,14 +244,20 @@ fun FunListScreen(
     if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(boardKey, t, l, if (img.isBlank()) emptyList() else listOf(img)); showAdd = false }, onDismiss = { showAdd = false })
     editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img -> vm.updateFun(it0, t, l, img); editItem = null }, onDismiss = { editItem = null }) }
     actionItem?.let { it0 ->
+        val editable = canEdit(it0)
         AlertDialog(
             onDismissRequest = { actionItem = null },
             title = { Text(it0.text.ifBlank { "게시물" }) },
             text = { Text("이 게시물을 어떻게 할까요?") },
-            confirmButton = { TextButton(onClick = { editItem = it0; actionItem = null }) { Text("수정") } },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = { shareItem(it0); actionItem = null }) { Text("공유") }
+                    if (editable) TextButton(onClick = { editItem = it0; actionItem = null }) { Text("수정") }
+                }
+            },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
+                    if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                     TextButton(onClick = { actionItem = null }) { Text("취소") }
                 }
             },
