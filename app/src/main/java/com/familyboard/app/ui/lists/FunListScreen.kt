@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -251,7 +252,7 @@ fun FunListScreen(
     actionItem?.let { it0 ->
         val editable = canEdit(it0)
         val toPrivate = boardKey != FunBoard.PRIVATE
-        val transferLabel = if (toPrivate) "내 재미진 곳으로 전달" else "재미진 곳으로 전달"
+        val transferLabel = if (toPrivate) "내 재미진 곳으로 전달 (나만 보기)" else "재미진 곳으로 전달 (가족과 공유)"
         val transferTarget = if (toPrivate) FunBoard.PRIVATE else FunBoard.BOARD
         val transferMsg = if (toPrivate) "내 재미진 곳에 담았어요" else "재미진 곳에 담았어요"
         AlertDialog(
@@ -260,10 +261,13 @@ fun FunListScreen(
             text = { Text("이 게시물을 어떻게 할까요?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = {
-                        vm.copyFunTo(it0, transferTarget)
-                        Toast.makeText(context, transferMsg, Toast.LENGTH_SHORT).show(); actionItem = null
-                    }) { Text(transferLabel) }
+                    TextButton(
+                        onClick = {
+                            vm.copyFunTo(it0, transferTarget)
+                            Toast.makeText(context, transferMsg, Toast.LENGTH_SHORT).show(); actionItem = null
+                        },
+                        modifier = Modifier.fillMaxWidth().offset(y = (-10).dp),
+                    ) { Text(transferLabel) }
                     Row {
                         if (editable) TextButton(onClick = { vm.deleteItem(it0.id); actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                         TextButton(onClick = { actionItem = null }) { Text("취소") }
