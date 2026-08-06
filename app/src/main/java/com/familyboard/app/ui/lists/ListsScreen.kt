@@ -112,12 +112,15 @@ fun ListsScreen(
                 CompactBoardCard("맛집", restaurant.size, RestaurantColor, Icons.Default.Restaurant, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.RESTAURANT) }
                 CompactBoardCard("가볼 곳", visit.size, VisitColor, Icons.Default.Place, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.VISIT) }
             }
-            Spacer(Modifier.height(10.dp))
-            // 둘째 행: 재미진 곳(공용) · 내 재미진 곳(나만)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
-                CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
-                Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
+            // 준호는 2026-11-19 00:00(자정)까지 재미진 곳/내 재미진 곳 숨김(하드코딩)
+            if (funBoardsVisibleFor(currentMemberId)) {
+                Spacer(Modifier.height(10.dp))
+                // 둘째 행: 재미진 곳(공용) · 내 재미진 곳(나만)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
+                    CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
+                    Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
+                }
             }
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
@@ -149,6 +152,14 @@ fun ListsScreen(
             onDismiss = { showCreate = false },
         )
     }
+}
+
+/** 준호는 2026-11-19 00:00(KST, 자정)까지 재미진 곳/내 재미진 곳을 못 보게(하드코딩). */
+private fun funBoardsVisibleFor(memberId: String?): Boolean {
+    if (memberId != "junho") return true
+    val revealAt = java.time.LocalDateTime.of(2026, 11, 19, 0, 0)
+        .atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
+    return System.currentTimeMillis() >= revealAt
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

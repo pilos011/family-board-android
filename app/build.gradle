@@ -30,8 +30,8 @@ android {
         applicationId "com.jun.family_board"
         minSdk 24
         targetSdk 34
-        versionCode 115
-        versionName "0.9.106"
+        versionCode 116
+        versionName "0.9.107"
         buildConfigField "String", "HOLIDAY_API_KEY", "\"${holidayApiKey}\""
         buildConfigField "String", "NOTIFY_BASE_URL", "\"${notifyBaseUrl}\""
         buildConfigField "String", "NOTIFY_SECRET", "\"${notifySecret}\""
