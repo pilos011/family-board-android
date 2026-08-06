@@ -16,12 +16,6 @@ interface BoardRepository {
 
     fun items(board: String): Flow<List<ListItem>>
 
-    /**
-     * 최신순(createdAt 내림차순) 페이지네이션용. 최대 [limit]개만 불러오는 실시간 스트림.
-     * [createdBy] 가 지정되면 해당 작성자 항목만(내 재미진 곳). limit 을 키우면 더 불러온다.
-     */
-    fun itemsPaged(board: String, limit: Long, createdBy: String? = null): Flow<List<ListItem>>
-
     /** 보드 전체 항목 수(집계 count, 문서를 내려받지 않음). [createdBy] 지정 시 해당 작성자만. */
     suspend fun countByBoard(board: String, createdBy: String? = null): Int
 

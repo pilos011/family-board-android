@@ -96,6 +96,8 @@ import com.familyboard.app.data.model.FunBoard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
@@ -139,16 +141,21 @@ fun FunListScreen(
     var resumeDismissed by remember(boardKey) { mutableStateOf(false) }
     var entrySavedPage by remember(boardKey) { mutableStateOf(0) }
 
-    // 필요한 개수만큼 로드 보장(부족하면 1회 조회로 채움 → 이어보기 점프도 한 번에)
-    suspend fun ensureLoaded(target: Int) {
-        if (loaded.size >= target) return
-        if (totalCount in 1..loaded.size) return
+    // 필요한 개수만큼 로드 보장(부족하면 1회 조회로 채움 → 이어보기 점프도 한 번에).
+    // Mutex 로 직렬화 → 페이지 연타 시 동시 조회 경합(중복/누락) 방지.
+    val loadMutex = remember(boardKey) { Mutex() }
+    suspend fun ensureLoaded(target: Int) = loadMutex.withLock {
+        if (loaded.size >= target) return@withLock
+        if (totalCount in 1..loaded.size) return@withLock
         loading = true
-        val after = loaded.lastOrNull()?.createdAt
-        val batch = vm.fetchFunPage(boardKey, oldestFirst, after, target - loaded.size)
-        val seen = loaded.mapTo(HashSet()) { it.id }
-        loaded = loaded + batch.filter { seen.add(it.id) }
-        loading = false
+        try {
+            val after = loaded.lastOrNull()?.createdAt
+            // 포함 커서(startAt)라 경계 1건이 다시 오므로 +1 요청해 순증가분을 맞춤
+            val need = (target - loaded.size) + if (after != null) 1 else 0
+            val batch = vm.fetchFunPage(boardKey, oldestFirst, after, need)
+            val seen = loaded.mapTo(HashSet()) { it.id }
+            loaded = loaded + batch.filter { seen.add(it.id) }
+        } finally { loading = false }
     }
     fun goToPage(n: Int) {
         val clamped = n.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
@@ -163,6 +170,10 @@ fun FunListScreen(
         loaded = emptyList(); pageIndex = 0; resumeDismissed = false
         entrySavedPage = vm.lastFunPage(boardKey, oldestFirst).first()
         ensureLoaded(pageSize)
+    }
+    // 삭제 등으로 총 페이지가 줄면 현재 페이지를 범위 안으로 보정
+    LaunchedEffect(totalPages) {
+        if (pageIndex > totalPages - 1) pageIndex = (totalPages - 1).coerceAtLeast(0)
     }
 
     // 현재 페이지 구간을 잘라 필터 적용(필터는 페이지 안에서만 숨김)
@@ -263,7 +274,7 @@ fun FunListScreen(
             }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 when {
-                    loading && loaded.isEmpty() -> CircularProgressIndicator()
+                    loading && shown.isEmpty() -> CircularProgressIndicator()
                     totalCount == 0 -> Text(
                         "아직 게시물이 없어요.\n유튜브·웹·이미지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요.",
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
@@ -284,6 +295,12 @@ fun FunListScreen(
                                 viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
                                 onClick = {
                                     vm.markFunViewed(post)
+                                    // 낙관적 갱신: 비실시간 페이지라 로컬 loaded 도 즉시 '봤음'으로(회색·"안 본" 필터 반영)
+                                    if (currentMemberId != null && !post.viewedBy.contains(currentMemberId)) {
+                                        loaded = loaded.map {
+                                            if (it.id == post.id) it.copy(viewedBy = it.viewedBy + currentMemberId) else it
+                                        }
+                                    }
                                     when {
                                         isVideo(post.link) -> playUrl = post.link
                                         post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls

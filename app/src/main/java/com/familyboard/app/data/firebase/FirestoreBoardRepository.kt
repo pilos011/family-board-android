@@ -54,17 +54,6 @@ class FirestoreBoardRepository(
         awaitClose { reg.remove() }
     }
 
-    override fun itemsPaged(board: String, limit: Long, createdBy: String?): Flow<List<ListItem>> = callbackFlow {
-        var q: com.google.firebase.firestore.Query = itemsCol.whereEqualTo("board", board)
-        if (createdBy != null) q = q.whereEqualTo("createdBy", createdBy)
-        q = q.orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).limit(limit)
-        val reg = q.addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
-            trySend(snap?.documents?.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() } ?: emptyList())
-        }
-        awaitClose { reg.remove() }
-    }
-
     override suspend fun countByBoard(board: String, createdBy: String?): Int {
         var q: com.google.firebase.firestore.Query = itemsCol.whereEqualTo("board", board)
         if (createdBy != null) q = q.whereEqualTo("createdBy", createdBy)
@@ -80,7 +69,8 @@ class FirestoreBoardRepository(
         val dir = if (ascending) com.google.firebase.firestore.Query.Direction.ASCENDING
                   else com.google.firebase.firestore.Query.Direction.DESCENDING
         q = q.orderBy("createdAt", dir)
-        if (afterCreatedAt != null) q = q.startAfter(afterCreatedAt)
+        // startAt(포함) + 호출측 id 중복제거 → 동일 createdAt 경계 항목이 누락되지 않음
+        if (afterCreatedAt != null) q = q.startAt(afterCreatedAt)
         q = q.limit(limit.toLong())
         return q.get().await().documents.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() }
     }

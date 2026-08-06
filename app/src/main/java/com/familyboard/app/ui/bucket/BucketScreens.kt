@@ -400,7 +400,7 @@ fun BucketViewScreen(
     var editIndex by remember { mutableStateOf(-1) }
     var editText by remember { mutableStateOf("") }
     var confirmDeleteItem by remember { mutableStateOf(false) }
-    var deleteHistoryIndex by remember { mutableStateOf(-1) }
+    var deleteHistoryNote by remember { mutableStateOf<ProgressNote?>(null) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -495,7 +495,7 @@ fun BucketViewScreen(
                                 Icon(Icons.Default.Edit, "이력 수정", tint = Ink.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
                             }
                             IconButton(
-                                onClick = { deleteHistoryIndex = i },
+                                onClick = { deleteHistoryNote = p },
                                 modifier = Modifier.size(32.dp),
                             ) {
                                 Icon(Icons.Default.Delete, "이력 삭제", tint = Ink.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
@@ -556,21 +556,22 @@ fun BucketViewScreen(
         )
     }
 
-    // 진행 이력 삭제 확인
-    if (deleteHistoryIndex >= 0 && item != null && deleteHistoryIndex < item.progress.size) {
-        val idx = deleteHistoryIndex
+    // 진행 이력 삭제 확인 (인덱스 대신 항목 매칭 — 다이얼로그 여는 사이 목록이 바뀌어도 안전)
+    if (deleteHistoryNote != null && item != null) {
+        val note = deleteHistoryNote!!
         AlertDialog(
-            onDismissRequest = { deleteHistoryIndex = -1 },
+            onDismissRequest = { deleteHistoryNote = null },
             title = { Text("진행 이력 삭제") },
             text = { Text("이 진행 이력을 삭제할까요?") },
             confirmButton = {
                 TextButton(onClick = {
-                    val next = item.progress.toMutableList().also { it.removeAt(idx) }
-                    vm.updateItem(item.copy(progress = next))
-                    deleteHistoryIndex = -1
+                    val next = item.progress.toMutableList()
+                    val ix = next.indexOf(note)
+                    if (ix >= 0) { next.removeAt(ix); vm.updateItem(item.copy(progress = next)) }
+                    deleteHistoryNote = null
                 }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleteHistoryIndex = -1 }) { Text("취소") } },
+            dismissButton = { TextButton(onClick = { deleteHistoryNote = null }) { Text("취소") } },
         )
     }
 }

@@ -33,13 +33,6 @@ class InMemoryBoardRepository : BoardRepository {
     override fun items(board: String): Flow<List<ListItem>> =
         itemsFlow.map { list -> list.filter { it.board == board } }
 
-    override fun itemsPaged(board: String, limit: Long, createdBy: String?): Flow<List<ListItem>> =
-        itemsFlow.map { list ->
-            list.filter { it.board == board && (createdBy == null || it.createdBy == createdBy) }
-                .sortedByDescending { it.createdAt }
-                .take(limit.toInt())
-        }
-
     override suspend fun countByBoard(board: String, createdBy: String?): Int =
         itemsFlow.value.count { it.board == board && (createdBy == null || it.createdBy == createdBy) }
 
@@ -48,8 +41,9 @@ class InMemoryBoardRepository : BoardRepository {
     ): List<ListItem> {
         var list = itemsFlow.value.filter { it.board == board && (createdBy == null || it.createdBy == createdBy) }
         list = if (ascending) list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }
+        // startAt(포함)과 동일하게 경계값 포함 → 호출측에서 id 중복제거
         if (afterCreatedAt != null)
-            list = list.filter { if (ascending) it.createdAt > afterCreatedAt else it.createdAt < afterCreatedAt }
+            list = list.filter { if (ascending) it.createdAt >= afterCreatedAt else it.createdAt <= afterCreatedAt }
         return list.take(limit)
     }
 
