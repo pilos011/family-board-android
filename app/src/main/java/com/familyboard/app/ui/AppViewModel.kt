@@ -326,11 +326,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun fetchPlaceInfo(url: String, onResult: (com.familyboard.app.notif.PlaceInfo?) -> Unit) = viewModelScope.launch {
         onResult(com.familyboard.app.notif.NotifyApi.parsePlace(url))
     }
-    /** 근처 후보를 서버(Groq)로 보내 한 곳 추천받기. */
+    /** 카카오+Groq로 '놓친 장소' 2~3곳 발굴 추천(저장된 곳 제외). */
     fun recommendPlace(
-        candidates: List<com.familyboard.app.notif.PlaceCandidate>, category: String, region: String,
-        onResult: (com.familyboard.app.notif.Recommendation?) -> Unit,
-    ) = viewModelScope.launch { onResult(com.familyboard.app.notif.NotifyApi.recommend(candidates, category, region)) }
+        board: String, category: String, region: String, savedNames: List<String>, lat: Double?, lng: Double?,
+        onResult: (List<com.familyboard.app.notif.Recommendation>) -> Unit,
+    ) = viewModelScope.launch {
+        onResult(com.familyboard.app.notif.NotifyApi.recommend(board, category, region, savedNames, lat, lng))
+    }
     fun describePlace(info: com.familyboard.app.notif.PlaceInfo): String = buildPlaceDesc(info)
     fun fetchLinkInfo(url: String, onResult: (com.familyboard.app.notif.LinkInfo?) -> Unit) = viewModelScope.launch {
         onResult(com.familyboard.app.notif.NotifyApi.parseLink(url))

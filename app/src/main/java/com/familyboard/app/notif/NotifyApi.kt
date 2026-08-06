@@ -31,9 +31,10 @@ data class PlaceInfo(
 /** 범용 링크(유튜브/웹) 미리보기 파싱 결과 */
 data class LinkInfo(val title: String = "", val image: String = "", val url: String = "")
 
-/** 추천 요청 후보(가까운 순). dist=거리(km, 없으면 null), score=네이버 평점. */
-data class PlaceCandidate(val name: String, val category: String, val dist: Double?, val score: Double)
-data class Recommendation(val name: String, val reason: String)
+/** 발굴 추천 결과 1건(카카오 실제 장소 + Groq 근거). dist=거리(km, 없으면 null). */
+data class Recommendation(
+    val name: String, val category: String, val address: String, val dist: Double?, val reason: String,
+)
 
 object NotifyApi {
     private const val TAG = "NotifyApi"
@@ -130,20 +131,19 @@ object NotifyApi {
         }
     }
 
-    /** 근처 후보 목록을 서버(Groq)에 보내 하나를 추천받음. 실패 시 null. */
-    suspend fun recommend(candidates: List<PlaceCandidate>, category: String, region: String): Recommendation? {
-        if (!enabled() || candidates.isEmpty()) return null
+    /** 카카오 검색+Groq 선별로 '놓친 장소' 2~3곳 발굴. lat/lng 는 거리 계산·바이어스용(선택). 실패 시 빈 목록. */
+    suspend fun recommend(
+        board: String, category: String, region: String, savedNames: List<String>, lat: Double?, lng: Double?,
+    ): List<Recommendation> {
+        if (!enabled()) return emptyList()
         return withContext(Dispatchers.IO) {
             runCatching {
-                val arr = JSONArray()
-                candidates.forEach { c ->
-                    val o = JSONObject().put("name", c.name).put("category", c.category).put("score", c.score)
-                    if (c.dist != null) o.put("dist", c.dist)
-                    arr.put(o)
-                }
-                val body = JSONObject().put("candidates", arr).put("category", category).put("region", region)
+                val body = JSONObject()
+                    .put("board", board).put("category", category).put("region", region)
+                    .put("savedNames", JSONArray(savedNames))
+                if (lat != null && lng != null) { body.put("x", lng); body.put("y", lat) } // 카카오: x=경도, y=위도
                 val conn = (URL("$base/recommend").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; connectTimeout = 10000; readTimeout = 15000; doOutput = true
+                    requestMethod = "POST"; connectTimeout = 10000; readTimeout = 20000; doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
                 }
@@ -151,11 +151,18 @@ object NotifyApi {
                 val code = conn.responseCode
                 val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
                 conn.disconnect()
-                if (code !in 200..299) return@runCatching null
-                val o = JSONObject(text)
-                val nm = o.optString("name")
-                if (nm.isBlank()) null else Recommendation(nm, o.optString("reason"))
-            }.onFailure { Log.w(TAG, "recommend 실패", it) }.getOrNull()
+                if (code !in 200..299) return@runCatching emptyList<Recommendation>()
+                val arr = JSONObject(text).optJSONArray("items") ?: return@runCatching emptyList<Recommendation>()
+                (0 until arr.length()).map { i ->
+                    val o = arr.getJSONObject(i)
+                    Recommendation(
+                        name = o.optString("name"), category = o.optString("category"),
+                        address = o.optString("address"),
+                        dist = if (o.isNull("dist")) null else o.optDouble("dist"),
+                        reason = o.optString("reason"),
+                    )
+                }
+            }.onFailure { Log.w(TAG, "recommend 실패", it) }.getOrDefault(emptyList())
         }
     }
 

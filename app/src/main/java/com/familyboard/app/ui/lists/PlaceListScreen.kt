@@ -117,8 +117,8 @@ fun PlaceListScreen(
     var catFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var regionFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var showFilter by remember { mutableStateOf(false) }
-    // 추천(Groq): 결과 / 로딩
-    var recommend by remember { mutableStateOf<com.familyboard.app.notif.Recommendation?>(null) }
+    // 발굴 추천(카카오+Groq): 결과 목록 / 로딩
+    var recommends by remember { mutableStateOf<List<com.familyboard.app.notif.Recommendation>>(emptyList()) }
     var recommending by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
@@ -152,6 +152,12 @@ fun PlaceListScreen(
         if (link.isBlank()) { Toast.makeText(context, "저장된 링크가 없어요", Toast.LENGTH_SHORT).show(); return }
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+    }
+    // 추천 장소를 네이버 지도에서 열기(가게 정보)
+    fun openNaver(name: String, address: String) {
+        val q = java.net.URLEncoder.encode(listOf(name, address).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://map.naver.com/p/search/$q"))) }
+            .onFailure { Toast.makeText(context, "지도를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
 
     Scaffold(
@@ -196,17 +202,17 @@ fun PlaceListScreen(
                     Modifier.clip(RoundedCornerShape(20.dp))
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                         .clickable(enabled = !recommending) {
-                            recommending = true; recommend = null
                             val loc = myLoc ?: lastKnownLocation(context).also { myLoc = it }
-                            val cands = (if (loc != null) filtered.sortedBy { distanceOrNull(loc, it) ?: Double.MAX_VALUE }
-                                         else filtered.sortedByDescending { it.naverScore })
-                                .take(10)
-                                .map { com.familyboard.app.notif.PlaceCandidate(it.text, it.category, if (loc != null) distanceOrNull(loc, it) else null, it.naverScore) }
-                            if (cands.isEmpty()) { recommending = false; Toast.makeText(context, "추천할 장소가 없어요", Toast.LENGTH_SHORT).show() }
-                            else vm.recommendPlace(cands, catFilter ?: "", regionFilter ?: "") { rec ->
-                                recommending = false
-                                if (rec == null) Toast.makeText(context, "추천을 가져오지 못했어요", Toast.LENGTH_SHORT).show()
-                                recommend = rec
+                            if (regionFilter == null && loc == null) {
+                                Toast.makeText(context, "지역을 선택하거나 위치를 켜주세요", Toast.LENGTH_SHORT).show()
+                            } else {
+                                recommending = true; recommends = emptyList()
+                                val savedNames = items.map { it.text }
+                                vm.recommendPlace(boardKey, catFilter ?: "", regionFilter ?: "", savedNames, loc?.latitude, loc?.longitude) { list ->
+                                    recommending = false
+                                    recommends = list
+                                    if (list.isEmpty()) Toast.makeText(context, "추천할 새 장소를 못 찾았어요", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -217,29 +223,37 @@ fun PlaceListScreen(
                     Text(if (recommending) "추천 중…" else "추천받기", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
                 }
             }
-            // 추천 결과 카드
-            recommend?.let { rec ->
-                val picked = filtered.firstOrNull { it.text == rec.name }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
-                        .clickable { picked?.let { openLink(it.link) } }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        val dist = picked?.let { p -> myLoc?.let { distanceOrNull(it, p)?.let { d -> " · " + fmtDist(d) } } }.orEmpty()
-                        val star = picked?.takeIf { it.naverScore > 0 }?.let { " · ★${it.naverScore}" }.orEmpty()
-                        Text("이 근처 추천: ${rec.name}$dist$star", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (rec.reason.isNotBlank())
-                            Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // 발굴 추천 결과: 놓친 곳 2~3개(탭 시 네이버 지도)
+            if (recommends.isNotEmpty()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                    .padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text("아직 안 담은 근처 추천", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.size(18.dp).clickable { recommends = emptyList() })
                     }
-                    Icon(Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.size(18.dp).clickable { recommend = null })
+                    recommends.forEach { rec ->
+                        Spacer(Modifier.size(8.dp))
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable { openNaver(rec.name, rec.address) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                val dist = rec.dist?.let { " · " + fmtDist(it) }.orEmpty()
+                                Text("${rec.name}$dist", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (rec.reason.isNotBlank())
+                                    Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            Icon(Icons.Default.OpenInNew, "네이버 지도", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
             }
             // 정렬 선택
