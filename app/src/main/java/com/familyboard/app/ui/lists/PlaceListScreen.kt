@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -301,8 +300,6 @@ fun PlaceListScreen(
                                     onClick = { openNav(rec.naverName, rec.lat, rec.lng) },
                                     onLongClick = { vm.setNavDefaultApp(""); Toast.makeText(context, "길찾기 기본앱 해제(다음엔 선택창)", Toast.LENGTH_SHORT).show() },
                                 ))
-                            Spacer(Modifier.size(10.dp))
-                            Icon(Icons.Default.OpenInNew, "네이버 지도", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
