@@ -98,14 +98,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 임의 보드 키의 항목 스트림(커스텀 리스트 포함). */
     fun boardItems(boardKey: String): kotlinx.coroutines.flow.Flow<List<ListItem>> = board.items(boardKey)
 
-    // 장소 북마크 보드(맛집/가볼 곳)
-    val restaurantItems: StateFlow<List<ListItem>> =
+    // 장소 북마크 보드(맛집/가볼 곳). 초기값 null=아직 로딩 전(스피너), 빈 리스트=진짜 없음.
+    val restaurantItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.PlaceBoards.RESTAURANT)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val visitItems: StateFlow<List<ListItem>> =
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val visitItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.PlaceBoards.VISIT)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    fun placeItems(boardKey: String): StateFlow<List<ListItem>> =
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    fun placeItems(boardKey: String): StateFlow<List<ListItem>?> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
     // 재미진 곳(유튜브/웹/이미지 게시판). 페이지 방식(이전/다음 + 이어보기).
@@ -218,9 +218,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun clearPendingShare() { pendingShare.value = null }
 
+    /** 준호는 2026-11-20 00:00(KST)까지 재미진 곳/내 재미진 곳 숨김(하드코딩). 카드·공유저장 공통. */
+    fun funHiddenForCurrentUser(): Boolean {
+        if (currentMemberId.value != "junho") return false
+        val revealAt = java.time.LocalDateTime.of(2026, 11, 20, 0, 0)
+            .atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
+        return System.currentTimeMillis() < revealAt
+    }
+
     fun saveFun(boardKey: String) {
         val s = pendingShare.value ?: return
         if (s.loading) return
+        if (funHiddenForCurrentUser()) { pendingShare.value = null; return } // 숨김 기간엔 저장 안 함
         val photos = if (s.images.isNotEmpty()) s.images else if (s.image.isNotBlank()) listOf(s.image) else emptyList()
         val isImage = s.link.isBlank() && photos.isNotEmpty()
         val nm = s.name.trim().let { if (it.isBlank() || it.endsWith("중…")) (if (isImage) "이미지" else "링크") else it }

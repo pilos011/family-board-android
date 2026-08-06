@@ -109,11 +109,11 @@ fun ListsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CompactBoardCard("장보기", shopping.size, ShoppingBlue, Icons.Default.ShoppingCart, Modifier.weight(1f)) { onOpenBoard(BoardType.SHOPPING.key) }
                 CompactBoardCard("할 일", todo.size, TodoGreen, Icons.Default.CheckCircle, Modifier.weight(1f)) { onOpenBoard(BoardType.TODO.key) }
-                CompactBoardCard("맛집", restaurant.size, RestaurantColor, Icons.Default.Restaurant, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.RESTAURANT) }
-                CompactBoardCard("가볼 곳", visit.size, VisitColor, Icons.Default.Place, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.VISIT) }
+                CompactBoardCard("맛집", restaurant?.size ?: 0, RestaurantColor, Icons.Default.Restaurant, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.RESTAURANT) }
+                CompactBoardCard("가볼 곳", visit?.size ?: 0, VisitColor, Icons.Default.Place, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.VISIT) }
             }
-            // 준호는 2026-11-19 00:00(자정)까지 재미진 곳/내 재미진 곳 숨김(하드코딩)
-            if (funBoardsVisibleFor(currentMemberId)) {
+            // 준호는 지정 시각까지 재미진 곳/내 재미진 곳 숨김(하드코딩, VM에 날짜 일원화)
+            if (!vm.funHiddenForCurrentUser()) {
                 Spacer(Modifier.height(10.dp))
                 // 둘째 행: 재미진 곳(공용) · 내 재미진 곳(나만)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -152,14 +152,6 @@ fun ListsScreen(
             onDismiss = { showCreate = false },
         )
     }
-}
-
-/** 준호는 2026-11-20 00:00(KST, 자정)까지 재미진 곳/내 재미진 곳을 못 보게(하드코딩). */
-private fun funBoardsVisibleFor(memberId: String?): Boolean {
-    if (memberId != "junho") return true
-    val revealAt = java.time.LocalDateTime.of(2026, 11, 20, 0, 0)
-        .atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
-    return System.currentTimeMillis() >= revealAt
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

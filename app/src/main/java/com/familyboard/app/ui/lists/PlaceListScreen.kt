@@ -119,8 +119,8 @@ fun PlaceListScreen(
     currentMemberId: String?,
     onBack: () -> Unit,
 ) {
-    // 첫 로딩과 "빈 목록" 구분: null=아직 로딩 전 → 스피너, 빈 리스트=진짜 없음
-    val itemsState by remember(boardKey) { vm.boardItems(boardKey) }.collectAsStateWithLifecycle(initialValue = null)
+    // 첫 로딩과 "빈 목록" 구분: null=아직 로딩 전 → 스피너, 빈 리스트=진짜 없음 (공유 StateFlow 재사용)
+    val itemsState by vm.placeItems(boardKey).collectAsStateWithLifecycle()
     val loading = itemsState == null
     val items = itemsState ?: emptyList()
     val title = PlaceBoards.titleOf(boardKey)
@@ -282,6 +282,8 @@ fun PlaceListScreen(
                         Icon(Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.size(18.dp).clickable { recommends = emptyList() })
                     }
+                    // 6곳까지 나올 수 있어 최대 높이 제한 + 스크롤(리스트 영역을 너무 밀지 않게)
+                    Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
                     recommends.forEach { rec ->
                         Spacer(Modifier.size(8.dp))
                         Row(
@@ -305,6 +307,7 @@ fun PlaceListScreen(
                                     onLongClick = { vm.setNavDefaultApp(""); Toast.makeText(context, "길찾기 기본앱 해제(다음엔 선택창)", Toast.LENGTH_SHORT).show() },
                                 ))
                         }
+                    }
                     }
                 }
             }
