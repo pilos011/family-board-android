@@ -31,9 +31,10 @@ data class PlaceInfo(
 /** 범용 링크(유튜브/웹) 미리보기 파싱 결과 */
 data class LinkInfo(val title: String = "", val image: String = "", val url: String = "")
 
-/** 발굴 추천 결과 1건(카카오 실제 장소 + Groq 근거). dist=거리(km, 없으면 null). */
+/** 발굴 추천 결과 1건(Google 실제 장소·평점 + Groq 근거). dist=거리(km, 없으면 null). */
 data class Recommendation(
-    val name: String, val category: String, val address: String, val dist: Double?, val reason: String,
+    val name: String, val category: String, val address: String, val dist: Double?,
+    val rating: Double?, val ratingCount: Int, val reason: String,
 )
 
 object NotifyApi {
@@ -159,6 +160,8 @@ object NotifyApi {
                         name = o.optString("name"), category = o.optString("category"),
                         address = o.optString("address"),
                         dist = if (o.isNull("dist")) null else o.optDouble("dist"),
+                        rating = if (o.isNull("rating")) null else o.optDouble("rating"),
+                        ratingCount = o.optInt("ratingCount"),
                         reason = o.optString("reason"),
                     )
                 }

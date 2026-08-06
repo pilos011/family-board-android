@@ -245,8 +245,9 @@ fun PlaceListScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
+                                val star = rec.rating?.let { "★$it" + (if (rec.ratingCount > 0) " (${rec.ratingCount})" else "") }.orEmpty()
                                 val dist = rec.dist?.let { " · " + fmtDist(it) }.orEmpty()
-                                Text("${rec.name}$dist", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                Text("${rec.name}${if (star.isNotBlank()) " · $star" else ""}$dist", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (rec.reason.isNotBlank())
                                     Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
