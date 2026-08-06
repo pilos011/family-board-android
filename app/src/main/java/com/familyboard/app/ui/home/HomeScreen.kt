@@ -100,6 +100,23 @@ private val KrDowFull = listOf("월요일", "화요일", "수요일", "목요일
 private const val HOME_LAT = 37.6584
 private const val HOME_LNG = 126.8320
 
+/** 현재 위치(마지막 known). 권한/좌표 없으면 고양 기본값. 날씨용 대략 위치. */
+@android.annotation.SuppressLint("MissingPermission")
+private fun homeLocation(context: android.content.Context): Pair<Double, Double> {
+    val fine = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val coarse = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    if (fine || coarse) {
+        val lm = context.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+        val loc = lm?.let {
+            listOf(android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER, android.location.LocationManager.PASSIVE_PROVIDER)
+                .mapNotNull { p -> runCatching { it.getLastKnownLocation(p) }.getOrNull() }
+                .maxByOrNull { it.time }
+        }
+        if (loc != null) return loc.latitude to loc.longitude
+    }
+    return HOME_LAT to HOME_LNG
+}
+
 /** WMO weather code → 이모지 아이콘. */
 private fun weatherEmoji(code: Int): String = when (code) {
     0 -> "☀️"
@@ -127,16 +144,17 @@ fun HomeScreen(
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
     val events by vm.events.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
-    // 오늘/내일 날씨: 진입 시 + 1시간마다 갱신
+    val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // 오늘/내일 날씨: 현재 위치 기준(권한/좌표 없으면 고양 기본값), 진입 시 + 1시간마다 갱신
     var weather by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
-            weather = com.familyboard.app.notif.WeatherApi.today2(HOME_LAT, HOME_LNG)
+            val (la, lo) = homeLocation(context)
+            weather = com.familyboard.app.notif.WeatherApi.today2(la, lo)
             kotlinx.coroutines.delay(3_600_000L)
         }
     }
-    val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showUpdate by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
@@ -508,7 +526,8 @@ private fun EventLine(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
             color = if (pastStyle) DatePast else DateUp,
-            modifier = Modifier.widthIn(min = 62.dp),
+            // 여러 날 일정 날짜("8/7(금)~8/9")도 다 보이도록 폭 확보(단일 일정도 이 폭에 맞춰 정렬)
+            modifier = Modifier.widthIn(min = 104.dp),
         )
         Spacer(Modifier.size(10.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
