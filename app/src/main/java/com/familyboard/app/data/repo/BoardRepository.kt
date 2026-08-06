@@ -25,6 +25,15 @@ interface BoardRepository {
     /** 보드 전체 항목 수(집계 count, 문서를 내려받지 않음). [createdBy] 지정 시 해당 작성자만. */
     suspend fun countByBoard(board: String, createdBy: String? = null): Int
 
+    /**
+     * 페이지 방식(이전/다음) 1회성 조회. createdAt 정렬([ascending] false=최신순).
+     * [afterCreatedAt] 지정 시 그 값 이후부터(커서). 최대 [limit]개.
+     */
+    suspend fun pageByBoard(
+        board: String, limit: Int, createdBy: String? = null,
+        ascending: Boolean = false, afterCreatedAt: Long? = null,
+    ): List<ListItem>
+
     suspend fun upsertItem(item: ListItem)
     suspend fun setChecked(id: String, checked: Boolean)
     suspend fun updateFields(id: String, fields: Map<String, Any>)

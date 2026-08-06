@@ -72,6 +72,19 @@ class FirestoreBoardRepository(
         return snap.count.toInt()
     }
 
+    override suspend fun pageByBoard(
+        board: String, limit: Int, createdBy: String?, ascending: Boolean, afterCreatedAt: Long?,
+    ): List<ListItem> {
+        var q: com.google.firebase.firestore.Query = itemsCol.whereEqualTo("board", board)
+        if (createdBy != null) q = q.whereEqualTo("createdBy", createdBy)
+        val dir = if (ascending) com.google.firebase.firestore.Query.Direction.ASCENDING
+                  else com.google.firebase.firestore.Query.Direction.DESCENDING
+        q = q.orderBy("createdAt", dir)
+        if (afterCreatedAt != null) q = q.startAfter(afterCreatedAt)
+        q = q.limit(limit.toLong())
+        return q.get().await().documents.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() }
+    }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsCol.document(i.id).set(i).await()

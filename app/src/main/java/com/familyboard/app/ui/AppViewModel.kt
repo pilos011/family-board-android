@@ -59,10 +59,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val board = container.boardRepository
     private val holidayRepo = container.holidayRepository
 
-    private companion object {
-        const val FUN_PAGE = 60  // 재미진 곳 한 페이지 개수(스크롤 시 이만큼씩 더 로드)
-    }
-
     val currentMemberId: StateFlow<String?> =
         container.currentUserStore.currentMemberId
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -111,63 +107,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun placeItems(boardKey: String): StateFlow<List<ListItem>> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
-    // 재미진 곳(유튜브/웹/이미지 게시판). 최신순 페이지네이션: 처음 FUN_PAGE개만 불러오고
-    // 스크롤로 바닥 근처에 오면 limit 을 키워 더 불러온다(3천 개를 한 번에 안 받도록).
+    // 재미진 곳(유튜브/웹/이미지 게시판). 페이지 방식(이전/다음 + 이어보기).
+    // 한 페이지 FUN_PAGE개. 페이지 상태/로딩은 화면(FunListScreen)이 관리하고,
+    // VM 은 1회성 조회(fetchFunPage) · 전체 개수 · 마지막 본 페이지 저장만 담당.
     // BOARD=공용, PRIVATE=내것(쿼리에서 createdBy 로 본인 것만).
-    private val funLimit = MutableStateFlow(FUN_PAGE)
-    private val myFunLimit = MutableStateFlow(FUN_PAGE)
-    // (FUN_PAGE 는 파일 하단 companion object 에 선언)
+    private val userStore = container.currentUserStore
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val funItems: StateFlow<List<ListItem>> =
-        funLimit.flatMapLatest { lim ->
-            board.itemsPaged(com.familyboard.app.data.model.FunBoard.BOARD, lim.toLong())
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    /** 항목 추가/삭제 시 개수 다시 집계하기 위한 트리거. */
+    private val funRefresh = MutableStateFlow(0)
+    private fun bumpFunRefresh() { funRefresh.value++ }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val myFunItems: StateFlow<List<ListItem>> =
-        combine(myFunLimit, currentMemberId) { lim, me -> lim to me }
-            .flatMapLatest { (lim, me) ->
-                if (me.isNullOrBlank()) kotlinx.coroutines.flow.flowOf(emptyList())
-                else board.itemsPaged(com.familyboard.app.data.model.FunBoard.PRIVATE, lim.toLong(), me)
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun funBoardItems(boardKey: String): StateFlow<List<ListItem>> =
-        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunItems else funItems
-
-    // 리스트 화면 카드에 표시할 "전체" 개수(집계 count, 페이징과 무관). 항목 변동 시 다시 집계.
+    // 리스트 화면 카드에 표시할 "전체" 개수(집계 count, 페이지와 무관).
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val funCount: StateFlow<Int> =
-        funItems.flatMapLatest {
+        funRefresh.flatMapLatest {
             kotlinx.coroutines.flow.flow {
-                emit(runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.BOARD) }.getOrDefault(it.size))
+                emit(runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.BOARD) }.getOrDefault(0))
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val myFunCount: StateFlow<Int> =
-        combine(myFunItems, currentMemberId) { list, me -> list to me }
-            .flatMapLatest { (list, me) ->
+        combine(funRefresh, currentMemberId) { _, me -> me }
+            .flatMapLatest { me ->
                 kotlinx.coroutines.flow.flow {
                     emit(if (me.isNullOrBlank()) 0
-                    else runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.PRIVATE, me) }.getOrDefault(list.size))
+                    else runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.PRIVATE, me) }.getOrDefault(0))
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    /** 화면 진입 시 페이지 크기 초기화(다시 들어올 때 큰 창을 다시 받지 않도록). */
-    fun resetFunLimit(boardKey: String) {
-        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunLimit.value = FUN_PAGE
-        else funLimit.value = FUN_PAGE
+    fun funCountFor(boardKey: String): StateFlow<Int> =
+        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunCount else funCount
+
+    /** 페이지 방식 1회성 조회. [afterCreatedAt] 이후부터 [limit]개(최신순/등록순). 내것은 본인 것만. */
+    suspend fun fetchFunPage(boardKey: String, ascending: Boolean, afterCreatedAt: Long?, limit: Int): List<ListItem> {
+        val isPrivate = boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE
+        val createdBy = if (isPrivate) currentMemberId.value else null
+        if (isPrivate && createdBy.isNullOrBlank()) return emptyList()
+        return runCatching { board.pageByBoard(boardKey, limit, createdBy, ascending, afterCreatedAt) }.getOrDefault(emptyList())
     }
 
-    /** 바닥 근처 스크롤 시 다음 페이지. 이미 다 불러왔으면(로드수<limit) 커지지 않는다. */
-    fun loadMoreFun(boardKey: String) {
-        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) {
-            if (myFunItems.value.size >= myFunLimit.value) myFunLimit.value += FUN_PAGE
-        } else {
-            if (funItems.value.size >= funLimit.value) funLimit.value += FUN_PAGE
-        }
-    }
+    /** 마지막 본 페이지(1-based, 0=없음) 흐름/저장 — 다음에 이어보기용. */
+    fun lastFunPage(boardKey: String): kotlinx.coroutines.flow.Flow<Int> = userStore.lastFunPage(boardKey)
+    fun saveLastFunPage(boardKey: String, page: Int) = viewModelScope.launch { userStore.setLastFunPage(boardKey, page) }
 
     /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
     val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)
@@ -243,6 +225,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 board = boardKey, createdBy = currentMemberId.value.orEmpty(),
                 createdAt = System.currentTimeMillis()))
         }
+        bumpFunRefresh()
     }
     /** 공유받은 이미지 여러 장 → 한 항목으로(고화질 업로드). */
     fun handleSharedImages(uris: List<android.net.Uri>) {
@@ -283,6 +266,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 board = targetBoard, createdBy = currentMemberId.value.orEmpty(),
                 createdAt = System.currentTimeMillis()))
         }
+        bumpFunRefresh()
     }
     /** 재미진 곳 항목을 현재 사용자가 봤다고 표시(중복 방지, arrayUnion). */
     fun markFunViewed(item: ListItem) {
@@ -481,7 +465,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { runCatching { board.setChecked(id, checked) } }
-    fun deleteItem(id: String) = viewModelScope.launch { runCatching { board.deleteItem(id) } }
+    fun deleteItem(id: String) = viewModelScope.launch { runCatching { board.deleteItem(id) }; bumpFunRefresh() }
 
     /** 긴급 연락 발송: 대상에게 전체화면 긴급 알림. wantLocation 이면 위치공유 요청 버튼 노출. */
     fun sendEmergency(targetIds: List<String>, message: String, wantLocation: Boolean) = viewModelScope.launch {

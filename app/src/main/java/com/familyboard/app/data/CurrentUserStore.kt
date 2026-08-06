@@ -2,6 +2,7 @@ package com.familyboard.app.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -19,5 +20,15 @@ class CurrentUserStore(private val context: Context) {
 
     suspend fun setCurrentMember(id: String) {
         context.dataStore.edit { it[keyMemberId] = id }
+    }
+
+    // 재미진 곳 "마지막 본 페이지"(1-based, 0=없음). 보드별로 저장 → 다음에 이어보기.
+    private fun funPageKey(board: String) = intPreferencesKey("fun_last_page_$board")
+
+    fun lastFunPage(board: String): Flow<Int> =
+        context.dataStore.data.map { it[funPageKey(board)] ?: 0 }
+
+    suspend fun setLastFunPage(board: String, page: Int) {
+        context.dataStore.edit { it[funPageKey(board)] = page }
     }
 }

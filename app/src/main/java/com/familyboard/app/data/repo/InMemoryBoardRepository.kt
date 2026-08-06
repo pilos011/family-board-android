@@ -43,6 +43,16 @@ class InMemoryBoardRepository : BoardRepository {
     override suspend fun countByBoard(board: String, createdBy: String?): Int =
         itemsFlow.value.count { it.board == board && (createdBy == null || it.createdBy == createdBy) }
 
+    override suspend fun pageByBoard(
+        board: String, limit: Int, createdBy: String?, ascending: Boolean, afterCreatedAt: Long?,
+    ): List<ListItem> {
+        var list = itemsFlow.value.filter { it.board == board && (createdBy == null || it.createdBy == createdBy) }
+        list = if (ascending) list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }
+        if (afterCreatedAt != null)
+            list = list.filter { if (ascending) it.createdAt > afterCreatedAt else it.createdAt < afterCreatedAt }
+        return list.take(limit)
+    }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsFlow.value = itemsFlow.value.filter { it.id != i.id } + i

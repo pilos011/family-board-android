@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,9 +38,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -49,6 +52,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -59,7 +63,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,8 +75,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.sp
@@ -88,6 +94,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import com.familyboard.app.data.model.FunBoard
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.familyboard.app.data.model.ListItem
@@ -102,12 +109,9 @@ fun FunListScreen(
     currentMemberId: String?,
     onBack: () -> Unit,
 ) {
-    val all by vm.funBoardItems(boardKey).collectAsStateWithLifecycle()
-    val items = remember(all, isPrivate, currentMemberId) {
-        if (isPrivate) all.filter { it.createdBy == currentMemberId } else all
-    }
     val context = LocalContext.current
     val shareScope = rememberCoroutineScope()
+    val loadScope = rememberCoroutineScope()
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     fun canEdit(it: ListItem) = it.createdBy == currentMemberId || isParent
 
@@ -123,26 +127,58 @@ fun FunListScreen(
     var oldestFirst by remember { mutableStateOf(false) }
     var hideViewed by remember { mutableStateOf(false) }
 
-    val shown = remember(items, youtubeOn, websiteOn, imageOn, oldestFirst, hideViewed, currentMemberId) {
-        var f = items.filter {
+    // 페이지 방식: 한 페이지 pageSize개. 최신순(기본)/등록순은 서버 정렬로 페이지 이동.
+    val pageSize = 60
+    val totalCount by vm.funCountFor(boardKey).collectAsStateWithLifecycle()
+    val totalPages = if (totalCount <= 0) 1 else (totalCount + pageSize - 1) / pageSize
+
+    // 현재 방향으로 위에서부터 순서대로 불러온 항목(연속). 방향 바뀌면 초기화.
+    var loaded by remember(boardKey) { mutableStateOf<List<ListItem>>(emptyList()) }
+    var pageIndex by remember(boardKey) { mutableStateOf(0) }
+    var loading by remember(boardKey) { mutableStateOf(false) }
+    var resumeDismissed by remember(boardKey) { mutableStateOf(false) }
+    var entrySavedPage by remember(boardKey) { mutableStateOf(0) }
+
+    // 필요한 개수만큼 로드 보장(부족하면 1회 조회로 채움 → 이어보기 점프도 한 번에)
+    suspend fun ensureLoaded(target: Int) {
+        if (loaded.size >= target) return
+        if (totalCount in 1..loaded.size) return
+        loading = true
+        val after = loaded.lastOrNull()?.createdAt
+        val batch = vm.fetchFunPage(boardKey, oldestFirst, after, target - loaded.size)
+        val seen = loaded.mapTo(HashSet()) { it.id }
+        loaded = loaded + batch.filter { seen.add(it.id) }
+        loading = false
+    }
+    fun goToPage(n: Int) {
+        val clamped = n.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
+        pageIndex = clamped
+        resumeDismissed = true
+        vm.saveLastFunPage(boardKey, clamped + 1)
+        loadScope.launch { ensureLoaded((clamped + 1) * pageSize) }
+    }
+
+    // 첫 진입 & 방향(등록순) 변경 시: 초기화 후 1페이지 로드
+    LaunchedEffect(boardKey, oldestFirst) {
+        loaded = emptyList(); pageIndex = 0
+        ensureLoaded(pageSize)
+    }
+    // 진입 시 마지막 본 페이지 스냅샷(이어보기 배너용)
+    LaunchedEffect(boardKey) { entrySavedPage = vm.lastFunPage(boardKey).first() }
+
+    // 현재 페이지 구간을 잘라 필터 적용(필터는 페이지 안에서만 숨김)
+    val shown = remember(loaded, pageIndex, youtubeOn, websiteOn, imageOn, hideViewed, currentMemberId) {
+        val start = pageIndex * pageSize
+        val slice = if (start < loaded.size) loaded.subList(start, minOf(loaded.size, start + pageSize)) else emptyList()
+        slice.filter {
             val yt = isYoutube(it.link)
             val img = it.link.isBlank() && it.photoUrls.isNotEmpty()
             val web = !yt && !img
-            (youtubeOn && yt) || (imageOn && img) || (websiteOn && web)
+            ((youtubeOn && yt) || (imageOn && img) || (websiteOn && web)) &&
+                (!hideViewed || !it.viewedBy.contains(currentMemberId))
         }
-        if (hideViewed) f = f.filter { !it.viewedBy.contains(currentMemberId) }
-        if (oldestFirst) f.sortedBy { it.createdAt } else f.sortedByDescending { it.createdAt }
     }
-
-    // 페이지네이션: 화면 진입 시 페이지 크기 초기화, 바닥 근처 스크롤 시 다음 페이지 로드
-    val gridState = rememberLazyGridState()
-    LaunchedEffect(boardKey) { vm.resetFunLimit(boardKey) }
-    LaunchedEffect(gridState, shown.size) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
-            .collect { lastVisible ->
-                if (shown.isNotEmpty() && lastVisible >= shown.size - 8) vm.loadMoreFun(boardKey)
-            }
-    }
+    val showResume = entrySavedPage > 1 && entrySavedPage <= totalPages && pageIndex == 0 && !resumeDismissed
 
     fun open(link: String) {
         if (link.isBlank()) return
@@ -199,6 +235,14 @@ fun FunListScreen(
                 Icon(Icons.Default.Add, "추가", tint = Color.White)
             }
         },
+        bottomBar = {
+            FunPageBar(
+                page = pageIndex + 1, totalPages = totalPages, loading = loading,
+                onPrev = { if (pageIndex > 0) goToPage(pageIndex - 1) },
+                onNext = { if (pageIndex < totalPages - 1) goToPage(pageIndex + 1) },
+                onGoto = { p -> goToPage(p - 1) },
+            )
+        },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             Row(
@@ -211,35 +255,44 @@ fun FunListScreen(
                 TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
                 TogglePill("안 본", hideViewed) { hideViewed = !hideViewed }
             }
-            if (shown.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (items.isEmpty()) "아직 게시물이 없어요.\n유튜브·웹·이미지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요."
-                        else "표시할 항목이 없어요. (필터 확인)",
+            if (showResume) {
+                ResumeBanner(
+                    page = entrySavedPage,
+                    onResume = { goToPage(entrySavedPage - 1) },
+                    onDismiss = { resumeDismissed = true },
+                )
+            }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                when {
+                    loading && loaded.isEmpty() -> CircularProgressIndicator()
+                    totalCount == 0 -> Text(
+                        "아직 게시물이 없어요.\n유튜브·웹·이미지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요.",
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                     )
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 88.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    gridItems(shown, key = { it.id }) { post ->
-                        FunCell(post, Modifier,
-                            viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
-                            onClick = {
-                                vm.markFunViewed(post)
-                                when {
-                                    isVideo(post.link) -> playUrl = post.link
-                                    post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls
-                                    else -> open(post.link)
-                                }
-                            },
-                            onLongPress = { actionItem = post })
+                    shown.isEmpty() -> Text(
+                        "이 페이지에 표시할 항목이 없어요. (필터 확인)",
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    )
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        gridItems(shown, key = { it.id }) { post ->
+                            FunCell(post, Modifier,
+                                viewed = currentMemberId != null && post.viewedBy.contains(currentMemberId),
+                                onClick = {
+                                    vm.markFunViewed(post)
+                                    when {
+                                        isVideo(post.link) -> playUrl = post.link
+                                        post.link.isBlank() && post.photoUrls.isNotEmpty() -> viewerImages = post.photoUrls
+                                        else -> open(post.link)
+                                    }
+                                },
+                                onLongPress = { actionItem = post })
+                        }
                     }
                 }
             }
@@ -305,6 +358,91 @@ fun FunListScreen(
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
         )
+    }
+}
+
+/** 지난번 본 페이지로 바로 이동하는 배너. */
+@Composable
+private fun ResumeBanner(page: Int, onResume: () -> Unit, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Bookmark, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.size(8.dp))
+        Text(
+            buildAnnotatedString {
+                append("지난번 ")
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("${page}페이지") }
+                append("까지 봤어요")
+            },
+            modifier = Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            "이어보기", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
+            modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary)
+                .clickable { onResume() }.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+        Spacer(Modifier.size(4.dp))
+        Icon(
+            Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp).clip(RoundedCornerShape(10.dp)).clickable { onDismiss() }.padding(2.dp),
+        )
+    }
+}
+
+/** 현재 페이지 주변 + 처음/끝 번호. -1 은 생략(…) 표시. */
+private fun pageWindow(cur: Int, total: Int): List<Int> {
+    if (total <= 7) return (1..total).toList()
+    val set = listOf(1, cur - 1, cur, cur + 1, total).filter { it in 1..total }.toSortedSet()
+    val out = mutableListOf<Int>()
+    var prev = 0
+    for (p in set) {
+        if (prev != 0 && p - prev > 1) out.add(-1)
+        out.add(p); prev = p
+    }
+    return out
+}
+
+/** 하단 페이지 이동 바: ‹ 이전 · 번호(현재 강조) · 다음 › */
+@Composable
+private fun FunPageBar(
+    page: Int, totalPages: Int, loading: Boolean,
+    onPrev: () -> Unit, onNext: () -> Unit, onGoto: (Int) -> Unit,
+) {
+    Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onPrev, enabled = page > 1) {
+                Icon(Icons.Default.ChevronLeft, "이전 페이지")
+            }
+            pageWindow(page, totalPages).forEach { p ->
+                when (p) {
+                    -1 -> Text(
+                        "…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                    )
+                    page -> Box(
+                        Modifier.padding(horizontal = 2.dp).clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primary).padding(horizontal = 11.dp, vertical = 5.dp),
+                    ) { Text("$p", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+                    else -> Text(
+                        "$p", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onGoto(p) }
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                    )
+                }
+            }
+            IconButton(onClick = onNext, enabled = page < totalPages) {
+                Icon(Icons.Default.ChevronRight, "다음 페이지")
+            }
+        }
     }
 }
 
