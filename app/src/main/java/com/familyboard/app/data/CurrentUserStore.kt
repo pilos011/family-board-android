@@ -22,13 +22,15 @@ class CurrentUserStore(private val context: Context) {
         context.dataStore.edit { it[keyMemberId] = id }
     }
 
-    // 재미진 곳 "마지막 본 페이지"(1-based, 0=없음). 보드별로 저장 → 다음에 이어보기.
-    private fun funPageKey(board: String) = intPreferencesKey("fun_last_page_$board")
+    // 재미진 곳 "마지막 본 페이지"(1-based, 0=없음). 보드+정렬방향별로 저장 → 다음에 이어보기.
+    // (최신순/등록순은 페이지 내용이 달라 방향별로 따로 기억한다.)
+    private fun funPageKey(board: String, ascending: Boolean) =
+        intPreferencesKey("fun_last_page_${board}_${if (ascending) "asc" else "desc"}")
 
-    fun lastFunPage(board: String): Flow<Int> =
-        context.dataStore.data.map { it[funPageKey(board)] ?: 0 }
+    fun lastFunPage(board: String, ascending: Boolean): Flow<Int> =
+        context.dataStore.data.map { it[funPageKey(board, ascending)] ?: 0 }
 
-    suspend fun setLastFunPage(board: String, page: Int) {
-        context.dataStore.edit { it[funPageKey(board)] = page }
+    suspend fun setLastFunPage(board: String, ascending: Boolean, page: Int) {
+        context.dataStore.edit { it[funPageKey(board, ascending)] = page }
     }
 }

@@ -147,9 +147,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return runCatching { board.pageByBoard(boardKey, limit, createdBy, ascending, afterCreatedAt) }.getOrDefault(emptyList())
     }
 
-    /** 마지막 본 페이지(1-based, 0=없음) 흐름/저장 — 다음에 이어보기용. */
-    fun lastFunPage(boardKey: String): kotlinx.coroutines.flow.Flow<Int> = userStore.lastFunPage(boardKey)
-    fun saveLastFunPage(boardKey: String, page: Int) = viewModelScope.launch { userStore.setLastFunPage(boardKey, page) }
+    /** 마지막 본 페이지(1-based, 0=없음) 흐름/저장 — 방향별(최신순/등록순) 이어보기용. */
+    fun lastFunPage(boardKey: String, ascending: Boolean): kotlinx.coroutines.flow.Flow<Int> =
+        userStore.lastFunPage(boardKey, ascending)
+    fun saveLastFunPage(boardKey: String, ascending: Boolean, page: Int) =
+        viewModelScope.launch { userStore.setLastFunPage(boardKey, ascending, page) }
 
     /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
     val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)

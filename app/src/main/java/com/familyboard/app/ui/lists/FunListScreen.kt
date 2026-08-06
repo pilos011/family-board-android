@@ -154,17 +154,16 @@ fun FunListScreen(
         val clamped = n.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
         pageIndex = clamped
         resumeDismissed = true
-        vm.saveLastFunPage(boardKey, clamped + 1)
+        vm.saveLastFunPage(boardKey, oldestFirst, clamped + 1)
         loadScope.launch { ensureLoaded((clamped + 1) * pageSize) }
     }
 
-    // 첫 진입 & 방향(등록순) 변경 시: 초기화 후 1페이지 로드
+    // 첫 진입 & 방향(등록순) 변경 시: 초기화 → 그 방향의 마지막 본 페이지 스냅샷 → 1페이지 로드
     LaunchedEffect(boardKey, oldestFirst) {
-        loaded = emptyList(); pageIndex = 0
+        loaded = emptyList(); pageIndex = 0; resumeDismissed = false
+        entrySavedPage = vm.lastFunPage(boardKey, oldestFirst).first()
         ensureLoaded(pageSize)
     }
-    // 진입 시 마지막 본 페이지 스냅샷(이어보기 배너용)
-    LaunchedEffect(boardKey) { entrySavedPage = vm.lastFunPage(boardKey).first() }
 
     // 현재 페이지 구간을 잘라 필터 적용(필터는 페이지 안에서만 숨김)
     val shown = remember(loaded, pageIndex, youtubeOn, websiteOn, imageOn, hideViewed, currentMemberId) {
