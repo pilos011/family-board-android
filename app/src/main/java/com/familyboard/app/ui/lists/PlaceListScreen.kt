@@ -206,6 +206,18 @@ fun PlaceListScreen(
         if (def != null && isNavInstalled(def.pkg)) launchNav(def, name, lat, lng)
         else navTarget = Triple(name, lat, lng)
     }
+    // AI 추천을 리스트(맛집/가볼곳)에 네이버 형식으로 저장. 이미 있으면 건너뜀. 저장 성공 시 true.
+    fun saveRec(rec: com.familyboard.app.notif.Recommendation): Boolean {
+        if (items.any { it.text == rec.naverName }) return false
+        val siGunGu = regionOf(rec.address).split(" ").getOrNull(1).orEmpty()
+        val q = java.net.URLEncoder.encode(listOf(rec.naverName, siGunGu).filter { it.isNotBlank() }.joinToString(" ").trim(), "UTF-8")
+        val link = "https://map.naver.com/p/search/$q"
+        val star = rec.rating?.let { "★$it" + (if (rec.ratingCount > 0) " (리뷰 ${rec.ratingCount})" else "") }.orEmpty()
+        val desc = listOf(rec.category, star).filter { it.isNotBlank() }.joinToString(" · ")
+        vm.addPlace(boardKey, rec.naverName, link, description = desc, address = rec.address,
+            naverScore = rec.rating ?: 0.0, lat = rec.lat ?: 0.0, lng = rec.lng ?: 0.0, category = rec.category)
+        return true
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -279,6 +291,15 @@ fun PlaceListScreen(
                         Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.size(6.dp))
                         Text("아직 안 담은 근처 추천", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        Text("모두 저장", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                            modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary)
+                                .clickable {
+                                    val n = recommends.count { saveRec(it) }
+                                    recommends = emptyList()
+                                    Toast.makeText(context, "${PlaceBoards.titleOf(boardKey)}에 ${n}곳 저장했어요", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp))
+                        Spacer(Modifier.size(8.dp))
                         Icon(Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.size(18.dp).clickable { recommends = emptyList() })
                     }
@@ -300,6 +321,17 @@ fun PlaceListScreen(
                                 if (rec.reason.isNotBlank())
                                     Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
+                            // 저장(리스트에 담기)
+                            Text("저장", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                    .clickable {
+                                        val ok = saveRec(rec)
+                                        recommends = recommends.filterNot { it.naverName == rec.naverName }
+                                        Toast.makeText(context, if (ok) "저장했어요" else "이미 있어요", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp))
+                            Spacer(Modifier.size(8.dp))
                             // 카드 탭=네이버 지도, 아이콘=길찾기(길게 누르면 기본앱 해제)
                             Icon(Icons.Default.Navigation, "길찾기", tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp).combinedClickable(
