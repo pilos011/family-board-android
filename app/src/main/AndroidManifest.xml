@@ -15,15 +15,15 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- 길찾기 앱 조회(Android 11+ 패키지 가시성): 지도앱(geo) + T맵 -->
+    <!-- 길찾기 앱 조회(Android 11+ 패키지 가시성): T맵·네이버지도·카카오지도·구글지도 -->
     <queries>
+        <package android:name="com.skt.tmap.ku" />
+        <package android:name="com.nhn.android.nmap" />
+        <package android:name="net.daum.android.map" />
+        <package android:name="com.google.android.apps.maps" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="geo" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="tmap" />
         </intent>
     </queries>
 

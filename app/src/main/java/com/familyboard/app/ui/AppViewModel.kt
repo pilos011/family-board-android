@@ -148,6 +148,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return runCatching { board.pageByBoard(boardKey, limit, createdBy, ascending, afterCreatedAt) }.getOrDefault(emptyList())
     }
 
+    /** 길찾기 기본 앱("항상" 선택). 빈 값=매번 선택창. */
+    val navDefaultApp: StateFlow<String> =
+        userStore.navDefaultApp.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    fun setNavDefaultApp(key: String) = viewModelScope.launch { userStore.setNavDefaultApp(key) }
+
     /** 마지막 본 페이지(1-based, 0=없음) 흐름/저장 — 방향별(최신순/등록순) 이어보기용. */
     fun lastFunPage(boardKey: String, ascending: Boolean): kotlinx.coroutines.flow.Flow<Int> =
         userStore.lastFunPage(boardKey, ascending)

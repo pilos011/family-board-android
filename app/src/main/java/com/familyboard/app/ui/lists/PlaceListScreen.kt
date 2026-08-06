@@ -9,8 +9,10 @@ import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
@@ -88,7 +91,27 @@ import kotlin.math.sqrt
 // 정렬 키(복수 선택·탭 순서대로 우선순위 혼합 정렬)
 private enum class SortKey(val label: String) { NAVER("네이버 평점순"), DISTANCE("거리순"), COMMENTS("댓글순") }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// 길찾기 대상 앱(4종만). key=저장용, pkg=패키지
+private data class NavApp(val key: String, val label: String, val pkg: String)
+private val NAV_APPS = listOf(
+    NavApp("tmap", "T맵", "com.skt.tmap.ku"),
+    NavApp("naver", "네이버지도", "com.nhn.android.nmap"),
+    NavApp("kakao", "카카오지도", "net.daum.android.map"),
+    NavApp("google", "지도", "com.google.android.apps.maps"),
+)
+/** 앱별 길안내 URI. encLabel 은 이미 URL 인코딩된 상호. 좌표 없으면 geo 검색. */
+private fun navUri(app: NavApp, encLabel: String, lat: Double?, lng: Double?): String {
+    val hasCoord = lat != null && lng != null && (lat != 0.0 || lng != 0.0)
+    if (!hasCoord) return "geo:0,0?q=$encLabel"
+    return when (app.key) {
+        "tmap" -> "tmap://route?goalname=$encLabel&goalx=$lng&goaly=$lat"
+        "naver" -> "nmap://route/car?dlat=$lat&dlng=$lng&dname=$encLabel&appname=com.jun.family_board"
+        "kakao" -> "kakaomap://route?ep=$lat,$lng&by=CAR"
+        else -> "google.navigation:q=$lat,$lng"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PlaceListScreen(
     vm: AppViewModel,
@@ -116,6 +139,9 @@ fun PlaceListScreen(
     // 발굴 추천(카카오+Groq): 결과 목록 / 로딩
     var recommends by remember { mutableStateOf<List<com.familyboard.app.notif.Recommendation>>(emptyList()) }
     var recommending by remember { mutableStateOf(false) }
+    // 길찾기: 기본앱(항상) + 선택창 대상
+    val navDefault by vm.navDefaultApp.collectAsStateWithLifecycle()
+    var navTarget by remember { mutableStateOf<Triple<String, Double?, Double?>?>(null) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
@@ -161,26 +187,21 @@ fun PlaceListScreen(
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://map.naver.com/p/search/$q"))) }
             .onFailure { Toast.makeText(context, "지도를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
-    // 길찾기: 지도앱 선택(chooser). geo: 표준으로 지도앱들 + T맵을 함께 제시.
-    fun openNav(name: String, lat: Double?, lng: Double?) {
-        val hasCoord = lat != null && lng != null && (lat != 0.0 || lng != 0.0)
-        val label = Uri.encode(name.ifBlank { "목적지" })
-        val pm = context.packageManager
-        val tmapUri = if (hasCoord) "tmap://route?goalname=$label&goalx=$lng&goaly=$lat" else "tmap://search?name=$label"
-        val geo = Intent(Intent.ACTION_VIEW, Uri.parse(if (hasCoord) "geo:$lat,$lng?q=$lat,$lng($label)" else "geo:0,0?q=$label"))
-        if (geo.resolveActivity(pm) == null) {
-            // geo 지원 지도앱이 없으면 T맵 직접(없으면 스토어)
-            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(tmapUri))) }
-                .onFailure { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.skt.tmap.ku"))) }
-                    .onFailure { Toast.makeText(context, "길찾기 앱이 없어요", Toast.LENGTH_SHORT).show() } }
-            return
+    fun isNavInstalled(pkg: String) = runCatching { context.packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
+    fun launchNav(app: NavApp, name: String, lat: Double?, lng: Double?) {
+        val enc = Uri.encode(name.ifBlank { "목적지" })
+        val i = Intent(Intent.ACTION_VIEW, Uri.parse(navUri(app, enc, lat, lng))).setPackage(app.pkg)
+        runCatching { context.startActivity(i) }.onFailure {
+            val hasCoord = lat != null && lng != null && (lat != 0.0 || lng != 0.0)
+            val g = Intent(Intent.ACTION_VIEW, Uri.parse(if (hasCoord) "geo:$lat,$lng?q=$lat,$lng($enc)" else "geo:0,0?q=$enc")).setPackage(app.pkg)
+            runCatching { context.startActivity(g) }.onFailure { Toast.makeText(context, "${app.label}을 열 수 없어요", Toast.LENGTH_SHORT).show() }
         }
-        val chooser = Intent.createChooser(geo, "길찾기 앱 선택")
-        // T맵은 geo 미지원일 수 있어 목록에 명시적으로 추가
-        val tmap = Intent(Intent.ACTION_VIEW, Uri.parse(tmapUri))
-        if (tmap.resolveActivity(pm) != null) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(tmap))
-        runCatching { context.startActivity(chooser) }
-            .onFailure { Toast.makeText(context, "길찾기 앱을 열 수 없어요", Toast.LENGTH_SHORT).show() }
+    }
+    // 길찾기: '항상' 앱이 있으면 바로, 없으면 4개 중 선택창(navTarget)
+    fun openNav(name: String, lat: Double?, lng: Double?) {
+        val def = NAV_APPS.firstOrNull { it.key == navDefault }
+        if (def != null && isNavInstalled(def.pkg)) launchNav(def, name, lat, lng)
+        else navTarget = Triple(name, lat, lng)
     }
 
     Scaffold(
@@ -274,9 +295,12 @@ fun PlaceListScreen(
                                 if (rec.reason.isNotBlank())
                                     Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
-                            // 카드 탭=네이버 지도, 아이콘=길찾기(앱 선택)
+                            // 카드 탭=네이버 지도, 아이콘=길찾기(길게 누르면 기본앱 해제)
                             Icon(Icons.Default.Navigation, "길찾기", tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp).clickable { openNav(rec.naverName, rec.lat, rec.lng) })
+                                modifier = Modifier.size(18.dp).combinedClickable(
+                                    onClick = { openNav(rec.naverName, rec.lat, rec.lng) },
+                                    onLongClick = { vm.setNavDefaultApp(""); Toast.makeText(context, "길찾기 기본앱 해제(다음엔 선택창)", Toast.LENGTH_SHORT).show() },
+                                ))
                             Spacer(Modifier.size(10.dp))
                             Icon(Icons.Default.OpenInNew, "네이버 지도", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         }
@@ -330,6 +354,7 @@ fun PlaceListScreen(
                             distanceText = myLoc?.let { distanceOrNull(it, place)?.let { d -> fmtDist(d) } },
                             onOpenLink = { openLink(place.link) },
                             onNav = { openNav(place.text, place.lat, place.lng) },
+                            onNavReset = { vm.setNavDefaultApp(""); Toast.makeText(context, "길찾기 기본앱 해제(다음엔 선택창)", Toast.LENGTH_SHORT).show() },
                             onAddComment = { t -> vm.addPlaceComment(place, t) },
                             onEditComment = { i, t -> editComment = Triple(place, i, t) },
                             onDeleteComment = { i -> commentDelete = place to i },
@@ -393,6 +418,42 @@ fun PlaceListScreen(
         )
     }
 
+    // 길찾기 앱 선택창(4개만) + '항상' 저장
+    navTarget?.let { (nm, la, ln) ->
+        var always by remember { mutableStateOf(false) }
+        val apps = NAV_APPS.filter { isNavInstalled(it.pkg) }
+        AlertDialog(
+            onDismissRequest = { navTarget = null },
+            title = { Text("길찾기 앱 선택") },
+            text = {
+                Column {
+                    if (apps.isEmpty()) Text("설치된 지도 앱이 없어요")
+                    apps.forEach { app ->
+                        Text(
+                            app.label, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    if (always) vm.setNavDefaultApp(app.key)
+                                    launchNav(app, nm, la, ln); navTarget = null
+                                }
+                                .padding(vertical = 12.dp, horizontal = 6.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { always = !always }.padding(4.dp),
+                    ) {
+                        Checkbox(checked = always, onCheckedChange = { always = it })
+                        Text("항상 이 앱으로 열기", fontSize = 14.sp)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { navTarget = null }) { Text("취소") } },
+        )
+    }
+
     // 필터 바텀시트: 카테고리·지역 칩(개수 포함)을 한눈에
     if (showFilter) {
         ModalBottomSheet(onDismissRequest = { showFilter = false }) {
@@ -451,6 +512,7 @@ private fun FilterChip(label: String, count: Int, on: Boolean, onClick: () -> Un
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlaceCard(
     item: ListItem,
@@ -458,6 +520,7 @@ private fun PlaceCard(
     distanceText: String?,
     onOpenLink: () -> Unit,
     onNav: () -> Unit,
+    onNavReset: () -> Unit,
     onAddComment: (String) -> Unit,
     onEditComment: (Int, String) -> Unit,
     onDeleteComment: (Int) -> Unit,
@@ -496,13 +559,10 @@ private fun PlaceCard(
                             Text(distanceText, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
                         }
-                        // 길찾기(지도앱 선택)
+                        // 길찾기(지도앱 선택). 길게 누르면 기본앱 해제. (네이버 링크는 상호 클릭으로 열림)
                         Icon(Icons.Default.Navigation, "길찾기", tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onNav() })
-                        if (item.link.isNotBlank()) {
-                            Icon(Icons.Default.OpenInNew, "링크 열기", tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onOpenLink() })
-                        }
+                            modifier = Modifier.padding(start = 6.dp).size(20.dp)
+                                .combinedClickable(onClick = { onNav() }, onLongClick = { onNavReset() }))
                     }
                     if (item.description.isNotBlank()) {
                         Text(item.description, fontSize = 13.sp, lineHeight = 18.sp,

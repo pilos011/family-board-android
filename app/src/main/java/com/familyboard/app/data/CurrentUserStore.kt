@@ -33,4 +33,11 @@ class CurrentUserStore(private val context: Context) {
     suspend fun setLastFunPage(board: String, ascending: Boolean, page: Int) {
         context.dataStore.edit { it[funPageKey(board, ascending)] = page }
     }
+
+    // 길찾기 기본 앱("항상" 선택 시 저장). 빈 값=매번 선택창.
+    private val keyNavApp = stringPreferencesKey("nav_default_app")
+    val navDefaultApp: Flow<String> = context.dataStore.data.map { it[keyNavApp] ?: "" }
+    suspend fun setNavDefaultApp(key: String) {
+        context.dataStore.edit { if (key.isBlank()) it.remove(keyNavApp) else it[keyNavApp] = key }
+    }
 }
