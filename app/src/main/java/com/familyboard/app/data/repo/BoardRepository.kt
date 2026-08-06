@@ -22,6 +22,9 @@ interface BoardRepository {
      */
     fun itemsPaged(board: String, limit: Long, createdBy: String? = null): Flow<List<ListItem>>
 
+    /** 보드 전체 항목 수(집계 count, 문서를 내려받지 않음). [createdBy] 지정 시 해당 작성자만. */
+    suspend fun countByBoard(board: String, createdBy: String? = null): Int
+
     suspend fun upsertItem(item: ListItem)
     suspend fun setChecked(id: String, checked: Boolean)
     suspend fun updateFields(id: String, fields: Map<String, Any>)

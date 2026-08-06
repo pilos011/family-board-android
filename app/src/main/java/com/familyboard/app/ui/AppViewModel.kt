@@ -135,6 +135,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun funBoardItems(boardKey: String): StateFlow<List<ListItem>> =
         if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunItems else funItems
 
+    // 리스트 화면 카드에 표시할 "전체" 개수(집계 count, 페이징과 무관). 항목 변동 시 다시 집계.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val funCount: StateFlow<Int> =
+        funItems.flatMapLatest {
+            kotlinx.coroutines.flow.flow {
+                emit(runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.BOARD) }.getOrDefault(it.size))
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val myFunCount: StateFlow<Int> =
+        combine(myFunItems, currentMemberId) { list, me -> list to me }
+            .flatMapLatest { (list, me) ->
+                kotlinx.coroutines.flow.flow {
+                    emit(if (me.isNullOrBlank()) 0
+                    else runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.PRIVATE, me) }.getOrDefault(list.size))
+                }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     /** 화면 진입 시 페이지 크기 초기화(다시 들어올 때 큰 창을 다시 받지 않도록). */
     fun resetFunLimit(boardKey: String) {
         if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunLimit.value = FUN_PAGE

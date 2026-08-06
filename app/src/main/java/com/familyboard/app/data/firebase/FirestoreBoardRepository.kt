@@ -65,6 +65,13 @@ class FirestoreBoardRepository(
         awaitClose { reg.remove() }
     }
 
+    override suspend fun countByBoard(board: String, createdBy: String?): Int {
+        var q: com.google.firebase.firestore.Query = itemsCol.whereEqualTo("board", board)
+        if (createdBy != null) q = q.whereEqualTo("createdBy", createdBy)
+        val snap = q.count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
+        return snap.count.toInt()
+    }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsCol.document(i.id).set(i).await()

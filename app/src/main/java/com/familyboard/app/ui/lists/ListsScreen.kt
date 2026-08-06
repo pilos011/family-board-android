@@ -86,8 +86,8 @@ fun ListsScreen(
     val todo by vm.todoItems.collectAsStateWithLifecycle()
     val restaurant by vm.restaurantItems.collectAsStateWithLifecycle()
     val visit by vm.visitItems.collectAsStateWithLifecycle()
-    val funPosts by vm.funItems.collectAsStateWithLifecycle()
-    val myFunPosts by vm.myFunItems.collectAsStateWithLifecycle()
+    val funCount by vm.funCount.collectAsStateWithLifecycle()
+    val myFunCount by vm.myFunCount.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
@@ -115,8 +115,8 @@ fun ListsScreen(
             Spacer(Modifier.height(10.dp))
             // 둘째 행: 재미진 곳(공용) · 내 재미진 곳(나만)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CompactBoardCard("재미진 곳", funPosts.size, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
-                CompactBoardCard("내 재미진 곳", myFunPosts.count { it.createdBy == currentMemberId }, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
+                CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
+                CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
                 Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
             }
             Spacer(Modifier.height(16.dp))

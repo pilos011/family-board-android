@@ -40,6 +40,9 @@ class InMemoryBoardRepository : BoardRepository {
                 .take(limit.toInt())
         }
 
+    override suspend fun countByBoard(board: String, createdBy: String?): Int =
+        itemsFlow.value.count { it.board == board && (createdBy == null || it.createdBy == createdBy) }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsFlow.value = itemsFlow.value.filter { it.id != i.id } + i
