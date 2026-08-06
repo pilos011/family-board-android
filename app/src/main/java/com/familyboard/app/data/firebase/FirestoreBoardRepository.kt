@@ -54,6 +54,17 @@ class FirestoreBoardRepository(
         awaitClose { reg.remove() }
     }
 
+    override fun itemsPaged(board: String, limit: Long, createdBy: String?): Flow<List<ListItem>> = callbackFlow {
+        var q: com.google.firebase.firestore.Query = itemsCol.whereEqualTo("board", board)
+        if (createdBy != null) q = q.whereEqualTo("createdBy", createdBy)
+        q = q.orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).limit(limit)
+        val reg = q.addSnapshotListener { snap, err ->
+            if (err != null) { close(err); return@addSnapshotListener }
+            trySend(snap?.documents?.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() } ?: emptyList())
+        }
+        awaitClose { reg.remove() }
+    }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsCol.document(i.id).set(i).await()

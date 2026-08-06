@@ -33,6 +33,13 @@ class InMemoryBoardRepository : BoardRepository {
     override fun items(board: String): Flow<List<ListItem>> =
         itemsFlow.map { list -> list.filter { it.board == board } }
 
+    override fun itemsPaged(board: String, limit: Long, createdBy: String?): Flow<List<ListItem>> =
+        itemsFlow.map { list ->
+            list.filter { it.board == board && (createdBy == null || it.createdBy == createdBy) }
+                .sortedByDescending { it.createdAt }
+                .take(limit.toInt())
+        }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsFlow.value = itemsFlow.value.filter { it.id != i.id } + i

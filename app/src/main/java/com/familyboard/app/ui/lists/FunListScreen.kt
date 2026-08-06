@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -130,6 +132,16 @@ fun FunListScreen(
         }
         if (hideViewed) f = f.filter { !it.viewedBy.contains(currentMemberId) }
         if (oldestFirst) f.sortedBy { it.createdAt } else f.sortedByDescending { it.createdAt }
+    }
+
+    // 페이지네이션: 화면 진입 시 페이지 크기 초기화, 바닥 근처 스크롤 시 다음 페이지 로드
+    val gridState = rememberLazyGridState()
+    LaunchedEffect(boardKey) { vm.resetFunLimit(boardKey) }
+    LaunchedEffect(gridState, shown.size) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+            .collect { lastVisible ->
+                if (shown.isNotEmpty() && lastVisible >= shown.size - 8) vm.loadMoreFun(boardKey)
+            }
     }
 
     fun open(link: String) {
@@ -210,6 +222,7 @@ fun FunListScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 88.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),

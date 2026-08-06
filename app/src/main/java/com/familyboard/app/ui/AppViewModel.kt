@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -57,6 +58,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val container = (app as FamilyBoardApp).container
     private val board = container.boardRepository
     private val holidayRepo = container.holidayRepository
+
+    private companion object {
+        const val FUN_PAGE = 60  // 재미진 곳 한 페이지 개수(스크롤 시 이만큼씩 더 로드)
+    }
 
     val currentMemberId: StateFlow<String?> =
         container.currentUserStore.currentMemberId
@@ -106,15 +111,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun placeItems(boardKey: String): StateFlow<List<ListItem>> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
-    // 재미진 곳(유튜브/웹/이미지 게시판). BOARD=공용, PRIVATE=내것(화면에서 createdBy 필터)
+    // 재미진 곳(유튜브/웹/이미지 게시판). 최신순 페이지네이션: 처음 FUN_PAGE개만 불러오고
+    // 스크롤로 바닥 근처에 오면 limit 을 키워 더 불러온다(3천 개를 한 번에 안 받도록).
+    // BOARD=공용, PRIVATE=내것(쿼리에서 createdBy 로 본인 것만).
+    private val funLimit = MutableStateFlow(FUN_PAGE)
+    private val myFunLimit = MutableStateFlow(FUN_PAGE)
+    // (FUN_PAGE 는 파일 하단 companion object 에 선언)
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val funItems: StateFlow<List<ListItem>> =
-        board.items(com.familyboard.app.data.model.FunBoard.BOARD)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        funLimit.flatMapLatest { lim ->
+            board.itemsPaged(com.familyboard.app.data.model.FunBoard.BOARD, lim.toLong())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val myFunItems: StateFlow<List<ListItem>> =
-        board.items(com.familyboard.app.data.model.FunBoard.PRIVATE)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        combine(myFunLimit, currentMemberId) { lim, me -> lim to me }
+            .flatMapLatest { (lim, me) ->
+                if (me.isNullOrBlank()) kotlinx.coroutines.flow.flowOf(emptyList())
+                else board.itemsPaged(com.familyboard.app.data.model.FunBoard.PRIVATE, lim.toLong(), me)
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun funBoardItems(boardKey: String): StateFlow<List<ListItem>> =
         if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunItems else funItems
+
+    /** 화면 진입 시 페이지 크기 초기화(다시 들어올 때 큰 창을 다시 받지 않도록). */
+    fun resetFunLimit(boardKey: String) {
+        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunLimit.value = FUN_PAGE
+        else funLimit.value = FUN_PAGE
+    }
+
+    /** 바닥 근처 스크롤 시 다음 페이지. 이미 다 불러왔으면(로드수<limit) 커지지 않는다. */
+    fun loadMoreFun(boardKey: String) {
+        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) {
+            if (myFunItems.value.size >= myFunLimit.value) myFunLimit.value += FUN_PAGE
+        } else {
+            if (funItems.value.size >= funLimit.value) funLimit.value += FUN_PAGE
+        }
+    }
 
     /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
     val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)

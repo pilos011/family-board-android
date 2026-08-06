@@ -15,6 +15,13 @@ interface BoardRepository {
     suspend fun deleteEvent(id: String)
 
     fun items(board: String): Flow<List<ListItem>>
+
+    /**
+     * 최신순(createdAt 내림차순) 페이지네이션용. 최대 [limit]개만 불러오는 실시간 스트림.
+     * [createdBy] 가 지정되면 해당 작성자 항목만(내 재미진 곳). limit 을 키우면 더 불러온다.
+     */
+    fun itemsPaged(board: String, limit: Long, createdBy: String? = null): Flow<List<ListItem>>
+
     suspend fun upsertItem(item: ListItem)
     suspend fun setChecked(id: String, checked: Boolean)
     suspend fun updateFields(id: String, fields: Map<String, Any>)
