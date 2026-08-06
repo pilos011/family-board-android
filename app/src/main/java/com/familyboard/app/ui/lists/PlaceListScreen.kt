@@ -153,9 +153,11 @@ fun PlaceListScreen(
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
-    // 추천 장소를 네이버 지도에서 열기. 상호만으로 검색(주소까지 넣으면 장소검색이 실패함).
-    fun openNaver(name: String) {
-        val q = java.net.URLEncoder.encode(name.trim(), "UTF-8")
+    // 추천 장소를 네이버 지도에서 열기. "상호 분류 시/군/구"로 검색(전체 주소는 검색 실패).
+    fun openNaver(name: String, category: String, address: String) {
+        val siGunGu = regionOf(address).split(" ").getOrNull(1).orEmpty()
+        val q = java.net.URLEncoder.encode(
+            listOf(name, category, siGunGu).filter { it.isNotBlank() }.joinToString(" ").trim(), "UTF-8")
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://map.naver.com/p/search/$q"))) }
             .onFailure { Toast.makeText(context, "지도를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
@@ -240,7 +242,7 @@ fun PlaceListScreen(
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                                 .background(MaterialTheme.colorScheme.surface)
-                                .clickable { openNaver(rec.name) }
+                                .clickable { openNaver(rec.name, rec.category, rec.address) }
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
