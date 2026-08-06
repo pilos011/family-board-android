@@ -500,7 +500,8 @@ private fun EventLine(
     val end = date.plusDays(dur)
     val multi = end != date
     val dowS = KrDow[date.dayOfWeek.value - 1]
-    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}(${dowS})~${end.monthValue}/${end.dayOfMonth}"
+    val dowE = KrDow[end.dayOfWeek.value - 1]
+    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}(${dowS})~${end.monthValue}/${end.dayOfMonth}(${dowE})"
     else "${date.monthValue}/${date.dayOfMonth}(${dowS})"
     val sub = when {
         multi -> ""
@@ -522,16 +523,15 @@ private fun EventLine(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 날짜는 내용 폭만 차지(고정폭 X) → 색상 점을 날짜 바로 뒤에 붙여 제목 공간 최대 확보
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
             color = if (pastStyle) DatePast else DateUp,
-            // 여러 날 일정 날짜("8/7(금)~8/9")도 다 보이도록 폭 확보(단일 일정도 이 폭에 맞춰 정렬)
-            modifier = Modifier.widthIn(min = 104.dp),
         )
-        Spacer(Modifier.size(10.dp))
+        Spacer(Modifier.size(6.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
-        Spacer(Modifier.size(9.dp))
+        Spacer(Modifier.size(8.dp))
         Text(
             e.title + sub,
             modifier = Modifier.weight(1f),
