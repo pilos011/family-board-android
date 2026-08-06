@@ -161,16 +161,26 @@ fun PlaceListScreen(
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://map.naver.com/p/search/$q"))) }
             .onFailure { Toast.makeText(context, "지도를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
-    // T맵으로 목적지 안내. 좌표 있으면 경로안내, 없으면 상호 검색. 미설치 시 스토어로.
-    fun openTmap(name: String, lat: Double?, lng: Double?) {
-        val enc = java.net.URLEncoder.encode(name.ifBlank { "목적지" }, "UTF-8")
-        val uri = if (lat != null && lng != null && (lat != 0.0 || lng != 0.0))
-            "tmap://route?goalname=$enc&goalx=$lng&goaly=$lat" else "tmap://search?name=$enc"
-        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri))) }
-            .onFailure {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.skt.tmap.ku"))) }
-                    .onFailure { Toast.makeText(context, "T맵을 열 수 없어요", Toast.LENGTH_SHORT).show() }
-            }
+    // 길찾기: 지도앱 선택(chooser). geo: 표준으로 지도앱들 + T맵을 함께 제시.
+    fun openNav(name: String, lat: Double?, lng: Double?) {
+        val hasCoord = lat != null && lng != null && (lat != 0.0 || lng != 0.0)
+        val label = Uri.encode(name.ifBlank { "목적지" })
+        val pm = context.packageManager
+        val tmapUri = if (hasCoord) "tmap://route?goalname=$label&goalx=$lng&goaly=$lat" else "tmap://search?name=$label"
+        val geo = Intent(Intent.ACTION_VIEW, Uri.parse(if (hasCoord) "geo:$lat,$lng?q=$lat,$lng($label)" else "geo:0,0?q=$label"))
+        if (geo.resolveActivity(pm) == null) {
+            // geo 지원 지도앱이 없으면 T맵 직접(없으면 스토어)
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(tmapUri))) }
+                .onFailure { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.skt.tmap.ku"))) }
+                    .onFailure { Toast.makeText(context, "길찾기 앱이 없어요", Toast.LENGTH_SHORT).show() } }
+            return
+        }
+        val chooser = Intent.createChooser(geo, "길찾기 앱 선택")
+        // T맵은 geo 미지원일 수 있어 목록에 명시적으로 추가
+        val tmap = Intent(Intent.ACTION_VIEW, Uri.parse(tmapUri))
+        if (tmap.resolveActivity(pm) != null) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(tmap))
+        runCatching { context.startActivity(chooser) }
+            .onFailure { Toast.makeText(context, "길찾기 앱을 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
 
     Scaffold(
@@ -264,9 +274,9 @@ fun PlaceListScreen(
                                 if (rec.reason.isNotBlank())
                                     Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
-                            // 카드 탭=네이버 지도, 아이콘=T맵 길안내
-                            Icon(Icons.Default.Navigation, "T맵 길안내", tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp).clickable { openTmap(rec.naverName, rec.lat, rec.lng) })
+                            // 카드 탭=네이버 지도, 아이콘=길찾기(앱 선택)
+                            Icon(Icons.Default.Navigation, "길찾기", tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp).clickable { openNav(rec.naverName, rec.lat, rec.lng) })
                             Spacer(Modifier.size(10.dp))
                             Icon(Icons.Default.OpenInNew, "네이버 지도", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         }
@@ -319,7 +329,7 @@ fun PlaceListScreen(
                             currentMemberId = currentMemberId,
                             distanceText = myLoc?.let { distanceOrNull(it, place)?.let { d -> fmtDist(d) } },
                             onOpenLink = { openLink(place.link) },
-                            onTmap = { openTmap(place.text, place.lat, place.lng) },
+                            onNav = { openNav(place.text, place.lat, place.lng) },
                             onAddComment = { t -> vm.addPlaceComment(place, t) },
                             onEditComment = { i, t -> editComment = Triple(place, i, t) },
                             onDeleteComment = { i -> commentDelete = place to i },
@@ -447,7 +457,7 @@ private fun PlaceCard(
     currentMemberId: String?,
     distanceText: String?,
     onOpenLink: () -> Unit,
-    onTmap: () -> Unit,
+    onNav: () -> Unit,
     onAddComment: (String) -> Unit,
     onEditComment: (Int, String) -> Unit,
     onDeleteComment: (Int) -> Unit,
@@ -486,9 +496,9 @@ private fun PlaceCard(
                             Text(distanceText, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
                         }
-                        // T맵 길안내(목적지 바로 인식)
-                        Icon(Icons.Default.Navigation, "T맵 길안내", tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onTmap() })
+                        // 길찾기(지도앱 선택)
+                        Icon(Icons.Default.Navigation, "길찾기", tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onNav() })
                         if (item.link.isNotBlank()) {
                             Icon(Icons.Default.OpenInNew, "링크 열기", tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onOpenLink() })
