@@ -31,9 +31,9 @@ data class PlaceInfo(
 /** 범용 링크(유튜브/웹) 미리보기 파싱 결과 */
 data class LinkInfo(val title: String = "", val image: String = "", val url: String = "")
 
-/** 발굴 추천 결과 1건(Google 실제 장소·평점 + Groq 근거). dist=거리(km, 없으면 null). */
+/** 발굴 추천 결과 1건(Google 실제 장소·평점). naverName=네이버 검색용 정리된 상호. */
 data class Recommendation(
-    val name: String, val category: String, val address: String, val dist: Double?,
+    val name: String, val naverName: String, val category: String, val address: String, val dist: Double?,
     val rating: Double?, val ratingCount: Int, val reason: String,
 )
 
@@ -157,7 +157,8 @@ object NotifyApi {
                 (0 until arr.length()).map { i ->
                     val o = arr.getJSONObject(i)
                     Recommendation(
-                        name = o.optString("name"), category = o.optString("category"),
+                        name = o.optString("name"), naverName = o.optString("naverName").ifBlank { o.optString("name") },
+                        category = o.optString("category"),
                         address = o.optString("address"),
                         dist = if (o.isNull("dist")) null else o.optDouble("dist"),
                         rating = if (o.isNull("rating")) null else o.optDouble("rating"),

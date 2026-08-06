@@ -242,7 +242,7 @@ fun PlaceListScreen(
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                                 .background(MaterialTheme.colorScheme.surface)
-                                .clickable { openNaver(rec.name, rec.category, rec.address) }
+                                .clickable { openNaver(rec.naverName, rec.category, rec.address) }
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
