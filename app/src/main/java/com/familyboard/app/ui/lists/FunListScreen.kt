@@ -330,8 +330,23 @@ fun FunListScreen(
 
     playUrl?.let { url -> VideoPlayerDialog(url) { playUrl = null } }
 
-    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img -> vm.addFun(boardKey, t, l, if (img.isBlank()) emptyList() else listOf(img)); showAdd = false }, onDismiss = { showAdd = false })
-    editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img -> vm.updateFun(it0, t, l, img); editItem = null }, onDismiss = { editItem = null }) }
+    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img ->
+        val photos = if (img.isBlank()) emptyList() else listOf(img)
+        // 추가 후 새 항목이 바로 보이도록 1페이지 재로드(비실시간)
+        loadScope.launch { vm.addFun(boardKey, t, l, photos).join(); loaded = emptyList(); pageIndex = 0; ensureLoaded(pageSize) }
+        showAdd = false
+    }, onDismiss = { showAdd = false })
+    editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img ->
+        vm.updateFun(it0, t, l, img)
+        // 낙관적 갱신(비실시간): 로컬 loaded 도 즉시 반영. photoUrls 계산은 VM.updateFun 과 동일 규칙.
+        val photos = when {
+            img.isBlank() -> it0.photoUrls
+            it0.photoUrls.size > 1 && it0.photoUrls.firstOrNull() == img -> it0.photoUrls
+            else -> listOf(img)
+        }
+        loaded = loaded.map { if (it.id == it0.id) it.copy(text = t.trim(), link = l.trim(), photoUrls = photos) else it }
+        editItem = null
+    }, onDismiss = { editItem = null }) }
     actionItem?.let { it0 ->
         val editable = canEdit(it0)
         val toPrivate = boardKey != FunBoard.PRIVATE
@@ -368,7 +383,11 @@ fun FunListScreen(
             title = { Text("삭제") },
             text = { Text("이 게시물을 삭제할까요?") },
             confirmButton = {
-                TextButton(onClick = { vm.deleteItem(target.id); pendingDelete = null }) {
+                TextButton(onClick = {
+                    vm.deleteItem(target.id)
+                    loaded = loaded.filterNot { it.id == target.id }  // 낙관적 갱신(비실시간)
+                    pendingDelete = null
+                }) {
                     Text("삭제", color = Color(0xFFE03131))
                 }
             },
