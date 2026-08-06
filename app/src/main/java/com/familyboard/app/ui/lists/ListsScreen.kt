@@ -154,10 +154,10 @@ fun ListsScreen(
     }
 }
 
-/** 준호는 2026-11-19 00:00(KST, 자정)까지 재미진 곳/내 재미진 곳을 못 보게(하드코딩). */
+/** 준호는 2026-11-20 00:00(KST, 자정)까지 재미진 곳/내 재미진 곳을 못 보게(하드코딩). */
 private fun funBoardsVisibleFor(memberId: String?): Boolean {
     if (memberId != "junho") return true
-    val revealAt = java.time.LocalDateTime.of(2026, 11, 19, 0, 0)
+    val revealAt = java.time.LocalDateTime.of(2026, 11, 20, 0, 0)
         .atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
     return System.currentTimeMillis() >= revealAt
 }

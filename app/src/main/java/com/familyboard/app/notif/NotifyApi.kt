@@ -35,6 +35,7 @@ data class LinkInfo(val title: String = "", val image: String = "", val url: Str
 data class Recommendation(
     val name: String, val naverName: String, val category: String, val address: String, val dist: Double?,
     val rating: Double?, val ratingCount: Int, val reason: String,
+    val lat: Double?, val lng: Double?,
 )
 
 object NotifyApi {
@@ -164,6 +165,8 @@ object NotifyApi {
                         rating = if (o.isNull("rating")) null else o.optDouble("rating"),
                         ratingCount = o.optInt("ratingCount"),
                         reason = o.optString("reason"),
+                        lat = if (o.isNull("lat")) null else o.optDouble("lat"),
+                        lng = if (o.isNull("lng")) null else o.optDouble("lng"),
                     )
                 }
             }.onFailure { Log.w(TAG, "recommend 실패", it) }.getOrDefault(emptyList())

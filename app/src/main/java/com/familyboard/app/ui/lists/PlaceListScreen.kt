@@ -39,10 +39,9 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -86,10 +85,8 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private val Gold = Color(0xFFF6B23C)
-private const val EUNSEON = "eunseon"
-
-private enum class SortMode(val label: String) { NAVER("네이버 평점순"), EUNSEON_SCORE("은선 평점순"), DISTANCE("거리순") }
+// 정렬 키(복수 선택·탭 순서대로 우선순위 혼합 정렬)
+private enum class SortKey(val label: String) { NAVER("네이버 평점순"), DISTANCE("거리순"), COMMENTS("댓글순") }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,13 +99,12 @@ fun PlaceListScreen(
     val items by vm.placeItems(boardKey).collectAsStateWithLifecycle()
     val title = PlaceBoards.titleOf(boardKey)
     val context = LocalContext.current
-    val canRate = currentMemberId == EUNSEON
 
     var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
-    var sortMode by remember { mutableStateOf(SortMode.NAVER) }
+    // 정렬: 선택한 키들을 탭 순서대로 우선순위 적용(혼합). 비면 네이버 평점순.
+    var sortKeys by remember { mutableStateOf(listOf(SortKey.NAVER)) }
     var myLoc by remember { mutableStateOf<Location?>(null) }
-    var ratingConfirm by remember { mutableStateOf<Pair<ListItem, Int>?>(null) }
     var editComment by remember { mutableStateOf<Triple<ListItem, Int, String>?>(null) }
     // 삭제 확인용: 삭제하려는 장소 / 삭제하려는 댓글(장소+인덱스)
     var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
@@ -124,7 +120,7 @@ fun PlaceListScreen(
 
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
     // 정렬/필터 바꾸면 항상 맨 위로 이동
-    LaunchedEffect(sortMode, catFilter, regionFilter) { listState.scrollToItem(0) }
+    LaunchedEffect(sortKeys, catFilter, regionFilter) { listState.scrollToItem(0) }
 
     // 필터 옵션(데이터에 실제 있는 값만) + 개수
     val catCounts = remember(items) { items.groupingBy { it.category.ifBlank { "기타" } }.eachCount() }
@@ -136,16 +132,20 @@ fun PlaceListScreen(
                 (regionFilter == null || regionOf(it.address).ifBlank { "기타" } == regionFilter)
         }
     }
-    val sorted = remember(filtered, sortMode, myLoc) {
-        when (sortMode) {
-            SortMode.NAVER -> filtered.sortedWith(compareByDescending<ListItem> { it.naverScore }.thenBy { it.text })
-            SortMode.EUNSEON_SCORE -> filtered.sortedWith(compareByDescending<ListItem> { it.rating }.thenBy { it.text })
-            SortMode.DISTANCE -> {
-                val me = myLoc
-                if (me == null) filtered
-                else filtered.sortedBy { distanceOrNull(me, it) ?: Double.MAX_VALUE }
+    // 선택한 정렬 키를 탭 순서대로 우선순위 적용(혼합 정렬). 비면 네이버 평점순.
+    val sorted = remember(filtered, sortKeys, myLoc) {
+        val keys = sortKeys.ifEmpty { listOf(SortKey.NAVER) }
+        val me = myLoc
+        var cmp: Comparator<ListItem>? = null
+        for (k in keys) {
+            val c: Comparator<ListItem> = when (k) {
+                SortKey.NAVER -> compareByDescending { it.naverScore }
+                SortKey.COMMENTS -> compareByDescending { it.progress.size }
+                SortKey.DISTANCE -> compareBy { if (me == null) Double.MAX_VALUE else (distanceOrNull(me, it) ?: Double.MAX_VALUE) }
             }
+            cmp = cmp?.then(c) ?: c
         }
+        filtered.sortedWith((cmp ?: compareByDescending { it.naverScore }).thenBy { it.text })
     }
 
     fun openLink(link: String) {
@@ -160,6 +160,17 @@ fun PlaceListScreen(
             listOf(name, category, siGunGu).filter { it.isNotBlank() }.joinToString(" ").trim(), "UTF-8")
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://map.naver.com/p/search/$q"))) }
             .onFailure { Toast.makeText(context, "지도를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+    }
+    // T맵으로 목적지 안내. 좌표 있으면 경로안내, 없으면 상호 검색. 미설치 시 스토어로.
+    fun openTmap(name: String, lat: Double?, lng: Double?) {
+        val enc = java.net.URLEncoder.encode(name.ifBlank { "목적지" }, "UTF-8")
+        val uri = if (lat != null && lng != null && (lat != 0.0 || lng != 0.0))
+            "tmap://route?goalname=$enc&goalx=$lng&goaly=$lat" else "tmap://search?name=$enc"
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri))) }
+            .onFailure {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.skt.tmap.ku"))) }
+                    .onFailure { Toast.makeText(context, "T맵을 열 수 없어요", Toast.LENGTH_SHORT).show() }
+            }
     }
 
     Scaffold(
@@ -253,31 +264,36 @@ fun PlaceListScreen(
                                 if (rec.reason.isNotBlank())
                                     Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
+                            // 카드 탭=네이버 지도, 아이콘=T맵 길안내
+                            Icon(Icons.Default.Navigation, "T맵 길안내", tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp).clickable { openTmap(rec.naverName, rec.lat, rec.lng) })
+                            Spacer(Modifier.size(10.dp))
                             Icon(Icons.Default.OpenInNew, "네이버 지도", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
             }
-            // 정렬 선택
+            // 정렬 선택(복수 선택 = 탭 순서대로 우선순위 혼합). 선택 시 순번 표시.
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SortMode.entries.forEach { m ->
-                    val on = m == sortMode
+                SortKey.entries.forEach { k ->
+                    val rank = sortKeys.indexOf(k)
+                    val on = rank >= 0
                     Text(
-                        m.label,
+                        if (on && sortKeys.size > 1) "${k.label} ${rank + 1}" else k.label,
                         fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
                         color = if (on) Color.White else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
                             .clickable {
-                                if (m == SortMode.DISTANCE && myLoc == null) {
+                                if (k == SortKey.DISTANCE && myLoc == null) {
                                     myLoc = lastKnownLocation(context)
                                     if (myLoc == null) Toast.makeText(context, "현재 위치를 알 수 없어요(위치 권한/GPS 확인)", Toast.LENGTH_SHORT).show()
                                 }
-                                sortMode = m
+                                sortKeys = if (on) sortKeys - k else sortKeys + k
                             }
                             .padding(horizontal = 14.dp, vertical = 7.dp),
                     )
@@ -301,10 +317,9 @@ fun PlaceListScreen(
                         PlaceCard(
                             item = place,
                             currentMemberId = currentMemberId,
-                            canRate = canRate,
                             distanceText = myLoc?.let { distanceOrNull(it, place)?.let { d -> fmtDist(d) } },
                             onOpenLink = { openLink(place.link) },
-                            onRateRequest = { n -> ratingConfirm = place to n },
+                            onTmap = { openTmap(place.text, place.lat, place.lng) },
                             onAddComment = { t -> vm.addPlaceComment(place, t) },
                             onEditComment = { i, t -> editComment = Triple(place, i, t) },
                             onDeleteComment = { i -> commentDelete = place to i },
@@ -327,17 +342,6 @@ fun PlaceListScreen(
         PlaceEditDialog(vm, it0,
             onSave = { n, l, d, a, img, cat -> vm.updatePlace(it0, n, l, d, a, img, category = cat); editItem = null },
             onDismiss = { editItem = null })
-    }
-    // 별점 등록/수정 확인 (은선만 진입)
-    ratingConfirm?.let { (item, n) ->
-        val editing = item.rating > 0
-        AlertDialog(
-            onDismissRequest = { ratingConfirm = null },
-            title = { Text(if (editing) "별점 수정" else "별점 등록") },
-            text = { Text("★ ${n}점으로 ${if (editing) "수정" else "등록"}할까요?") },
-            confirmButton = { TextButton(onClick = { vm.setPlaceRating(item, n); ratingConfirm = null }) { Text(if (editing) "수정" else "등록") } },
-            dismissButton = { TextButton(onClick = { ratingConfirm = null }) { Text("취소") } },
-        )
     }
     // 댓글 수정
     editComment?.let { (item, idx, cur) ->
@@ -441,10 +445,9 @@ private fun FilterChip(label: String, count: Int, on: Boolean, onClick: () -> Un
 private fun PlaceCard(
     item: ListItem,
     currentMemberId: String?,
-    canRate: Boolean,
     distanceText: String?,
     onOpenLink: () -> Unit,
-    onRateRequest: (Int) -> Unit,
+    onTmap: () -> Unit,
     onAddComment: (String) -> Unit,
     onEditComment: (Int, String) -> Unit,
     onDeleteComment: (Int) -> Unit,
@@ -453,7 +456,6 @@ private fun PlaceCard(
 ) {
     var showComments by remember { mutableStateOf(false) }
     var comment by remember { mutableStateOf("") }
-    val rating = item.rating.toInt()
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -484,6 +486,9 @@ private fun PlaceCard(
                             Text(distanceText, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
                         }
+                        // T맵 길안내(목적지 바로 인식)
+                        Icon(Icons.Default.Navigation, "T맵 길안내", tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onTmap() })
                         if (item.link.isNotBlank()) {
                             Icon(Icons.Default.OpenInNew, "링크 열기", tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 6.dp).size(20.dp).clickable { onOpenLink() })
@@ -498,26 +503,6 @@ private fun PlaceCard(
                         Text("📍 ${item.address}", fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     }
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            // 은선 별점 (은선만 변경 가능, 0 = 미방문)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                (1..5).forEach { n ->
-                    val star = Modifier.size(26.dp).padding(1.dp)
-                    Icon(
-                        if (n <= rating) Icons.Filled.Star else Icons.Filled.StarBorder,
-                        contentDescription = "별 $n",
-                        tint = if (n <= rating) Gold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        modifier = if (canRate) star.clickable { onRateRequest(if (rating == n) 0 else n) } else star,
-                    )
-                }
-                Spacer(Modifier.size(8.dp))
-                if (rating == 0) {
-                    Text("미방문", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.background(Color(0xFFECECEC), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 2.dp))
-                } else {
-                    Text("은선 ★$rating", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(Modifier.height(6.dp))
