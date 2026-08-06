@@ -15,12 +15,15 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +31,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -38,11 +42,13 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -106,20 +112,34 @@ fun PlaceListScreen(
     // 삭제 확인용: 삭제하려는 장소 / 삭제하려는 댓글(장소+인덱스)
     var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
     var commentDelete by remember { mutableStateOf<Pair<ListItem, Int>?>(null) }
+    // 필터: 카테고리(종목)/지역(시·군·구). null=전체. 바텀시트 열림 상태.
+    var catFilter by remember(boardKey) { mutableStateOf<String?>(null) }
+    var regionFilter by remember(boardKey) { mutableStateOf<String?>(null) }
+    var showFilter by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
-    // 정렬을 바꾸면 항상 맨 위(최상위 항목)로 이동
-    LaunchedEffect(sortMode) { listState.scrollToItem(0) }
+    // 정렬/필터 바꾸면 항상 맨 위로 이동
+    LaunchedEffect(sortMode, catFilter, regionFilter) { listState.scrollToItem(0) }
 
-    val sorted = remember(items, sortMode, myLoc) {
+    // 필터 옵션(데이터에 실제 있는 값만) + 개수
+    val catCounts = remember(items) { items.groupingBy { it.category.ifBlank { "기타" } }.eachCount() }
+    val regionCounts = remember(items) { items.groupingBy { regionOf(it.address).ifBlank { "기타" } }.eachCount() }
+
+    val filtered = remember(items, catFilter, regionFilter) {
+        items.filter {
+            (catFilter == null || it.category.ifBlank { "기타" } == catFilter) &&
+                (regionFilter == null || regionOf(it.address).ifBlank { "기타" } == regionFilter)
+        }
+    }
+    val sorted = remember(filtered, sortMode, myLoc) {
         when (sortMode) {
-            SortMode.NAVER -> items.sortedWith(compareByDescending<ListItem> { it.naverScore }.thenBy { it.text })
-            SortMode.EUNSEON_SCORE -> items.sortedWith(compareByDescending<ListItem> { it.rating }.thenBy { it.text })
+            SortMode.NAVER -> filtered.sortedWith(compareByDescending<ListItem> { it.naverScore }.thenBy { it.text })
+            SortMode.EUNSEON_SCORE -> filtered.sortedWith(compareByDescending<ListItem> { it.rating }.thenBy { it.text })
             SortMode.DISTANCE -> {
                 val me = myLoc
-                if (me == null) items
-                else items.sortedBy { distanceOrNull(me, it) ?: Double.MAX_VALUE }
+                if (me == null) filtered
+                else filtered.sortedBy { distanceOrNull(me, it) ?: Double.MAX_VALUE }
             }
         }
     }
@@ -146,6 +166,28 @@ fun PlaceListScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            // 필터 바: [필터] 버튼 + 현재 선택 요약(개수)
+            Row(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(if (catFilter != null || regionFilter != null) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+                        .clickable { showFilter = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val active = catFilter != null || regionFilter != null
+                    Icon(Icons.Default.Tune, "필터", tint = if (active) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(5.dp))
+                    Text("필터", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (active) Color.White else MaterialTheme.colorScheme.onSurface)
+                }
+                Spacer(Modifier.size(10.dp))
+                val summary = listOfNotNull(catFilter, regionFilter).joinToString(" · ").ifBlank { "전체" }
+                Text("$summary · ${sorted.size}곳", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
             // 정렬 선택
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
@@ -208,12 +250,12 @@ fun PlaceListScreen(
 
     if (showAdd) {
         PlaceEditDialog(vm, null,
-            onSave = { n, l, d, a, img -> vm.addPlace(boardKey, n, l, d, a, img); showAdd = false },
+            onSave = { n, l, d, a, img, cat -> vm.addPlace(boardKey, n, l, d, a, img, category = cat); showAdd = false },
             onDismiss = { showAdd = false })
     }
     editItem?.let { it0 ->
         PlaceEditDialog(vm, it0,
-            onSave = { n, l, d, a, img -> vm.updatePlace(it0, n, l, d, a, img); editItem = null },
+            onSave = { n, l, d, a, img, cat -> vm.updatePlace(it0, n, l, d, a, img, category = cat); editItem = null },
             onDismiss = { editItem = null })
     }
     // 별점 등록/수정 확인 (은선만 진입)
@@ -265,6 +307,63 @@ fun PlaceListScreen(
             },
             dismissButton = { TextButton(onClick = { commentDelete = null }) { Text("취소") } },
         )
+    }
+
+    // 필터 바텀시트: 카테고리·지역 칩(개수 포함)을 한눈에
+    if (showFilter) {
+        ModalBottomSheet(onDismissRequest = { showFilter = false }) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            ) {
+                Text("카테고리", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.size(8.dp))
+                FilterFlow {
+                    FilterChip("전체", items.size, catFilter == null) { catFilter = null }
+                    catCounts.entries.sortedByDescending { it.value }.forEach { (c, n) ->
+                        FilterChip(c, n, catFilter == c) { catFilter = if (catFilter == c) null else c }
+                    }
+                }
+                Spacer(Modifier.size(16.dp))
+                Text("지역 (시·군·구)", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.size(8.dp))
+                FilterFlow {
+                    FilterChip("전체", items.size, regionFilter == null) { regionFilter = null }
+                    regionCounts.entries.sortedByDescending { it.value }.forEach { (r, n) ->
+                        FilterChip(r, n, regionFilter == r) { regionFilter = if (regionFilter == r) null else r }
+                    }
+                }
+                Spacer(Modifier.size(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { catFilter = null; regionFilter = null }, modifier = Modifier.weight(1f)) { Text("초기화") }
+                    androidx.compose.material3.Button(onClick = { showFilter = false }, modifier = Modifier.weight(2f)) {
+                        Text("${sorted.size}곳 보기")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterFlow(content: @Composable () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
+}
+
+@Composable
+private fun FilterChip(label: String, count: Int, on: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(16.dp))
+            .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+            .clickable { onClick() }
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, fontSize = 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+            color = if (on) Color.White else Color(0xFF444444))
+        Spacer(Modifier.size(4.dp))
+        Text("$count", fontSize = 11.sp, color = if (on) Color.White.copy(alpha = 0.85f) else Color(0xFF999999))
     }
 }
 
@@ -398,7 +497,7 @@ private fun PlaceCard(
 private fun PlaceEditDialog(
     vm: AppViewModel,
     item: ListItem?,
-    onSave: (String, String, String, String, String) -> Unit,
+    onSave: (String, String, String, String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(item?.text ?: "") }
@@ -406,6 +505,7 @@ private fun PlaceEditDialog(
     var address by remember { mutableStateOf(item?.address ?: "") }
     var description by remember { mutableStateOf(item?.description ?: "") }
     var image by remember { mutableStateOf(item?.photoUrls?.firstOrNull() ?: "") }
+    var category by remember { mutableStateOf(item?.category ?: "") }
     var fetching by remember { mutableStateOf(false) }
     val context = LocalContext.current
     AlertDialog(
@@ -426,6 +526,7 @@ private fun PlaceEditDialog(
                             fetching = false
                             if (info != null && info.name.isNotBlank()) {
                                 name = info.name; address = info.address; description = vm.describePlace(info)
+                                category = info.category
                                 if (info.image.isNotBlank()) image = info.image
                                 Toast.makeText(context, "정보를 가져왔어요", Toast.LENGTH_SHORT).show()
                             } else Toast.makeText(context, "정보를 가져오지 못했어요", Toast.LENGTH_SHORT).show()
@@ -441,10 +542,28 @@ private fun PlaceEditDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), link.trim(), description, address.trim(), image) }) { Text("저장") }
+            TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), link.trim(), description, address.trim(), image, category.trim()) }) { Text("저장") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
+}
+
+// ─────────── 지역(주소 파싱) ───────────
+private val SIDO_SHORT = mapOf(
+    "서울특별시" to "서울", "부산광역시" to "부산", "대구광역시" to "대구", "인천광역시" to "인천",
+    "광주광역시" to "광주", "대전광역시" to "대전", "울산광역시" to "울산", "세종특별자치시" to "세종",
+    "경기도" to "경기", "강원도" to "강원", "강원특별자치도" to "강원", "충청북도" to "충북", "충청남도" to "충남",
+    "전라북도" to "전북", "전북특별자치도" to "전북", "전라남도" to "전남", "경상북도" to "경북", "경상남도" to "경남",
+    "제주특별자치도" to "제주", "제주도" to "제주",
+)
+
+/** 도로명 주소 → "시도 시/군/구"(예: 경기 고양시, 부산 남구). 못 찾으면 "". */
+private fun regionOf(address: String): String {
+    val toks = address.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (toks.isEmpty()) return ""
+    val sido = SIDO_SHORT[toks[0]] ?: SIDO_SHORT.values.firstOrNull { toks[0].startsWith(it) } ?: toks[0].take(2)
+    val gu = toks.getOrNull(1)?.takeIf { it.endsWith("시") || it.endsWith("군") || it.endsWith("구") } ?: ""
+    return listOf(sido, gu).filter { it.isNotBlank() }.joinToString(" ")
 }
 
 // ─────────── 위치/거리 ───────────

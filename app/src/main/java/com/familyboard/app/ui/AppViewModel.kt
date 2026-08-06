@@ -41,6 +41,7 @@ data class SharedPlace(
     val link: String,
     val description: String = "",
     val address: String = "",
+    val category: String = "",  // 네이버 종목(맛집/가볼곳 필터용)
     val image: String = "",
     val images: List<String> = emptyList(), // 여러 장 묶음(재미진 곳)
     val naverScore: Double = 0.0,
@@ -173,7 +174,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val cur = pendingShare.value ?: return@launch
                 pendingShare.value = if (info != null && info.name.isNotBlank())
                     cur.copy(name = info.name, description = buildPlaceDesc(info), address = info.address,
-                        image = info.image, naverScore = info.score ?: 0.0,
+                        category = info.category, image = info.image, naverScore = info.score ?: 0.0,
                         lat = info.lat ?: 0.0, lng = info.lng ?: 0.0, loading = false)
                 else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
             }
@@ -207,7 +208,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val s = pendingShare.value ?: return
         if (s.loading) return
         val nm = s.name.trim().let { if (it.isBlank() || it == "장소 불러오는 중…") "새 장소" else it }
-        addPlace(boardKey, nm, s.link, s.description, s.address, s.image, s.naverScore, s.lat, s.lng)
+        addPlace(boardKey, nm, s.link, s.description, s.address, s.image, s.naverScore, s.lat, s.lng, s.category)
         pendingShare.value = null
     }
     fun clearPendingShare() { pendingShare.value = null }
@@ -299,21 +300,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addPlace(boardKey: String, name: String, link: String, description: String = "", address: String = "",
-                 image: String = "", naverScore: Double = 0.0, lat: Double = 0.0, lng: Double = 0.0) = viewModelScope.launch {
+                 image: String = "", naverScore: Double = 0.0, lat: Double = 0.0, lng: Double = 0.0,
+                 category: String = "") = viewModelScope.launch {
         if (name.isBlank()) return@launch
         runCatching {
             board.upsertItem(ListItem(text = name.trim(), link = link.trim(), description = description,
-                address = address, photoUrls = if (image.isBlank()) emptyList() else listOf(image),
+                address = address, category = category, photoUrls = if (image.isBlank()) emptyList() else listOf(image),
                 naverScore = naverScore, lat = lat, lng = lng,
                 board = boardKey, createdBy = currentMemberId.value.orEmpty()))
         }
     }
     fun updatePlace(item: ListItem, name: String, link: String,
                     description: String = item.description, address: String = item.address,
-                    image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
+                    image: String = item.photoUrls.firstOrNull().orEmpty(),
+                    category: String = item.category) = viewModelScope.launch {
         runCatching {
             board.updateFields(item.id, mapOf(
                 "text" to name.trim(), "link" to link.trim(), "description" to description, "address" to address,
+                "category" to category,
                 "photoUrls" to (if (image.isBlank()) emptyList<String>() else listOf(image)),
             ))
         }
