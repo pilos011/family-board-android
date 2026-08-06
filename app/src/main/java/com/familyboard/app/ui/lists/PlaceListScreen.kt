@@ -35,6 +35,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -116,6 +117,9 @@ fun PlaceListScreen(
     var catFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var regionFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var showFilter by remember { mutableStateOf(false) }
+    // 추천(Groq): 결과 / 로딩
+    var recommend by remember { mutableStateOf<com.familyboard.app.notif.Recommendation?>(null) }
+    var recommending by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
@@ -187,6 +191,56 @@ fun PlaceListScreen(
                 val summary = listOfNotNull(catFilter, regionFilter).joinToString(" · ").ifBlank { "전체" }
                 Text("$summary · ${sorted.size}곳", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                // 근처 추천(Groq)
+                Row(
+                    Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable(enabled = !recommending) {
+                            recommending = true; recommend = null
+                            val loc = myLoc ?: lastKnownLocation(context).also { myLoc = it }
+                            val cands = (if (loc != null) filtered.sortedBy { distanceOrNull(loc, it) ?: Double.MAX_VALUE }
+                                         else filtered.sortedByDescending { it.naverScore })
+                                .take(10)
+                                .map { com.familyboard.app.notif.PlaceCandidate(it.text, it.category, if (loc != null) distanceOrNull(loc, it) else null, it.naverScore) }
+                            if (cands.isEmpty()) { recommending = false; Toast.makeText(context, "추천할 장소가 없어요", Toast.LENGTH_SHORT).show() }
+                            else vm.recommendPlace(cands, catFilter ?: "", regionFilter ?: "") { rec ->
+                                recommending = false
+                                if (rec == null) Toast.makeText(context, "추천을 가져오지 못했어요", Toast.LENGTH_SHORT).show()
+                                recommend = rec
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.AutoAwesome, "추천", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.size(5.dp))
+                    Text(if (recommending) "추천 중…" else "추천받기", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            // 추천 결과 카드
+            recommend?.let { rec ->
+                val picked = filtered.firstOrNull { it.text == rec.name }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                        .clickable { picked?.let { openLink(it.link) } }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        val dist = picked?.let { p -> myLoc?.let { distanceOrNull(it, p)?.let { d -> " · " + fmtDist(d) } } }.orEmpty()
+                        val star = picked?.takeIf { it.naverScore > 0 }?.let { " · ★${it.naverScore}" }.orEmpty()
+                        Text("이 근처 추천: ${rec.name}$dist$star", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (rec.reason.isNotBlank())
+                            Text(rec.reason, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Icon(Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(18.dp).clickable { recommend = null })
+                }
             }
             // 정렬 선택
             Row(
