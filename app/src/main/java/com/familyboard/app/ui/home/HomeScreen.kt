@@ -94,6 +94,26 @@ private val NoteColors = listOf(Color(0xFFFFF3A8), Color(0xFFC7EFD0), Color(0xFF
 private val PinColors = listOf(Color(0xFFD63B2F), Color(0xFF2F7FD6), Color(0xFFE8A13A), Color(0xFF37B24D))
 
 private val KrDow = listOf("월", "화", "수", "목", "금", "토", "일")
+private val KrDowFull = listOf("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
+
+// 날씨 기본 위치(고양시). 홈 알림판용 대략 위치.
+private const val HOME_LAT = 37.6584
+private const val HOME_LNG = 126.8320
+
+/** WMO weather code → 이모지 아이콘. */
+private fun weatherEmoji(code: Int): String = when (code) {
+    0 -> "☀️"
+    1, 2 -> "🌤️"
+    3 -> "☁️"
+    45, 48 -> "🌫️"
+    in 51..57 -> "🌦️"
+    in 61..67 -> "🌧️"
+    in 71..77 -> "🌨️"
+    in 80..82 -> "🌦️"
+    85, 86 -> "🌨️"
+    in 95..99 -> "⛈️"
+    else -> "🌡️"
+}
 
 @Composable
 fun HomeScreen(
@@ -107,6 +127,14 @@ fun HomeScreen(
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
     val events by vm.events.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
+    // 오늘/내일 날씨: 진입 시 + 1시간마다 갱신
+    var weather by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            weather = com.familyboard.app.notif.WeatherApi.today2(HOME_LAT, HOME_LNG)
+            kotlinx.coroutines.delay(3_600_000L)
+        }
+    }
     val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -213,7 +241,7 @@ fun HomeScreen(
 
             SectionLabel("일정 보드")
             Spacer(Modifier.height(8.dp))
-            ScheduleBoard(past = schedule.first, upcoming = schedule.second, onOpenEvent = onOpenEvent)
+            ScheduleBoard(past = schedule.first, upcoming = schedule.second, today = today, weather = weather, onOpenEvent = onOpenEvent)
             Spacer(Modifier.height(26.dp))
 
             special?.let { (item, d, _) ->
@@ -377,6 +405,8 @@ private val DateUp = Color(0xFF6F5C46)
 private fun ScheduleBoard(
     past: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     upcoming: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
+    today: LocalDate,
+    weather: Pair<Int, Int>?,
     onOpenEvent: (String, String) -> Unit,
 ) {
     val shape = RoundedCornerShape(10.dp)
@@ -392,6 +422,18 @@ private fun ScheduleBoard(
                 }
                 .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 14.dp),
         ) {
+            // 상단: 왼쪽=오늘 날짜/요일, 오른쪽=오늘·내일 날씨
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "오늘은 ${today.monthValue}월 ${today.dayOfMonth}일 ${KrDowFull[today.dayOfWeek.value - 1]}",
+                    fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = DateUp,
+                    modifier = Modifier.weight(1f),
+                )
+                weather?.let { (t, tm) ->
+                    Text("오늘 ${weatherEmoji(t)}  내일 ${weatherEmoji(tm)}", fontSize = 13.sp, color = DateUp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             if (past.isEmpty() && upcoming.isEmpty()) {
                 Text("표시할 일정이 없어요.", color = DatePast, fontSize = 14.sp)
             }
@@ -439,8 +481,9 @@ private fun EventLine(
     }.getOrDefault(0L).coerceAtLeast(0L)
     val end = date.plusDays(dur)
     val multi = end != date
-    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}~${end.monthValue}/${end.dayOfMonth}"
-    else "${date.monthValue}/${date.dayOfMonth}"
+    val dowS = KrDow[date.dayOfWeek.value - 1]
+    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}(${dowS})~${end.monthValue}/${end.dayOfMonth}"
+    else "${date.monthValue}/${date.dayOfMonth}(${dowS})"
     val sub = when {
         multi -> ""
         e.allDay -> " · 하루 종일"
@@ -465,7 +508,7 @@ private fun EventLine(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
             color = if (pastStyle) DatePast else DateUp,
-            modifier = Modifier.widthIn(min = 46.dp),
+            modifier = Modifier.widthIn(min = 62.dp),
         )
         Spacer(Modifier.size(10.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
@@ -477,16 +520,13 @@ private fun EventLine(
             color = if (pastStyle) DatePast else Ink,
             textDecoration = if (pastStyle) TextDecoration.LineThrough else TextDecoration.None,
         )
-        // 오른쪽 정렬 작성자 이름(실제 멤버가 등록한 경우만)
-        val author = Family.byId(e.createdBy)?.name
-        if (author != null) {
-            Spacer(Modifier.size(8.dp))
-            Text(
-                author,
-                fontSize = 12.sp, maxLines = 1,
-                color = if (pastStyle) DatePast else DateUp.copy(alpha = 0.75f),
-            )
-        }
+        // 오른쪽 정렬: 대상 인원 이름(여러 명 "선일·은선·준호", 전체 "모두")
+        Spacer(Modifier.size(8.dp))
+        Text(
+            Family.targetNames(e.memberIds),
+            fontSize = 12.sp, maxLines = 1,
+            color = if (pastStyle) DatePast else DateUp.copy(alpha = 0.75f),
+        )
     }
 }
 

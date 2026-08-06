@@ -51,4 +51,10 @@ object Family {
     fun namesOf(ids: List<String>): String =
         if (ids.isEmpty() || ids.contains(ALL_ID)) "모두"
         else ids.mapNotNull { byId(it)?.name }.joinToString(", ").ifBlank { "모두" }
+
+    /** 대상 멤버 이름(가운뎃점): "선일·은선·준호". 비었거나 전체/4명이면 "모두". (홈 일정 보드용) */
+    fun targetNames(ids: List<String>): String {
+        if (ids.isEmpty() || ids.contains(ALL_ID) || members.all { it.id in ids }) return "모두"
+        return members.filter { it.id in ids }.joinToString("·") { it.name }.ifBlank { "모두" }
+    }
 }
