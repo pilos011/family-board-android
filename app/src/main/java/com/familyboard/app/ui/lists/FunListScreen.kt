@@ -515,42 +515,51 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
 @Composable
 private fun ZoomOverlay(url: String, onClose: () -> Unit) {
     val context = LocalContext.current
-    // 원본 유지하되 GPU 텍스처 한계를 넘는 초대형(예: 세로 2만px 웹툰컷)은 축소해 렌더 실패(빈화면) 방지.
-    val painter = rememberAsyncImagePainter(
-        ImageRequest.Builder(context).data(url).size(4096).build(),
-    )
-    val scroll = rememberScrollState()
-    var scale by remember { mutableStateOf(1f) }
-    var tx by remember { mutableStateOf(0f) }
-    var ty by remember { mutableStateOf(0f) }
+    // 파일로 받아 SubsamplingScaleImageView(부분 디코딩)로 표시 → 세로 2만px 같은 초대형도
+    // 원본 해상도 유지하며 가로 꽉차게 세로 스크롤 + 핀치 확대(글자 읽기 가능).
+    var file by remember(url) { mutableStateOf<java.io.File?>(null) }
+    var failed by remember(url) { mutableStateOf(false) }
+    LaunchedEffect(url) {
+        file = null; failed = false
+        val f = withContext(Dispatchers.IO) {
+            runCatching {
+                val ext = url.substringBefore('?').substringAfterLast('.', "jpg").take(5).ifBlank { "jpg" }
+                val out = java.io.File(context.cacheDir, "view_${url.hashCode()}.$ext")
+                if (!out.exists() || out.length() == 0L)
+                    java.net.URL(url).openStream().use { i -> out.outputStream().use { i.copyTo(it) } }
+                out
+            }.getOrNull()
+        }
+        if (f != null) file = f else failed = true
+    }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Column(Modifier.fillMaxSize().verticalScroll(scroll, enabled = scale <= 1f)) {
-            Image(
-                painter = painter, contentDescription = null, contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth()
-                    .pointerInput(url) {
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            do {
-                                val e = awaitPointerEvent()
-                                if (e.changes.size >= 2) {
-                                    scale = (scale * e.calculateZoom()).coerceIn(1f, 5f)
-                                    val p = e.calculatePan(); tx += p.x; ty += p.y
-                                    e.changes.forEach { it.consume() }
-                                } else if (scale > 1f) {
-                                    val p = e.calculatePan(); tx += p.x; ty += p.y
-                                    e.changes.forEach { it.consume() }
+        val f = file
+        when {
+            f != null -> AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView(ctx).apply {
+                        setMinimumScaleType(com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.SCALE_TYPE_CUSTOM)
+                        setPanLimit(com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
+                        setDoubleTapZoomDuration(200)
+                        setOnImageEventListener(object : com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView.DefaultOnImageEventListener() {
+                            override fun onReady() {
+                                val vw = width.toFloat(); val iw = sWidth.toFloat()
+                                if (vw > 0f && iw > 0f) {
+                                    val fill = vw / iw            // 가로 꽉차게
+                                    minScale = fill
+                                    maxScale = maxOf(fill * 4f, 3f) // 원본 이상으로 확대 허용(글자 읽기)
+                                    setDoubleTapZoomScale(maxOf(fill * 2f, 1f))
+                                    setScaleAndCenter(fill, android.graphics.PointF(iw / 2f, 0f)) // 위(시작)부터
                                 }
-                                // 배율 1 + 한 손가락: 소비하지 않음 → 부모 verticalScroll이 플링 처리
-                            } while (e.changes.any { it.pressed })
-                            if (scale <= 1f) { tx = 0f; ty = 0f }
-                        }
+                            }
+                        })
+                        setImage(com.davemorrissey.labs.subscaleview.ImageSource.uri(android.net.Uri.fromFile(f)))
                     }
-                    .pointerInput(url) {
-                        detectTapGestures(onDoubleTap = { scale = if (scale > 1f) 1f else 2.5f; tx = 0f; ty = 0f })
-                    }
-                    .graphicsLayer { scaleX = scale; scaleY = scale; translationX = tx; translationY = ty },
+                },
             )
+            failed -> Text("이미지를 열 수 없어요", color = Color.White, modifier = Modifier.align(Alignment.Center))
+            else -> CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
         }
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             Icon(Icons.Default.Close, "닫기", tint = Color.White)
