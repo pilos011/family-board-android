@@ -48,6 +48,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
@@ -118,7 +119,10 @@ fun PlaceListScreen(
     currentMemberId: String?,
     onBack: () -> Unit,
 ) {
-    val items by vm.placeItems(boardKey).collectAsStateWithLifecycle()
+    // 첫 로딩과 "빈 목록" 구분: null=아직 로딩 전 → 스피너, 빈 리스트=진짜 없음
+    val itemsState by remember(boardKey) { vm.boardItems(boardKey) }.collectAsStateWithLifecycle(initialValue = null)
+    val loading = itemsState == null
+    val items = itemsState ?: emptyList()
     val title = PlaceBoards.titleOf(boardKey)
     val context = LocalContext.current
 
@@ -333,10 +337,17 @@ fun PlaceListScreen(
 
             if (sorted.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "아직 등록된 장소가 없어요.\n네이버 플레이스에서 공유하거나\n오른쪽 아래 +로 추가하세요.",
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    )
+                    when {
+                        loading -> CircularProgressIndicator()
+                        items.isEmpty() -> Text(
+                            "아직 등록된 장소가 없어요.\n네이버 플레이스에서 공유하거나\n오른쪽 아래 +로 추가하세요.",
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        )
+                        else -> Text(
+                            "조건에 맞는 곳이 없어요. (필터 확인)",
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
