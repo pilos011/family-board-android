@@ -643,36 +643,54 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
 
 @Composable
 private fun FunEditDialog(vm: AppViewModel, item: ListItem?, onSave: (String, String, String) -> Unit, onDismiss: () -> Unit) {
-    var title by remember { mutableStateOf(item?.text ?: "") }
-    var link by remember { mutableStateOf(item?.link ?: "") }
-    var image by remember { mutableStateOf(item?.photoUrls?.firstOrNull() ?: "") }
-    var fetching by remember { mutableStateOf(false) }
+    // 게시물 유형: 이미지(링크 없음+사진) vs 링크/영상. remember 는 항목별로 초기화(키=id).
+    val isImagePost = item != null && item.link.isBlank() && item.photoUrls.isNotEmpty()
+    var title by remember(item?.id) { mutableStateOf(item?.text ?: "") }
+    var link by remember(item?.id) { mutableStateOf(item?.link ?: "") }
+    var image by remember(item?.id) { mutableStateOf(item?.photoUrls?.firstOrNull() ?: "") }
+    var fetching by remember(item?.id) { mutableStateOf(false) }
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (item == null) "게시물 추가" else "게시물 수정") },
         text = {
             Column {
-                OutlinedTextField(value = link, onValueChange = { link = it }, label = { Text("링크 (유튜브/웹)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                TextButton(enabled = !fetching && link.isNotBlank(), onClick = {
-                    fetching = true
-                    vm.fetchLinkInfo(link.trim()) { info ->
-                        fetching = false
-                        if (info != null && (info.title.isNotBlank() || info.image.isNotBlank())) {
-                            if (info.title.isNotBlank()) title = info.title
-                            if (info.image.isNotBlank()) image = info.image
-                            Toast.makeText(context, "정보를 가져왔어요", Toast.LENGTH_SHORT).show()
-                        } else Toast.makeText(context, "정보를 가져오지 못했어요", Toast.LENGTH_SHORT).show()
+                if (isImagePost) {
+                    // 이미지 게시물: 미리보기 + 제목만(링크 없음)
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(funThumbUrl(item!!.photoUrls.first())).size(600).build(),
+                        contentDescription = null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)),
+                    )
+                    if (item.photoUrls.size > 1) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("이미지 ${item.photoUrls.size}장", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     }
-                }) { Text(if (fetching) "가져오는 중…" else "링크 정보 가져오기") }
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("제목") },
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("제목") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                } else {
+                    OutlinedTextField(value = link, onValueChange = { link = it }, label = { Text("링크 (유튜브/웹)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    TextButton(enabled = !fetching && link.isNotBlank(), onClick = {
+                        fetching = true
+                        vm.fetchLinkInfo(link.trim()) { info ->
+                            fetching = false
+                            if (info != null && (info.title.isNotBlank() || info.image.isNotBlank())) {
+                                if (info.title.isNotBlank()) title = info.title
+                                if (info.image.isNotBlank()) image = info.image
+                                Toast.makeText(context, "정보를 가져왔어요", Toast.LENGTH_SHORT).show()
+                            } else Toast.makeText(context, "정보를 가져오지 못했어요", Toast.LENGTH_SHORT).show()
+                        }
+                    }) { Text(if (fetching) "가져오는 중…" else "링크 정보 가져오기") }
+                    OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("제목") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                }
             }
         },
         confirmButton = {
             TextButton(enabled = link.isNotBlank() || image.isNotBlank(),
-                onClick = { onSave(title.trim().ifBlank { "링크" }, link.trim(), image) }) { Text("저장") }
+                onClick = { onSave(title.trim().ifBlank { if (isImagePost) "이미지" else "링크" }, link.trim(), image) }) { Text("저장") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
