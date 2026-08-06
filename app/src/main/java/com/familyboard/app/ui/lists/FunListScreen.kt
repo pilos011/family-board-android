@@ -515,8 +515,9 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
 @Composable
 private fun ZoomOverlay(url: String, onClose: () -> Unit) {
     val context = LocalContext.current
+    // 원본 유지하되 GPU 텍스처 한계를 넘는 초대형(예: 세로 2만px 웹툰컷)은 축소해 렌더 실패(빈화면) 방지.
     val painter = rememberAsyncImagePainter(
-        ImageRequest.Builder(context).data(url).size(coil.size.Size.ORIGINAL).build(),
+        ImageRequest.Builder(context).data(url).size(4096).build(),
     )
     val scroll = rememberScrollState()
     var scale by remember { mutableStateOf(1f) }
@@ -666,6 +667,9 @@ private fun FunEditDialog(vm: AppViewModel, item: ListItem?, onSave: (String, St
                         Spacer(Modifier.height(4.dp))
                         Text("이미지 ${item.photoUrls.size}장", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(value = image, onValueChange = { image = it }, label = { Text("이미지 주소") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("제목") },
                         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
