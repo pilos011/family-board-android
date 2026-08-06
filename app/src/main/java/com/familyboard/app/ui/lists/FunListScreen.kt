@@ -545,6 +545,10 @@ private fun VideoPlayerDialog(url: String, onDismiss: () -> Unit) {
     }
 }
 
+/** 우리 서버(/photos/)에 올린 이미지는 그리드에서 500px 썸네일(/thumb/)로 빠르게. 외부 URL은 그대로. */
+fun funThumbUrl(url: String): String =
+    if (url.contains("/photos/")) url.replaceFirst("/photos/", "/thumb/") else url
+
 private fun isYoutube(link: String) = link.contains("youtu.be", true) || link.contains("youtube.com", true)
 private fun isVideo(link: String): Boolean {
     val l = link.substringBefore('?').lowercase()
@@ -579,9 +583,9 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
             contentAlignment = Alignment.Center,
         ) {
             if (!photo.isNullOrBlank()) {
-                // 썸네일은 작게 디코드(그리드 스크롤 부드럽게)
+                // 그리드는 서버 500px 썸네일 사용(첫 로드 빠르고 로컬 캐시에 오래 남음)
                 AsyncImage(
-                    model = ImageRequest.Builder(ctx).data(photo).size(400).build(),
+                    model = ImageRequest.Builder(ctx).data(funThumbUrl(photo)).size(400).build(),
                     contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
                 )
             } else {

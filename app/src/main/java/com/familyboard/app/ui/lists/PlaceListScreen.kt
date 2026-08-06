@@ -296,8 +296,9 @@ private fun PlaceCard(
             Row {
                 val photo = item.photoUrls.firstOrNull()
                 if (!photo.isNullOrBlank()) {
+                    // 우리 서버 이미지는 500px 썸네일 사용(외부 네이버 이미지는 그대로)
                     AsyncImage(
-                        model = photo, contentDescription = null, contentScale = ContentScale.Crop,
+                        model = funThumbUrl(photo), contentDescription = null, contentScale = ContentScale.Crop,
                         modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).clickable { onOpenLink() },
                     )
                     Spacer(Modifier.size(10.dp))
