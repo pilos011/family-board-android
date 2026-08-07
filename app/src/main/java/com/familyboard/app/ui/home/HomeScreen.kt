@@ -144,6 +144,7 @@ fun HomeScreen(
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
     val events by vm.events.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
+    val nowTime = remember { java.time.LocalTime.now() } // 진입 시각(오늘 일정 지남 판정 기준)
     val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // 오늘/내일 날씨: 현재 위치 기준(권한/좌표 없으면 고양 기본값), 진입 시 + 1시간마다 갱신
@@ -168,7 +169,7 @@ fun HomeScreen(
 
     // 일정 보드: 롤링 윈도우(오늘 한 달 전 ~ 3개월 후)에서 지난 2개 + 다가오는 4개.
     // 고정 연말(12/31) 대신 롤링으로 두어 연말에도 내년 초 일정이 "다가오는 일정"에 보이게 함.
-    val schedule = remember(events, today) {
+    val schedule = remember(events, today, nowTime) {
         val winEnd = today.plusMonths(3)
         val winStart = today.minusMonths(1)
         val occ = RecurrenceExpander.expand(events, winStart, winEnd)
@@ -177,8 +178,21 @@ fun HomeScreen(
                 if (d == null) emptyList() else day.filter { it.spanStart }.map { d to it.event }
             }
             .sortedBy { it.first }
-        val past = occ.filter { it.first.isBefore(today) }.takeLast(2)
-        val upcoming = occ.filter { !it.first.isBefore(today) }.take(4)
+        // 지난 일정 판정: 날짜가 오늘 이전이거나, "오늘 시작하는 단일(당일) 일정"인데 시작 시간이 현재 시각을 지난 경우.
+        // (여러 날 일정은 오늘 시작했어도 진행 중으로 보고 제외)
+        fun isPast(pair: Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>): Boolean {
+            val (d, e) = pair
+            if (d.isBefore(today)) return true
+            if (d.isEqual(today) && !e.allDay && e.startTime.isNotBlank()) {
+                val end = runCatching { LocalDate.parse(e.endDateIso.ifBlank { e.startDateIso }) }.getOrNull() ?: d
+                val multiDay = end.isAfter(d)
+                val st = runCatching { java.time.LocalTime.parse(e.startTime) }.getOrNull()
+                if (!multiDay && st != null && st.isBefore(nowTime)) return true
+            }
+            return false
+        }
+        val past = occ.filter { isPast(it) }.takeLast(2)
+        val upcoming = occ.filterNot { isPast(it) }.take(4)
         past to upcoming
     }
     // 홈 카운트다운: D-Day 항목 중 '홈 게시' 체크된 것. 준호 수능은 특별 박스(주요 일정 포함).
