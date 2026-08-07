@@ -503,10 +503,11 @@ private fun EventLine(
     val dowE = KrDow[end.dayOfWeek.value - 1]
     val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}(${dowS})~${end.monthValue}/${end.dayOfMonth}(${dowE})"
     else "${date.monthValue}/${date.dayOfMonth}(${dowS})"
-    val sub = when {
+    // 시작시간(제목 오른쪽 → 날짜 아래로 이동). 여러 날/미지정은 없음.
+    val timeLabel = when {
         multi -> ""
-        e.allDay -> " · 하루 종일"
-        e.startTime.isNotBlank() -> " · ${e.startTime}"
+        e.allDay -> "종일"
+        e.startTime.isNotBlank() -> e.startTime
         else -> ""
     }
     val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
@@ -523,17 +524,25 @@ private fun EventLine(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 날짜는 내용 폭만 차지(고정폭 X) → 색상 점을 날짜 바로 뒤에 붙여 제목 공간 최대 확보
-        Text(
-            dateLabel,
-            fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-            color = if (pastStyle) DatePast else DateUp,
-        )
-        Spacer(Modifier.size(6.dp))
-        Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
+        // 날짜열: 여러 날 일정 폭에 맞춰 고정 → 색상 점 시작 위치가 모든 행에서 정렬됨. 시작시간은 날짜 아래.
+        Column(Modifier.widthIn(min = 124.dp)) {
+            Text(
+                dateLabel,
+                fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                color = if (pastStyle) DatePast else DateUp,
+            )
+            if (timeLabel.isNotBlank()) {
+                Text(
+                    timeLabel, fontSize = 11.sp, maxLines = 1,
+                    color = if (pastStyle) DatePast else DateUp.copy(alpha = 0.7f),
+                )
+            }
+        }
         Spacer(Modifier.size(8.dp))
+        Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
+        Spacer(Modifier.size(9.dp))
         Text(
-            e.title + sub,
+            e.title,
             modifier = Modifier.weight(1f),
             fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (pastStyle) DatePast else Ink,
