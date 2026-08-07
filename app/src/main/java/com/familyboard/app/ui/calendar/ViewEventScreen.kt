@@ -129,7 +129,7 @@ fun ViewEventScreen(
                     Icon(Icons.Default.Edit, null); Spacer(Modifier.size(6.dp)); Text("수정")
                 }
                 OutlinedButton(
-                    onClick = { if (event.repeat.isNotBlank()) showDelete = true else { vm.deleteEvent(eventId); onBack() } },
+                    onClick = { showDelete = true },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Delete, null); Spacer(Modifier.size(6.dp)); Text("삭제")
@@ -139,21 +139,34 @@ fun ViewEventScreen(
     }
 
     if (showDelete && event != null) {
-        AlertDialog(
-            onDismissRequest = { showDelete = false },
-            title = { Text("반복 일정 삭제") },
-            text = { Text("이 일정은 반복 일정입니다. 어떻게 삭제할까요?") },
-            confirmButton = {
-                TextButton(onClick = { showDelete = false; vm.deleteEvent(eventId); onBack() }) { Text("모든 반복 삭제") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        showDelete = false; vm.excludeOccurrence(event, dateIso); onBack()
-                    }) { Text("이 날짜만") }
-                    TextButton(onClick = { showDelete = false }) { Text("취소") }
-                }
-            },
-        )
+        if (event.repeat.isNotBlank()) {
+            AlertDialog(
+                onDismissRequest = { showDelete = false },
+                title = { Text("반복 일정 삭제") },
+                text = { Text("이 일정은 반복 일정입니다. 어떻게 삭제할까요?") },
+                confirmButton = {
+                    TextButton(onClick = { showDelete = false; vm.deleteEvent(eventId); onBack() }) { Text("모든 반복 삭제") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = {
+                            showDelete = false; vm.excludeOccurrence(event, dateIso); onBack()
+                        }) { Text("이 날짜만") }
+                        TextButton(onClick = { showDelete = false }) { Text("취소") }
+                    }
+                },
+            )
+        } else {
+            // 일반(비반복) 일정도 다른 리스트처럼 삭제 확인
+            AlertDialog(
+                onDismissRequest = { showDelete = false },
+                title = { Text("일정 삭제") },
+                text = { Text("'${event.title}' 일정을 삭제할까요?") },
+                confirmButton = {
+                    TextButton(onClick = { showDelete = false; vm.deleteEvent(eventId); onBack() }) { Text("삭제") }
+                },
+                dismissButton = { TextButton(onClick = { showDelete = false }) { Text("취소") } },
+            )
+        }
     }
 }
