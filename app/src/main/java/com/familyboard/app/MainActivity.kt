@@ -75,20 +75,28 @@ class MainActivity : ComponentActivity() {
         handleShareIntent(intent)
     }
 
-    /** '공유 → 준준가족 보드'로 들어온 텍스트/이미지/영상 처리. */
+    /** '공유 → 가족 알림판'으로 들어온 텍스트/이미지/영상/파일 처리. */
     private fun handleShareIntent(intent: Intent?) {
         if (intent == null) return
         val type = intent.type ?: ""
         when (intent.action) {
-            Intent.ACTION_SEND -> when {
-                type == "text/plain" -> {
-                    vm.handleSharedText(intent.getStringExtra(Intent.EXTRA_TEXT), intent.getStringExtra(Intent.EXTRA_SUBJECT))
-                    if (vm.pendingShare.value == null) Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
+            Intent.ACTION_SEND -> {
+                val stream = singleStream(intent)
+                val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                when {
+                    type.startsWith("image/") -> stream?.let { vm.handleSharedImage(it) }
+                        ?: Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
+                    type.startsWith("video/") -> stream?.let { vm.handleSharedVideo(it, type.substringAfter('/')) }
+                        ?: Toast.makeText(this, "영상을 읽지 못했어요", Toast.LENGTH_SHORT).show()
+                    // 링크(텍스트) 공유 → 재미진 곳/장소
+                    !sharedText.isNullOrBlank() && stream == null -> {
+                        vm.handleSharedText(sharedText, intent.getStringExtra(Intent.EXTRA_SUBJECT))
+                        if (vm.pendingShare.value == null) Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
+                    }
+                    // 그 외 파일(pdf·docx·엑셀·hwp 등) → 가족 공유 문서함
+                    stream != null -> vm.handleSharedDocument(stream)
+                    else -> Toast.makeText(this, "공유한 내용을 처리하지 못했어요", Toast.LENGTH_SHORT).show()
                 }
-                type.startsWith("image/") -> singleStream(intent)?.let { vm.handleSharedImage(it) }
-                    ?: Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
-                type.startsWith("video/") -> singleStream(intent)?.let { vm.handleSharedVideo(it, type.substringAfter('/')) }
-                    ?: Toast.makeText(this, "영상을 읽지 못했어요", Toast.LENGTH_SHORT).show()
             }
             Intent.ACTION_SEND_MULTIPLE -> if (type.startsWith("image/")) {
                 val uris = multiStream(intent)

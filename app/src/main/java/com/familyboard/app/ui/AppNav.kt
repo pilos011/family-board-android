@@ -21,8 +21,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -105,6 +107,8 @@ private fun MainScaffold(vm: AppViewModel) {
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     val pendingShare by vm.pendingShare.collectAsStateWithLifecycle()
+    val docShare by vm.pendingDoc.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Scaffold(
         bottomBar = {
@@ -330,6 +334,24 @@ private fun MainScaffold(vm: AppViewModel) {
                 },
             )
         }
+    }
+
+    // 다른 앱에서 '공유'로 받은 파일 → 가족 공유 문서함 저장 확인
+    docShare?.let { pd ->
+        AlertDialog(
+            onDismissRequest = { if (!pd.uploading) vm.clearPendingDoc() },
+            title = { Text("문서함에 저장") },
+            text = { Text(if (pd.uploading) "저장 중…" else pd.name) },
+            confirmButton = {
+                TextButton(enabled = !pd.uploading, onClick = {
+                    vm.savePendingDoc { ok, err ->
+                        if (ok) nav.navigate(Routes.DOCS)
+                        else Toast.makeText(context, err ?: "저장 실패", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("저장") }
+            },
+            dismissButton = { TextButton(enabled = !pd.uploading, onClick = { vm.clearPendingDoc() }) { Text("취소") } },
+        )
     }
 }
 

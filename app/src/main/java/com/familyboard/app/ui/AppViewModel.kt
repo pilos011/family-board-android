@@ -51,6 +51,13 @@ data class SharedPlace(
     val isFun: Boolean = false, // true=재미진 곳(유튜브/웹/이미지/영상), false=장소(맛집/가볼곳)
 )
 
+/** 다른 앱에서 '공유'로 받은 파일(문서함 저장 대기용). */
+data class PendingDoc(
+    val uri: android.net.Uri,
+    val name: String,
+    val uploading: Boolean = false,
+)
+
 /**
  * 앱 전역 상태/동작 허브. 화면들은 이 VM 을 공유한다(activity 스코프).
  */
@@ -167,6 +174,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 네이버 플레이스 등에서 공유받은 장소(저장 위치 선택 대기). */
     val pendingShare: MutableStateFlow<SharedPlace?> = MutableStateFlow(null)
+
+    /** 다른 앱에서 '공유'로 받은 파일(문서함 저장 대기). */
+    val pendingDoc: MutableStateFlow<PendingDoc?> = MutableStateFlow(null)
+
+    /** 공유받은 파일(pdf·docx·엑셀 등) → 문서함 저장 확인 대기. */
+    fun handleSharedDocument(uri: android.net.Uri) {
+        val (name, _) = queryFileNameSize(getApplication<Application>().contentResolver, uri)
+        pendingDoc.value = PendingDoc(uri, name.ifBlank { "문서" })
+    }
+
+    /** 대기 중인 공유 파일을 문서함에 업로드. onDone(성공, 실패사유). */
+    fun savePendingDoc(onDone: (Boolean, String?) -> Unit) {
+        val p = pendingDoc.value ?: return
+        if (p.uploading) return
+        pendingDoc.value = p.copy(uploading = true)
+        addDocFromUri(p.uri) { ok, err -> pendingDoc.value = null; onDone(ok, err) }
+    }
+
+    fun clearPendingDoc() { pendingDoc.value = null }
 
     /** 공유 텍스트 처리. 네이버 플레이스 링크 → 장소(맛집/가볼곳), 그 외 링크 → 재미진 곳. 서버로 정보 파싱. */
     fun handleSharedText(raw: String?, subject: String?) {
