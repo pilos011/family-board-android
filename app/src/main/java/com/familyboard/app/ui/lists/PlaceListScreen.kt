@@ -165,8 +165,9 @@ fun PlaceListScreen(
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
-    // 정렬/필터 바꾸면 항상 맨 위로 이동
-    LaunchedEffect(sortKeys, catFilter, regionFilter) { listState.scrollToItem(0) }
+    // 정렬/필터가 바뀌거나, (거리순에서) 위치가 갱신돼 순서가 재정렬되면 항상 맨 위로 이동.
+    // (key 가 있는 LazyColumn 은 재정렬 시 직전 최상단 항목을 따라가 중간에 걸리므로 명시적으로 맨 위 고정)
+    LaunchedEffect(sortKeys, catFilter, regionFilter, myLoc) { listState.scrollToItem(0) }
 
     // 필터 옵션(데이터에 실제 있는 값만) + 개수
     val catCounts = remember(items) { items.groupingBy { it.category.ifBlank { "기타" } }.eachCount() }
