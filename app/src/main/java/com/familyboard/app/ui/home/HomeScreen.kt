@@ -1,9 +1,13 @@
 package com.familyboard.app.ui.home
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -236,9 +240,8 @@ fun HomeScreen(
         Box(Modifier.fillMaxSize().background(Color(0x14000000))) // 살짝 어둡게
 
         // 지연 렌더(LazyColumn) → 보이는 항목만 구성/그려 스와이프가 부드러움.
-        // 기본 fling 을 부스트해 한 번의 스와이프로 더 멀리 스크롤(답답함 해소).
-        val baseFling = androidx.compose.foundation.gestures.ScrollableDefaults.flingBehavior()
-        val boostedFling = remember(baseFling) { BoostFling(baseFling, 2.2f) }
+        // 시원한 스크롤: 초기 속도 3.0배 + 저마찰 감속 → 한 번의 스와이프로 더 멀리.
+        val boostedFling = remember { BoostFling(exponentialDecay(frictionMultiplier = 0.5f), 3.0f) }
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
@@ -574,13 +577,24 @@ private val DateUp = Color(0xFF6F5C46)
 private val TodayAccent = Color(0xFFE8590C) // 오늘 일정 강조(주황)
 private val TodayHi = Color(0x22E8590C)     // 오늘 행 배경(옅은 주황)
 
-/** 기본 fling 초기 속도를 [factor] 배로 키워 한 번의 스와이프로 더 멀리 스크롤(네이티브 감속감 유지). */
+/** 초기 속도를 [factor] 배로 키우고 저마찰 [decay] 로 감속 → 한 번의 스와이프로 더 멀리 스크롤. */
 private class BoostFling(
-    private val original: androidx.compose.foundation.gestures.FlingBehavior,
+    private val decay: DecayAnimationSpec<Float>,
     private val factor: Float,
 ) : androidx.compose.foundation.gestures.FlingBehavior {
-    override suspend fun androidx.compose.foundation.gestures.ScrollScope.performFling(initialVelocity: Float): Float =
-        with(original) { performFling(initialVelocity * factor) }
+    override suspend fun androidx.compose.foundation.gestures.ScrollScope.performFling(initialVelocity: Float): Float {
+        if (kotlin.math.abs(initialVelocity) <= 1f) return initialVelocity
+        var last = 0f
+        var velocityLeft = initialVelocity
+        AnimationState(initialValue = 0f, initialVelocity = initialVelocity * factor).animateDecay(decay) {
+            val delta = value - last
+            val consumed = scrollBy(delta)
+            last = value
+            velocityLeft = this.velocity
+            if (kotlin.math.abs(delta - consumed) > 0.5f) cancelAnimation()
+        }
+        return velocityLeft
+    }
 }
 
 @Composable
