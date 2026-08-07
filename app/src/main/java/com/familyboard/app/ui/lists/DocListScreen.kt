@@ -123,9 +123,9 @@ fun DocListScreen(
                     setDataAndType(fileUri, mime)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                // createChooser(1회성) 대신 기본 실행 → 안드로이드 '연결 프로그램(한 번만/항상)' 창이 뜨고,
-                // '항상' 선택 시 시스템 기본 앱으로 기억됨(맛집 내비 선택과 동일한 경험).
-                context.startActivity(view)
+                // 항상 '한 번만'으로 열기: createChooser 는 시스템 기본앱을 저장하지 않고 매번 앱을 고르게 함
+                // (기본 실행 startActivity 는 '항상'을 고르면 고정돼 다시 못 바꾸는 문제가 있어 이 방식 사용).
+                context.startActivity(Intent.createChooser(view, "열기"))
             }.onFailure { Toast.makeText(context, "이 형식을 열 수 있는 앱이 없어요", Toast.LENGTH_SHORT).show() }
         }
     }

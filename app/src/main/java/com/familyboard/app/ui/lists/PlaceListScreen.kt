@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -61,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,11 +74,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.familyboard.app.data.Family
@@ -147,7 +152,19 @@ fun PlaceListScreen(
     var navTarget by remember { mutableStateOf<Triple<String, Double?, Double?>?>(null) }
     val listState = rememberLazyListState()
 
+    // 첫 진입: 캐시된 위치로 즉시 표시
     LaunchedEffect(Unit) { myLoc = lastKnownLocation(context) }
+    // 거리순이 켜져 있으면 화면 열 때/백그라운드→포그라운드 복귀 때 현재 위치를 새로 측정해 최신화
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && sortKeys.contains(SortKey.DISTANCE)) {
+                requestFreshLocation(context) { loc -> if (loc != null) myLoc = loc }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
     // 정렬/필터 바꾸면 항상 맨 위로 이동
     LaunchedEffect(sortKeys, catFilter, regionFilter) { listState.scrollToItem(0) }
 
@@ -744,6 +761,32 @@ private fun lastKnownLocation(context: Context): Location? {
     return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
         .mapNotNull { p -> runCatching { lm.getLastKnownLocation(p) }.getOrNull() }
         .maxByOrNull { it.time }
+}
+
+/**
+ * 현재 위치를 새로 한 번 측정(API30+ getCurrentLocation). 결과가 없으면 마지막 알려진 위치로 폴백.
+ * 거리순 정렬을 화면 열 때/포그라운드 복귀 때 최신 위치로 갱신하는 데 사용.
+ */
+@SuppressLint("MissingPermission")
+private fun requestFreshLocation(context: Context, onResult: (Location?) -> Unit) {
+    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!fine && !coarse) { onResult(null); return }
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val provider = when {
+        fine && runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false) -> LocationManager.GPS_PROVIDER
+        runCatching { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false) -> LocationManager.NETWORK_PROVIDER
+        else -> LocationManager.PASSIVE_PROVIDER
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        runCatching {
+            lm.getCurrentLocation(provider, null, ContextCompat.getMainExecutor(context)) { loc ->
+                onResult(loc ?: lastKnownLocation(context))
+            }
+        }.onFailure { onResult(lastKnownLocation(context)) }
+    } else {
+        onResult(lastKnownLocation(context))
+    }
 }
 
 /** 두 지점 거리(km). 좌표 없으면 null. */
