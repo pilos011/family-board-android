@@ -236,9 +236,13 @@ fun HomeScreen(
         Box(Modifier.fillMaxSize().background(Color(0x14000000))) // 살짝 어둡게
 
         // 지연 렌더(LazyColumn) → 보이는 항목만 구성/그려 스와이프가 부드러움.
+        // 기본 fling 을 부스트해 한 번의 스와이프로 더 멀리 스크롤(답답함 해소).
+        val baseFling = androidx.compose.foundation.gestures.ScrollableDefaults.flingBehavior()
+        val boostedFling = remember(baseFling) { BoostFling(baseFling, 2.2f) }
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
+            flingBehavior = boostedFling,
         ) {
             item {
                 TitleSign(
@@ -569,6 +573,15 @@ private val DatePast = Color(0xFFA89A86)
 private val DateUp = Color(0xFF6F5C46)
 private val TodayAccent = Color(0xFFE8590C) // 오늘 일정 강조(주황)
 private val TodayHi = Color(0x22E8590C)     // 오늘 행 배경(옅은 주황)
+
+/** 기본 fling 초기 속도를 [factor] 배로 키워 한 번의 스와이프로 더 멀리 스크롤(네이티브 감속감 유지). */
+private class BoostFling(
+    private val original: androidx.compose.foundation.gestures.FlingBehavior,
+    private val factor: Float,
+) : androidx.compose.foundation.gestures.FlingBehavior {
+    override suspend fun androidx.compose.foundation.gestures.ScrollScope.performFling(initialVelocity: Float): Float =
+        with(original) { performFling(initialVelocity * factor) }
+}
 
 @Composable
 private fun ScheduleBoard(
