@@ -7,10 +7,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -418,6 +420,7 @@ private fun SectionLabel(text: String) {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PostIt(text: String, index: Int, modifier: Modifier = Modifier, onLongPress: (() -> Unit)? = null) {
     val rot = listOf(-2.5f, 1.8f, -1.2f, 2.4f)[index % 4]
@@ -427,12 +430,11 @@ private fun PostIt(text: String, index: Int, modifier: Modifier = Modifier, onLo
             .shadow(6.dp, RoundedCornerShape(3.dp))
             .background(NoteColors[index % NoteColors.size], RoundedCornerShape(3.dp))
             .then(
-                if (onLongPress != null) Modifier.pointerInput(Unit) {
-                    detectTapGestures(onLongPress = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onLongPress()
-                    })
-                } else Modifier,
+                // combinedClickable 은 스크롤에 즉시 양보 → 스와이프가 멈칫하지 않음(detectTapGestures 대체)
+                if (onLongPress != null) Modifier.combinedClickable(
+                    onClick = onLongPress,
+                    onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongPress() },
+                ) else Modifier,
             ),
     ) {
         Box(
@@ -626,6 +628,7 @@ private fun PaperDivider(label: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventLine(
     date: LocalDate,
@@ -654,14 +657,12 @@ private fun EventLine(
         Modifier.fillMaxWidth()
             // 오늘이면 행 전체 폭에 옅은 강조 배경(내용 들여쓰기 없음 → 다른 행과 정렬 유지)
             .then(if (isToday) Modifier.clip(RoundedCornerShape(6.dp)).background(TodayHi) else Modifier)
-            .pointerInput(e.id, date) {
-                detectTapGestures(onLongPress = {
-                    if (e.id.isNotBlank()) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onOpenEvent(e.id, date.toString())
-                    }
-                })
-            }
+            // combinedClickable = 스크롤에 즉시 양보(스와이프 멈칫 방지). 탭/롱프레스 모두 일정 열기.
+            .combinedClickable(
+                enabled = e.id.isNotBlank(),
+                onClick = { onOpenEvent(e.id, date.toString()) },
+                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onOpenEvent(e.id, date.toString()) },
+            )
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -697,6 +698,7 @@ private val Gold = Color(0xFFE7B24C)
 private val Chalk = Color(0xFFF2EAD6)
 private val ChalkSoft = Color(0xFFB9C7BA)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: Boolean, onLongPress: () -> Unit) {
     val ddayLabel = when {
@@ -707,11 +709,11 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
         Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF2C4A3B), BoardGreen)))
-            .pointerInput(Unit) {
-                detectTapGestures(onLongPress = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongPress()
-                })
-            }
+            // combinedClickable = 스크롤에 즉시 양보(스와이프 멈칫 방지)
+            .combinedClickable(
+                onClick = onLongPress,
+                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongPress() },
+            )
             .padding(18.dp),
     ) {
         Column {
