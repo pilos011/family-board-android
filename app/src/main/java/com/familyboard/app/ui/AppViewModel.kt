@@ -354,7 +354,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (url.isNullOrBlank()) { onDone(false, "업로드 실패(네트워크 확인)"); return@launch }
         val ok = runCatching {
             board.upsertItem(ListItem(
-                text = name, board = com.familyboard.app.data.model.DocBoard.BOARD,
+                text = titleFromFileName(name), board = com.familyboard.app.data.model.DocBoard.BOARD,
                 createdBy = currentMemberId.value.orEmpty(),
                 memberIds = listOf(Family.ALL_ID),
                 photoUrls = listOf(url), fileName = name, fileMime = mime, fileSize = size,
@@ -363,9 +363,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onDone(ok, if (ok) null else "저장 실패")
     }
 
+    /** 파일명에서 확장자를 뺀 기본 제목. (예: "가족여행.pdf" → "가족여행") */
+    private fun titleFromFileName(name: String): String =
+        name.substringBeforeLast('.', name).ifBlank { name }
+
     /** 문서 제목·열람 대상 수정(올린이/관리자). viewerIds 비거나 all 포함이면 모두 공개. */
     fun updateDoc(item: ListItem, title: String, viewerIds: List<String>) = viewModelScope.launch {
-        val cleanTitle = title.trim().ifBlank { item.fileName.ifBlank { "문서" } }
+        val cleanTitle = title.trim().ifBlank { titleFromFileName(item.fileName).ifBlank { "문서" } }
         val viewers = if (viewerIds.isEmpty() || viewerIds.contains(Family.ALL_ID)) listOf(Family.ALL_ID) else viewerIds
         runCatching { board.updateFields(item.id, mapOf("text" to cleanTitle, "memberIds" to viewers)) }
     }

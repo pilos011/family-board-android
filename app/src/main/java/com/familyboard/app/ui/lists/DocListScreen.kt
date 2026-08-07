@@ -123,7 +123,9 @@ fun DocListScreen(
                     setDataAndType(fileUri, mime)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(view, "열기").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                // createChooser(1회성) 대신 기본 실행 → 안드로이드 '연결 프로그램(한 번만/항상)' 창이 뜨고,
+                // '항상' 선택 시 시스템 기본 앱으로 기억됨(맛집 내비 선택과 동일한 경험).
+                context.startActivity(view)
             }.onFailure { Toast.makeText(context, "이 형식을 열 수 있는 앱이 없어요", Toast.LENGTH_SHORT).show() }
         }
     }
