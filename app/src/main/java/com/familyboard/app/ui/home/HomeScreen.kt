@@ -652,6 +652,7 @@ private fun EventLine(
     val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
     Row(
         Modifier.fillMaxWidth()
+            // 오늘이면 행 전체 폭에 옅은 강조 배경(내용 들여쓰기 없음 → 다른 행과 정렬 유지)
             .then(if (isToday) Modifier.clip(RoundedCornerShape(6.dp)).background(TodayHi) else Modifier)
             .pointerInput(e.id, date) {
                 detectTapGestures(onLongPress = {
@@ -661,24 +662,15 @@ private fun EventLine(
                     }
                 })
             }
-            .padding(vertical = 4.dp, horizontal = if (isToday) 6.dp else 0.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 오늘이면 왼쪽에 '오늘' 태그로 명확히 표시
-        if (isToday) {
-            Text(
-                "오늘", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(TodayAccent)
-                    .padding(horizontal = 5.dp, vertical = 1.dp),
-            )
-            Spacer(Modifier.size(5.dp))
-        }
-        // 날짜(+당일 시간)를 한 줄로. 여러 날 일정 폭에 딱 맞춰 고정 → 점 정렬은 유지하되 빈 공간 최소화.
+        // 날짜(+당일 시간)를 한 줄로. 여러 날 일정 폭에 딱 맞춰 고정 → 점 정렬은 모든 행 동일.
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
             color = if (pastStyle) DatePast else if (isToday) TodayAccent else DateUp,
-            modifier = if (isToday) Modifier else Modifier.widthIn(min = 88.dp),
+            modifier = Modifier.widthIn(min = 88.dp),
         )
         Spacer(Modifier.size(6.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
