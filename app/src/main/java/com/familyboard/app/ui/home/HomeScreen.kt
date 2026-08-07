@@ -256,14 +256,10 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(20.dp))
 
-            SectionLabel("가족 공지사항")
-            Spacer(Modifier.height(8.dp))
-            if (checkedNotices.isEmpty()) {
-                Text(
-                    "관리 기능 > 가족 공지사항에서 체크하면\n여기 포스트잇으로 붙어요.",
-                    fontFamily = NanumPen, fontSize = 18.sp, color = Color.White,
-                )
-            } else {
+            // 표시할(체크된) 공지가 있을 때만 '가족 공지사항' 섹션 노출. 없으면 일정 보드가 이 자리로 올라옴.
+            if (checkedNotices.isNotEmpty()) {
+                SectionLabel("가족 공지사항")
+                Spacer(Modifier.height(8.dp))
                 // 화면 폭과 무관하게 항상 한 줄에 2개씩(각 절반 폭). 플립3 등 좁은 폭에서 세로로 접히지 않게 함.
                 // 부모(선일·은선)만 롱클릭으로 공지 화면 이동. 자녀는 반응 없음.
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -281,8 +277,8 @@ fun HomeScreen(
                         }
                     }
                 }
+                Spacer(Modifier.height(26.dp))
             }
-            Spacer(Modifier.height(26.dp))
 
             SectionLabel("일정 보드")
             Spacer(Modifier.height(8.dp))
@@ -465,26 +461,21 @@ private fun NoticeSpotlight(text: String, index: Int, onConfirm: () -> Unit) {
     val alphaA = remember { Animatable(0f) }
     val pinPress = remember { Animatable(0f) } // 0=떠 있음, 1=꾹 눌려 박힘
 
-    // 등장(팝인) + 스크림 페이드
+    // 등장(팝인) → 압정 꾹(찍힘): 처음 떠오를 때만 압정을 눌러 박는다.
     LaunchedEffect(Unit) {
-        alphaA.animateTo(1f, tween(200))
-        scale.animateTo(1.16f, tween(360, easing = FastOutSlowInEasing))
-        scale.animateTo(1.06f, tween(200))
+        alphaA.animateTo(1f, tween(180))
+        scale.animateTo(1.16f, tween(340, easing = FastOutSlowInEasing))
+        scale.animateTo(1.06f, tween(180))
+        pinPress.animateTo(1.18f, tween(150, easing = FastOutSlowInEasing)) // 꾹(오버슈트)
+        pinPress.animateTo(1f, tween(120))
     }
-    // 확인 전 둥실
-    val bobT = rememberInfiniteTransition(label = "noticeBob")
-    val bobY by bobT.animateFloat(
-        0f, -7f, infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "noticeBobY",
-    )
 
-    // 확인 시퀀스: 축소 + 위로 이동 → 압정 꾹 → 페이드아웃 → 콜백
+    // 확인 시퀀스: 축소 + 위로(보드) 이동 → 페이드아웃 → 콜백. (도킹 시 압정 애니메이션 없음)
     LaunchedEffect(confirming) {
         if (confirming) {
             launch { scale.animateTo(0.5f, tween(480, easing = FastOutSlowInEasing)) }
             transY.animateTo(-300f, tween(480, easing = FastOutSlowInEasing))
-            pinPress.animateTo(1.18f, tween(130, easing = FastOutSlowInEasing)) // 꾹(오버슈트)
-            pinPress.animateTo(1f, tween(110))
-            delay(90)
+            delay(60)
             alphaA.animateTo(0f, tween(160))
             onConfirm()
         }
@@ -499,7 +490,7 @@ private fun NoticeSpotlight(text: String, index: Int, onConfirm: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 Modifier
-                    .offset(y = (transY.value + if (!confirming) bobY else 0f).dp)
+                    .offset(y = transY.value.dp)
                     .scale(scale.value)
                     .alpha(alphaA.value),
             ) {
@@ -542,13 +533,14 @@ private fun SpotlightPostIt(text: String, index: Int, pinPress: Float) {
                 .padding(top = 26.dp, start = 18.dp, end = 18.dp, bottom = 16.dp),
             maxLines = 6, overflow = TextOverflow.Ellipsis,
         )
-        // 압정: 눌리면 아래로 박히고 살짝 커짐
+        // 압정: 처음 팝업 때만 위에서 내려와 꾹 박힘(pinPress 0=숨김/위, 1=박힘). 그 전엔 보이지 않음.
         Icon(
             Icons.Filled.PushPin, "고정",
             tint = PinColors[index % PinColors.size],
             modifier = Modifier.align(Alignment.TopCenter)
                 .offset(y = (-8 + 12 * pinPress).dp)
                 .size((26 + 8 * pinPress).dp)
+                .alpha(pinPress.coerceIn(0f, 1f))
                 .rotate(32f),
         )
     }
