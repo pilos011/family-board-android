@@ -43,6 +43,7 @@ import com.familyboard.app.ui.emergency.EmergencySendScreen
 import com.familyboard.app.ui.home.HomeScreen
 import com.familyboard.app.data.model.FunBoard
 import com.familyboard.app.data.model.PlaceBoards
+import com.familyboard.app.ui.lists.DocListScreen
 import com.familyboard.app.ui.lists.FunListScreen
 import com.familyboard.app.ui.lists.ListDetailScreen
 import com.familyboard.app.ui.lists.PlaceListScreen
@@ -65,6 +66,7 @@ private object Routes {
     const val PLACE = "place/{board}"
     const val FUN = "fun"
     const val MYFUN = "myfun"
+    const val DOCS = "docs"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -178,6 +180,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenPlace = { nav.navigate(Routes.place(it)) },
                     onOpenFun = { nav.navigate(Routes.FUN) },
                     onOpenMyFun = { nav.navigate(Routes.MYFUN) },
+                    onOpenDocs = { nav.navigate(Routes.DOCS) },
                 )
             }
             composable(Routes.FUN) {
@@ -187,6 +190,9 @@ private fun MainScaffold(vm: AppViewModel) {
             composable(Routes.MYFUN) {
                 FunListScreen(vm = vm, boardKey = FunBoard.PRIVATE, isPrivate = true,
                     currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.DOCS) {
+                DocListScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.PLACE) { entry ->
                 PlaceListScreen(

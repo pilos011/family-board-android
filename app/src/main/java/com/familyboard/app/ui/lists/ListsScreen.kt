@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Place
@@ -81,6 +82,7 @@ fun ListsScreen(
     onOpenPlace: (String) -> Unit,
     onOpenFun: () -> Unit,
     onOpenMyFun: () -> Unit,
+    onOpenDocs: () -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
@@ -89,6 +91,8 @@ fun ListsScreen(
     val funCount by vm.funCount.collectAsStateWithLifecycle()
     val myFunCount by vm.myFunCount.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
+    val docs by vm.docItems.collectAsStateWithLifecycle()
+    val docCount = docs?.count { com.familyboard.app.data.model.DocBoard.visibleTo(it, currentMemberId) } ?: 0
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
     val customLists by vm.customLists.collectAsStateWithLifecycle()
@@ -112,15 +116,13 @@ fun ListsScreen(
                 CompactBoardCard("맛집", restaurant?.size ?: 0, RestaurantColor, Icons.Default.Restaurant, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.RESTAURANT) }
                 CompactBoardCard("가볼 곳", visit?.size ?: 0, VisitColor, Icons.Default.Place, Modifier.weight(1f)) { onOpenPlace(PlaceBoards.VISIT) }
             }
-            // 준호는 지정 시각까지 재미진 곳/내 재미진 곳 숨김(하드코딩, VM에 날짜 일원화)
-            if (!vm.funHiddenForCurrentUser()) {
-                Spacer(Modifier.height(10.dp))
-                // 둘째 행: 재미진 곳(공용) · 내 재미진 곳(나만)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
-                    CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
-                    Spacer(Modifier.weight(1f)); Spacer(Modifier.weight(1f))
-                }
+            Spacer(Modifier.height(10.dp))
+            // 둘째 행: 재미진 곳(공용) · 내 재미진 곳(나만) · 가족 공유 문서함
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
+                CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
+                CompactBoardCard("문서함", docCount, DocsColor, Icons.Default.FolderShared, Modifier.weight(1f)) { onOpenDocs() }
+                Spacer(Modifier.weight(1f))
             }
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
@@ -305,6 +307,7 @@ private val RestaurantColor = Color(0xFFFF922B)
 private val VisitColor = Color(0xFF22B8CF)
 private val FunColor = Color(0xFFF06595)
 private val MyFunColor = Color(0xFF9775FA)
+private val DocsColor = Color(0xFF3B5BDB)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

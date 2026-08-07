@@ -128,8 +128,8 @@ fun PlaceListScreen(
 
     var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
-    // 정렬: 선택한 키들을 탭 순서대로 우선순위 적용(혼합). 비면 네이버 평점순.
-    var sortKeys by remember { mutableStateOf(listOf(SortKey.NAVER)) }
+    // 정렬: 선택한 키들을 탭 순서대로 우선순위 적용(혼합). 기본=거리순(가까운 곳 먼저).
+    var sortKeys by remember { mutableStateOf(listOf(SortKey.DISTANCE)) }
     var myLoc by remember { mutableStateOf<Location?>(null) }
     var editComment by remember { mutableStateOf<Triple<ListItem, Int, String>?>(null) }
     // 삭제 확인용: 삭제하려는 장소 / 삭제하려는 댓글(장소+인덱스)
@@ -269,7 +269,7 @@ fun PlaceListScreen(
                                 val savedNames = items.map { it.text }
                                 vm.recommendPlace(boardKey, catFilter ?: "", regionFilter ?: "", savedNames, loc?.latitude, loc?.longitude) { list ->
                                     recommending = false
-                                    recommends = list
+                                    recommends = list.take(5) // AI 추천 최대 5곳
                                     if (list.isEmpty()) Toast.makeText(context, "추천할 새 장소를 못 찾았어요", Toast.LENGTH_SHORT).show()
                                 }
                             }
@@ -303,7 +303,7 @@ fun PlaceListScreen(
                         Icon(Icons.Default.Close, "닫기", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.size(18.dp).clickable { recommends = emptyList() })
                     }
-                    // 6곳까지 나올 수 있어 최대 높이 제한 + 스크롤(리스트 영역을 너무 밀지 않게)
+                    // 최대 5곳 + 높이 제한/스크롤(리스트 영역을 너무 밀지 않게)
                     Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
                     recommends.forEach { rec ->
                         Spacer(Modifier.size(8.dp))

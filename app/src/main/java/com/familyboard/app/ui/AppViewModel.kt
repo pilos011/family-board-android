@@ -108,6 +108,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun placeItems(boardKey: String): StateFlow<List<ListItem>?> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
+    // 가족 공유 문서함(pdf·이미지·docx·엑셀 등). 항목 수가 많지 않아 실시간 전체 조회 + 클라 정렬/권한필터.
+    // null=로딩 전(스피너), 빈 리스트=없음.
+    val docItems: StateFlow<List<ListItem>?> =
+        board.items(com.familyboard.app.data.model.DocBoard.BOARD)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     // 재미진 곳(유튜브/웹/이미지 게시판). 페이지 방식(이전/다음 + 이어보기).
     // 한 페이지 FUN_PAGE개. 페이지 상태/로딩은 화면(FunListScreen)이 관리하고,
     // VM 은 1회성 조회(fetchFunPage) · 전체 개수 · 마지막 본 페이지 저장만 담당.
@@ -218,18 +224,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun clearPendingShare() { pendingShare.value = null }
 
-    /** 준호는 2026-11-20 00:00(KST)까지 재미진 곳/내 재미진 곳 숨김(하드코딩). 카드·공유저장 공통. */
-    fun funHiddenForCurrentUser(): Boolean {
-        if (currentMemberId.value != "junho") return false
-        val revealAt = java.time.LocalDateTime.of(2026, 11, 20, 0, 0)
-            .atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
-        return System.currentTimeMillis() < revealAt
-    }
-
     fun saveFun(boardKey: String) {
         val s = pendingShare.value ?: return
         if (s.loading) return
-        if (funHiddenForCurrentUser()) { pendingShare.value = null; return } // 숨김 기간엔 저장 안 함
         val photos = if (s.images.isNotEmpty()) s.images else if (s.image.isNotBlank()) listOf(s.image) else emptyList()
         val isImage = s.link.isBlank() && photos.isNotEmpty()
         val nm = s.name.trim().let { if (it.isBlank() || it.endsWith("중…")) (if (isImage) "이미지" else "링크") else it }
@@ -311,6 +308,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             pendingShare.value = if (url != null) cur.copy(name = "공유 이미지", image = url, link = "", loading = false, isFun = true)
             else null // 업로드 실패 시 대기 취소
         }
+    }
+
+    // ---- 가족 공유 문서함 ----
+    private val MAX_DOC_BYTES = 58_000_000 // 서버 /uploadfile 한도(60MB) 이내 여유
+
+    /** 파일 URI 업로드 후 문서함 항목 생성(제목=파일명, 열람=모두). onDone(성공, 실패사유). */
+    fun addDocFromUri(uri: android.net.Uri, onDone: (Boolean, String?) -> Unit) = viewModelScope.launch {
+        val cr = getApplication<Application>().contentResolver
+        val (rawName, size) = queryFileNameSize(cr, uri)
+        val mime = cr.getType(uri).orEmpty()
+        val name = rawName.ifBlank { "문서" }
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { cr.openInputStream(uri)!!.use { it.readBytes() } }.getOrNull()
+        }
+        if (bytes == null) { onDone(false, "파일을 읽을 수 없어요"); return@launch }
+        if (bytes.size > MAX_DOC_BYTES) { onDone(false, "58MB 이하 파일만 올릴 수 있어요"); return@launch }
+        val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, docExt(name, mime))
+        if (url.isNullOrBlank()) { onDone(false, "업로드 실패(네트워크 확인)"); return@launch }
+        val ok = runCatching {
+            board.upsertItem(ListItem(
+                text = name, board = com.familyboard.app.data.model.DocBoard.BOARD,
+                createdBy = currentMemberId.value.orEmpty(),
+                memberIds = listOf(Family.ALL_ID),
+                photoUrls = listOf(url), fileName = name, fileMime = mime, fileSize = size,
+                createdAt = System.currentTimeMillis()))
+        }.isSuccess
+        onDone(ok, if (ok) null else "저장 실패")
+    }
+
+    /** 문서 제목·열람 대상 수정(올린이/관리자). viewerIds 비거나 all 포함이면 모두 공개. */
+    fun updateDoc(item: ListItem, title: String, viewerIds: List<String>) = viewModelScope.launch {
+        val cleanTitle = title.trim().ifBlank { item.fileName.ifBlank { "문서" } }
+        val viewers = if (viewerIds.isEmpty() || viewerIds.contains(Family.ALL_ID)) listOf(Family.ALL_ID) else viewerIds
+        runCatching { board.updateFields(item.id, mapOf("text" to cleanTitle, "memberIds" to viewers)) }
+    }
+
+    private fun queryFileNameSize(cr: android.content.ContentResolver, uri: android.net.Uri): Pair<String, Long> {
+        var name = ""; var size = 0L
+        runCatching {
+            cr.query(uri, null, null, null, null)?.use { c ->
+                val ni = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                val si = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (c.moveToFirst()) {
+                    if (ni >= 0) name = c.getString(ni).orEmpty()
+                    if (si >= 0 && !c.isNull(si)) size = c.getLong(si)
+                }
+            }
+        }
+        if (name.isBlank()) name = uri.lastPathSegment?.substringAfterLast('/').orEmpty()
+        return name to size
+    }
+
+    private fun docExt(name: String, mime: String): String {
+        val fromName = name.substringAfterLast('.', "").lowercase()
+        if (fromName.isNotBlank() && fromName.length <= 5 && fromName.all { it.isLetterOrDigit() }) return fromName
+        return android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)?.lowercase() ?: "bin"
     }
 
     fun addPlace(boardKey: String, name: String, link: String, description: String = "", address: String = "",

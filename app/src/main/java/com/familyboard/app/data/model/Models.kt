@@ -44,10 +44,14 @@ data class ListItem(
     val naverScore: Double = 0.0,  // 네이버 평점(정렬용). 맛집/가볼 곳
     val lat: Double = 0.0,         // 위도(거리 정렬용)
     val lng: Double = 0.0,         // 경도(거리 정렬용)
-    val createdAt: Long = 0,       // 생성 시각(epoch millis). 등록순 정렬용(재미진 곳 등)
+    val createdAt: Long = 0,       // 생성 시각(epoch millis). 등록순 정렬용(재미진 곳/문서함 등)
     val viewedBy: List<String> = emptyList(), // 이 항목을 본(클릭한) 멤버 id 목록(재미진 곳)
+    val fileName: String = "",     // 문서함: 원본 파일명(확장자 포함). text=표시 제목(편집 가능)
+    val fileMime: String = "",     // 문서함: MIME 타입(열기용)
+    val fileSize: Long = 0,        // 문서함: 파일 크기(bytes)
     // 댓글은 progress(ProgressNote: text/by/dateIso)를 재사용
     // 파싱 요약(종목·별점·영업시간)은 description 을 재사용
+    // 문서함 열람 대상은 memberIds 를 재사용(["all"]=모두, 지정 시 해당 멤버만)
 )
 
 /** 버킷 진행 이력 메모 */
@@ -87,6 +91,29 @@ object FunBoard {
     const val TITLE = "재미진 곳"
     const val TITLE_PRIVATE = "내 재미진 곳"
     fun titleOf(board: String) = if (board == PRIVATE) TITLE_PRIVATE else TITLE
+}
+
+/**
+ * 가족 공유 문서함: pdf·이미지·docx·엑셀 등 파일 공유. text=제목(기본 파일명, 편집 가능),
+ * photoUrls[0]=서버 파일 URL, fileName/fileMime/fileSize=원본 메타, createdAt=올린 시각(최신순),
+ * memberIds=열람 대상(["all"]=모두 / 지정 시 해당 멤버만·올린이·관리자는 항상).
+ */
+object DocBoard {
+    const val BOARD = "docs"
+    const val TITLE = "가족 공유 문서함"
+    const val ADMIN = "seonil" // 선일: 모든 문서 수정·삭제 권한
+
+    /** 열람 권한: 공개(모두/빈 대상)거나, 올린이·관리자거나, 지정 대상에 포함될 때. */
+    fun visibleTo(item: ListItem, memberId: String?): Boolean {
+        val ids = item.memberIds
+        if (ids.isEmpty() || ids.contains("all")) return true
+        if (memberId.isNullOrBlank()) return false
+        return memberId == item.createdBy || memberId == ADMIN || ids.contains(memberId)
+    }
+
+    /** 수정·삭제 권한: 올린이 본인 또는 관리자(선일). */
+    fun canManage(item: ListItem, memberId: String?): Boolean =
+        !memberId.isNullOrBlank() && (memberId == item.createdBy || memberId == ADMIN)
 }
 
 /** 용돈 정산 보드 키 (아이별). 준영/준호만 사용. */
