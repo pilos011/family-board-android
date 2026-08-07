@@ -501,15 +501,10 @@ private fun EventLine(
     val multi = end != date
     val dowS = KrDow[date.dayOfWeek.value - 1]
     val dowE = KrDow[end.dayOfWeek.value - 1]
-    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}(${dowS})~${end.monthValue}/${end.dayOfMonth}(${dowE})"
-    else "${date.monthValue}/${date.dayOfMonth}(${dowS})"
-    // 시작시간(제목 오른쪽 → 날짜 아래로 이동). 여러 날/미지정은 없음.
-    val timeLabel = when {
-        multi -> ""
-        e.allDay -> "종일"
-        e.startTime.isNotBlank() -> e.startTime
-        else -> ""
-    }
+    // 당일 시간있는 일정은 요일 오른쪽 같은 줄에("8/7(금) 14:00"). 종일은 표시 안 함. 여러 날은 "8/11~8/14(금)".
+    val timeSuffix = if (!multi && !e.allDay && e.startTime.isNotBlank()) " ${e.startTime}" else ""
+    val dateLabel = if (multi) "${date.monthValue}/${date.dayOfMonth}~${end.monthValue}/${end.dayOfMonth}(${dowE})"
+    else "${date.monthValue}/${date.dayOfMonth}(${dowS})$timeSuffix"
     val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
     Row(
         Modifier.fillMaxWidth()
@@ -524,20 +519,13 @@ private fun EventLine(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 날짜열: 여러 날 일정 폭에 맞춰 고정 → 색상 점 시작 위치가 모든 행에서 정렬됨. 시작시간은 날짜 아래.
-        Column(Modifier.widthIn(min = 124.dp)) {
-            Text(
-                dateLabel,
-                fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                color = if (pastStyle) DatePast else DateUp,
-            )
-            if (timeLabel.isNotBlank()) {
-                Text(
-                    timeLabel, fontSize = 11.sp, maxLines = 1,
-                    color = if (pastStyle) DatePast else DateUp.copy(alpha = 0.7f),
-                )
-            }
-        }
+        // 날짜(+당일 시간)를 한 줄로. 여러 날 일정 폭에 맞춰 고정 → 색상 점 시작 위치가 모든 행에서 정렬됨.
+        Text(
+            dateLabel,
+            fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            color = if (pastStyle) DatePast else DateUp,
+            modifier = Modifier.widthIn(min = 124.dp),
+        )
         Spacer(Modifier.size(8.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
         Spacer(Modifier.size(9.dp))
