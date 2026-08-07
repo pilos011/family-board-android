@@ -1,5 +1,6 @@
 package com.familyboard.app.ui.home
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Upgrade
@@ -42,12 +44,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
@@ -76,8 +80,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyboard.app.R
 import com.familyboard.app.data.Family
 import com.familyboard.app.data.RecurrenceExpander
+import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.notif.UpdateChecker
 import com.familyboard.app.ui.AppViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -139,6 +145,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
+    val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val events by vm.events.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
     val nowTime = remember { java.time.LocalTime.now() } // 진입 시각(오늘 일정 지남 판정 기준)
@@ -162,6 +169,16 @@ fun HomeScreen(
     LaunchedEffect(Unit) { vm.refreshUpdate() }
 
     val checkedNotices = remember(notices) { notices.filter { it.checked }.take(4) }
+    // 새 공지 강조(스포트라이트): 체크된 공지 중 현재 사용자가 아직 '확인'하지 않은 것(viewedBy 미포함).
+    var spotlight by remember { mutableStateOf<ListItem?>(null) }
+    val spotlightHandled = remember { mutableSetOf<String>() } // 이번 세션에서 확인 처리한 id(즉시 재노출 방지)
+    LaunchedEffect(checkedNotices, currentMemberId) {
+        if (spotlight == null) {
+            val me = currentMemberId
+            if (!me.isNullOrBlank())
+                spotlight = checkedNotices.firstOrNull { me !in it.viewedBy && it.id !in spotlightHandled }
+        }
+    }
 
     // 일정 보드: 롤링 윈도우(오늘 한 달 전 ~ 3개월 후)에서 지난 2개 + 다가오는 4개.
     // 고정 연말(12/31) 대신 롤링으로 두어 연말에도 내년 초 일정이 "다가오는 일정"에 보이게 함.
@@ -280,6 +297,18 @@ fun HomeScreen(
                 CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false, onLongPress = onOpenDday)
             }
             Spacer(Modifier.height(24.dp))
+        }
+
+        // 새 공지 강조 오버레이: 가운데 떠오른 뒤, 확인 시 축소·이동 + 압정 꾹 고정
+        spotlight?.let { n ->
+            val idx = checkedNotices.indexOf(n).coerceAtLeast(0)
+            key(n.id) { // 공지가 바뀌면 애니메이션 상태 새로 시작
+                NoticeSpotlight(
+                    text = n.text,
+                    index = idx,
+                    onConfirm = { spotlightHandled.add(n.id); vm.markNoticeSeen(n); spotlight = null },
+                )
+            }
         }
     }
 
@@ -424,6 +453,107 @@ private fun PostIt(text: String, index: Int, modifier: Modifier = Modifier, onLo
     }
 }
 
+/**
+ * 새 공지 강조 오버레이: 가운데에 크게 떠올라(살짝 둥실) 강조 → '확인' 누르면 축소하며 위(보드)로 이동,
+ * 마지막에 압정이 꾹 눌려 고정되는 느낌 후 콜백. 콜백에서 viewedBy 표시 & 오버레이 종료.
+ */
+@Composable
+private fun NoticeSpotlight(text: String, index: Int, onConfirm: () -> Unit) {
+    var confirming by remember { mutableStateOf(false) }
+    val scale = remember { Animatable(0.72f) }
+    val transY = remember { Animatable(0f) }   // dp 값(음수=위로)
+    val alphaA = remember { Animatable(0f) }
+    val pinPress = remember { Animatable(0f) } // 0=떠 있음, 1=꾹 눌려 박힘
+
+    // 등장(팝인) + 스크림 페이드
+    LaunchedEffect(Unit) {
+        alphaA.animateTo(1f, tween(200))
+        scale.animateTo(1.16f, tween(360, easing = FastOutSlowInEasing))
+        scale.animateTo(1.06f, tween(200))
+    }
+    // 확인 전 둥실
+    val bobT = rememberInfiniteTransition(label = "noticeBob")
+    val bobY by bobT.animateFloat(
+        0f, -7f, infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "noticeBobY",
+    )
+
+    // 확인 시퀀스: 축소 + 위로 이동 → 압정 꾹 → 페이드아웃 → 콜백
+    LaunchedEffect(confirming) {
+        if (confirming) {
+            launch { scale.animateTo(0.5f, tween(480, easing = FastOutSlowInEasing)) }
+            transY.animateTo(-300f, tween(480, easing = FastOutSlowInEasing))
+            pinPress.animateTo(1.18f, tween(130, easing = FastOutSlowInEasing)) // 꾹(오버슈트)
+            pinPress.animateTo(1f, tween(110))
+            delay(90)
+            alphaA.animateTo(0f, tween(160))
+            onConfirm()
+        }
+    }
+
+    Box(
+        Modifier.fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.45f * alphaA.value))
+            .pointerInput(Unit) { detectTapGestures { } }, // 모달(뒤 조작 차단)
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier
+                    .offset(y = (transY.value + if (!confirming) bobY else 0f).dp)
+                    .scale(scale.value)
+                    .alpha(alphaA.value),
+            ) {
+                SpotlightPostIt(text, index, pinPress = pinPress.value)
+            }
+            if (!confirming) {
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    Modifier.alpha(alphaA.value)
+                        .shadow(6.dp, RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xFF37B24D))
+                        .clickable { confirming = true }
+                        .padding(horizontal = 24.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Check, "확인", tint = Color.White, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.size(7.dp))
+                    Text("확인", color = Color.White, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
+        }
+    }
+}
+
+/** 강조용 큰 포스트잇 + 애니메이션 압정(pinPress 0→1 = 위에서 떠 있다가 꾹 박힘). */
+@Composable
+private fun SpotlightPostIt(text: String, index: Int, pinPress: Float) {
+    val rot = listOf(-2.5f, 1.8f, -1.2f, 2.4f)[index % 4]
+    Box(
+        Modifier.width(230.dp).height(210.dp).rotate(rot)
+            .shadow(18.dp, RoundedCornerShape(4.dp))
+            .background(NoteColors[index % NoteColors.size], RoundedCornerShape(4.dp)),
+    ) {
+        Text(
+            text,
+            fontFamily = NanumPen, fontSize = 27.sp, color = Color(0xFF40331F), lineHeight = 31.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.align(Alignment.Center)
+                .padding(top = 26.dp, start = 18.dp, end = 18.dp, bottom = 16.dp),
+            maxLines = 6, overflow = TextOverflow.Ellipsis,
+        )
+        // 압정: 눌리면 아래로 박히고 살짝 커짐
+        Icon(
+            Icons.Filled.PushPin, "고정",
+            tint = PinColors[index % PinColors.size],
+            modifier = Modifier.align(Alignment.TopCenter)
+                .offset(y = (-8 + 12 * pinPress).dp)
+                .size((26 + 8 * pinPress).dp)
+                .rotate(32f),
+        )
+    }
+}
+
 private val Paper = Color(0xFFFDFAF3)
 private val PaperRule = Color(0xFFEADFC9)
 private val DatePast = Color(0xFFA89A86)
@@ -455,12 +585,15 @@ private fun ScheduleBoard(
                 Text(
                     "오늘은 ${today.monthValue}월 ${today.dayOfMonth}일 ${KrDowFull[today.dayOfWeek.value - 1]}",
                     fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = DateUp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.size(8.dp))
                 weather?.let { (todayW, tomW) ->
-                    Column(horizontalAlignment = Alignment.End) {
+                    // 오늘·내일을 한 행에 나란히(오늘이 중앙을 넘어 왼쪽으로 와도 무방)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         WeatherLine("오늘", todayW)
-                        Spacer(Modifier.size(2.dp))
+                        Spacer(Modifier.size(10.dp))
                         WeatherLine("내일", tomW)
                     }
                 }

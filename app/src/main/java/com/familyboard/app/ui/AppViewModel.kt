@@ -314,6 +314,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (me.isBlank() || item.viewedBy.contains(me)) return
         viewModelScope.launch { runCatching { board.markViewed(item.id, me) } }
     }
+
+    /** 홈 공지 강조를 현재 사용자가 '확인'했다고 표시(viewedBy arrayUnion). markFunViewed 와 동일 로직. */
+    fun markNoticeSeen(item: ListItem) = markFunViewed(item)
     fun updateFun(item: ListItem, title: String, link: String, image: String = item.photoUrls.firstOrNull().orEmpty()) = viewModelScope.launch {
         // 여러 장 묶음은 대표 이미지가 그대로면 전체 보존, 바뀌면 그 이미지로 대체
         val photos = when {
