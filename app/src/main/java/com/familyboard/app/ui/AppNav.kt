@@ -302,11 +302,11 @@ private fun MainScaffold(vm: AppViewModel) {
                 title = { Text("어디에 담을까요?") },
                 text = { Text(body) },
                 confirmButton = {
-                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.BOARD); nav.navigate(Routes.FUN) }) { Text("재미진 곳") }
+                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.BOARD); nav.navigateShare(Routes.FUN) }) { Text("재미진 곳") }
                 },
                 dismissButton = {
                     Row {
-                        TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.PRIVATE); nav.navigate(Routes.MYFUN) }) { Text("내 재미진 곳") }
+                        TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.PRIVATE); nav.navigateShare(Routes.MYFUN) }) { Text("내 재미진 곳") }
                         TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
                     }
                 },
@@ -321,13 +321,13 @@ private fun MainScaffold(vm: AppViewModel) {
                 text = { Text(body) },
                 confirmButton = {
                     TextButton(enabled = !sp.loading, onClick = {
-                        vm.savePlace(PlaceBoards.RESTAURANT); nav.navigate(Routes.place(PlaceBoards.RESTAURANT))
+                        vm.savePlace(PlaceBoards.RESTAURANT); nav.navigateShare(Routes.place(PlaceBoards.RESTAURANT))
                     }) { Text("맛집") }
                 },
                 dismissButton = {
                     Row {
                         TextButton(enabled = !sp.loading, onClick = {
-                            vm.savePlace(PlaceBoards.VISIT); nav.navigate(Routes.place(PlaceBoards.VISIT))
+                            vm.savePlace(PlaceBoards.VISIT); nav.navigateShare(Routes.place(PlaceBoards.VISIT))
                         }) { Text("가볼 곳") }
                         TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
                     }
@@ -345,13 +345,24 @@ private fun MainScaffold(vm: AppViewModel) {
             confirmButton = {
                 TextButton(enabled = !pd.uploading, onClick = {
                     vm.savePendingDoc { ok, err ->
-                        if (ok) nav.navigate(Routes.DOCS)
+                        if (ok) nav.navigateShare(Routes.DOCS)
                         else Toast.makeText(context, err ?: "저장 실패", Toast.LENGTH_SHORT).show()
                     }
                 }) { Text("저장") }
             },
             dismissButton = { TextButton(enabled = !pd.uploading, onClick = { vm.clearPendingDoc() }) { Text("취소") } },
         )
+    }
+}
+
+/**
+ * 공유로 저장한 뒤 이동. 시작 지점(홈) 위에 목적지 하나만 남겨 중복 누적을 방지한다.
+ * (공유를 여러 번 하면 재미진 곳 등이 백스택에 쌓여 뒤로가기가 안 먹던 문제 해결)
+ */
+private fun androidx.navigation.NavController.navigateShare(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = false }
+        launchSingleTop = true
     }
 }
 
