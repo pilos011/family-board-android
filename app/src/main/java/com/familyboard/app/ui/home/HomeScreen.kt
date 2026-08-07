@@ -519,14 +519,14 @@ private fun EventLine(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 날짜(+당일 시간)를 한 줄로. 여러 날 일정 폭에 맞춰 고정 → 색상 점 시작 위치가 모든 행에서 정렬됨.
+        // 날짜(+당일 시간)를 한 줄로. 여러 날 일정 폭에 딱 맞춰 고정 → 점 정렬은 유지하되 빈 공간 최소화.
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
             color = if (pastStyle) DatePast else DateUp,
-            modifier = Modifier.widthIn(min = 124.dp),
+            modifier = Modifier.widthIn(min = 88.dp),
         )
-        Spacer(Modifier.size(8.dp))
+        Spacer(Modifier.size(6.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
         Spacer(Modifier.size(9.dp))
         Text(
