@@ -96,26 +96,9 @@ private val PinColors = listOf(Color(0xFFD63B2F), Color(0xFF2F7FD6), Color(0xFFE
 private val KrDow = listOf("월", "화", "수", "목", "금", "토", "일")
 private val KrDowFull = listOf("월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일")
 
-// 날씨 기본 위치(고양시). 홈 알림판용 대략 위치.
-private const val HOME_LAT = 37.6584
-private const val HOME_LNG = 126.8320
-
-/** 현재 위치(마지막 known). 권한/좌표 없으면 고양 기본값. 날씨용 대략 위치. */
-@android.annotation.SuppressLint("MissingPermission")
-private fun homeLocation(context: android.content.Context): Pair<Double, Double> {
-    val fine = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    val coarse = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    if (fine || coarse) {
-        val lm = context.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
-        val loc = lm?.let {
-            listOf(android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER, android.location.LocationManager.PASSIVE_PROVIDER)
-                .mapNotNull { p -> runCatching { it.getLastKnownLocation(p) }.getOrNull() }
-                .maxByOrNull { it.time }
-        }
-        if (loc != null) return loc.latitude to loc.longitude
-    }
-    return HOME_LAT to HOME_LNG
-}
+// 날씨 위치: 고양시 일산동구 백석동 고정(현재 위치 사용 안 함).
+private const val HOME_LAT = 37.6437
+private const val HOME_LNG = 126.7896
 
 /** WMO weather code → 이모지 아이콘. */
 private fun weatherEmoji(code: Int): String = when (code) {
@@ -147,12 +130,11 @@ fun HomeScreen(
     val nowTime = remember { java.time.LocalTime.now() } // 진입 시각(오늘 일정 지남 판정 기준)
     val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    // 오늘/내일 날씨: 현재 위치 기준(권한/좌표 없으면 고양 기본값), 진입 시 + 1시간마다 갱신
-    var weather by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    // 오늘 날씨(최고/최저+아이콘): 일산동구 백석동 고정, 진입 시 + 1시간마다 갱신
+    var weather by remember { mutableStateOf<com.familyboard.app.notif.WeatherApi.TodayWeather?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
-            val (la, lo) = homeLocation(context)
-            weather = com.familyboard.app.notif.WeatherApi.today2(la, lo)
+            weather = com.familyboard.app.notif.WeatherApi.todayHighLow(HOME_LAT, HOME_LNG)
             kotlinx.coroutines.delay(3_600_000L)
         }
     }
@@ -438,7 +420,7 @@ private fun ScheduleBoard(
     past: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     upcoming: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     today: LocalDate,
-    weather: Pair<Int, Int>?,
+    weather: com.familyboard.app.notif.WeatherApi.TodayWeather?,
     onOpenEvent: (String, String) -> Unit,
 ) {
     val shape = RoundedCornerShape(10.dp)
@@ -454,15 +436,22 @@ private fun ScheduleBoard(
                 }
                 .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 14.dp),
         ) {
-            // 상단: 왼쪽=오늘 날짜/요일, 오른쪽=오늘·내일 날씨
+            // 상단: 왼쪽=오늘 날짜/요일, 오른쪽=오늘 최고/최저(상하) + 날씨 아이콘 (백석동)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "오늘은 ${today.monthValue}월 ${today.dayOfMonth}일 ${KrDowFull[today.dayOfWeek.value - 1]}",
                     fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = DateUp,
                     modifier = Modifier.weight(1f),
                 )
-                weather?.let { (t, tm) ->
-                    Text("오늘 ${weatherEmoji(t)}  내일 ${weatherEmoji(tm)}", fontSize = 13.sp, color = DateUp)
+                weather?.let { w ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("${w.high}°", fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 13.sp, color = Color(0xFFE03131))
+                            Text("${w.low}°", fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 13.sp, color = Color(0xFF1971C2))
+                        }
+                        Spacer(Modifier.size(6.dp))
+                        Text(weatherEmoji(w.code), fontSize = 22.sp)
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
