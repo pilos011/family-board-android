@@ -21,12 +21,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -232,69 +235,81 @@ fun HomeScreen(
         )
         Box(Modifier.fillMaxSize().background(Color(0x14000000))) // 살짝 어둡게
 
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        // 지연 렌더(LazyColumn) → 보이는 항목만 구성/그려 스와이프가 부드러움.
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
         ) {
-            TitleSign(
-                updateAvailable = updateInfo != null,
-                onUpdate = { showUpdate = true },
-                onTitleClick = { showMaker = true },
-            )
+            item {
+                TitleSign(
+                    updateAvailable = updateInfo != null,
+                    onUpdate = { showUpdate = true },
+                    onTitleClick = { showMaker = true },
+                )
+            }
             // 타이틀 이미지 바로 아래에 만든이 표시(탭 시 잠깐)
             if (showMaker) {
-                Spacer(Modifier.height(6.dp))
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Column(
-                        Modifier.background(Color(0x99000000), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 5.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("버전 ${com.familyboard.app.BuildConfig.VERSION_NAME}",
-                            fontFamily = NanumGothic, fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
-                        Spacer(Modifier.height(6.dp))
-                        Text("만든이 : 김선일", fontFamily = NanumGothic, fontSize = 13.sp, color = Color.White)
-                    }
-                }
-            }
-            Spacer(Modifier.height(20.dp))
-
-            // 표시할(체크된) 공지가 있을 때만 '가족 공지사항' 섹션 노출. 없으면 일정 보드가 이 자리로 올라옴.
-            if (checkedNotices.isNotEmpty()) {
-                SectionLabel("가족 공지사항")
-                Spacer(Modifier.height(8.dp))
-                // 화면 폭과 무관하게 항상 한 줄에 2개씩(각 절반 폭). 플립3 등 좁은 폭에서 세로로 접히지 않게 함.
-                // 부모(선일·은선)만 롱클릭으로 공지 화면 이동. 자녀는 반응 없음.
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    checkedNotices.chunked(2).forEachIndexed { rowIdx, rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            rowItems.forEachIndexed { colIdx, n ->
-                                PostIt(
-                                    n.text, rowIdx * 2 + colIdx,
-                                    modifier = Modifier.weight(1f),
-                                    onLongPress = if (canManageNotice) onOpenNotice else null,
-                                )
-                            }
-                            // 마지막 줄에 1개만 있으면 왼쪽 절반 폭을 유지하도록 빈칸 채움
-                            if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+                item {
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(
+                            Modifier.background(Color(0x99000000), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("버전 ${com.familyboard.app.BuildConfig.VERSION_NAME}",
+                                fontFamily = NanumGothic, fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
+                            Spacer(Modifier.height(6.dp))
+                            Text("만든이 : 김선일", fontFamily = NanumGothic, fontSize = 13.sp, color = Color.White)
                         }
                     }
                 }
+            }
+            item { Spacer(Modifier.height(20.dp)) }
+
+            // 표시할(체크된) 공지가 있을 때만 '가족 공지사항' 섹션 노출. 없으면 일정 보드가 이 자리로 올라옴.
+            if (checkedNotices.isNotEmpty()) {
+                item {
+                    SectionLabel("가족 공지사항")
+                    Spacer(Modifier.height(8.dp))
+                    // 화면 폭과 무관하게 항상 한 줄에 2개씩(각 절반 폭). 플립3 등 좁은 폭에서 세로로 접히지 않게 함.
+                    // 부모(선일·은선)만 롱클릭으로 공지 화면 이동. 자녀는 반응 없음.
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        checkedNotices.chunked(2).forEachIndexed { rowIdx, rowItems ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                rowItems.forEachIndexed { colIdx, n ->
+                                    PostIt(
+                                        n.text, rowIdx * 2 + colIdx,
+                                        modifier = Modifier.weight(1f),
+                                        onLongPress = if (canManageNotice) onOpenNotice else null,
+                                    )
+                                }
+                                // 마지막 줄에 1개만 있으면 왼쪽 절반 폭을 유지하도록 빈칸 채움
+                                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(26.dp))
+                }
+            }
+
+            item {
+                SectionLabel("일정 보드")
+                Spacer(Modifier.height(8.dp))
+                ScheduleBoard(past = schedule.first, upcoming = schedule.second, today = today, weather = weather, onOpenEvent = onOpenEvent)
                 Spacer(Modifier.height(26.dp))
             }
 
-            SectionLabel("일정 보드")
-            Spacer(Modifier.height(8.dp))
-            ScheduleBoard(past = schedule.first, upcoming = schedule.second, today = today, weather = weather, onOpenEvent = onOpenEvent)
-            Spacer(Modifier.height(26.dp))
-
-            special?.let { (item, d, _) ->
-                CountdownBox(title = item.text, dday = d, dateText = null, examList = true, onLongPress = onOpenDday)
+            if (special != null) {
+                item {
+                    CountdownBox(title = special.first.text, dday = special.second, dateText = null, examList = true, onLongPress = onOpenDday)
+                }
             }
-            others.forEach { (item, d, t) ->
+            items(others) { row ->
                 Spacer(Modifier.height(12.dp))
-                CountdownBox(title = item.text, dday = d, dateText = krDate(t), examList = false, onLongPress = onOpenDday)
+                CountdownBox(title = row.first.text, dday = row.second, dateText = krDate(row.third), examList = false, onLongPress = onOpenDday)
             }
-            Spacer(Modifier.height(24.dp))
+            item { Spacer(Modifier.height(24.dp)) }
         }
 
         // 새 공지 강조 오버레이: 가운데 떠오른 뒤, 확인 시 축소·이동 + 압정 꾹 고정
