@@ -115,6 +115,20 @@ private fun weatherEmoji(code: Int): String = when (code) {
     else -> "🌡️"
 }
 
+/** 한 줄 날씨: 라벨(오늘/내일) + 최저(파랑)/최고(빨강) 나란히 + 날씨 아이콘. */
+@Composable
+private fun WeatherLine(label: String, w: com.familyboard.app.notif.WeatherApi.DayWeather) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 11.sp, color = DateUp)
+        Spacer(Modifier.size(4.dp))
+        Text("${w.low}°", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1971C2))
+        Text("/", fontSize = 11.sp, color = DateUp)
+        Text("${w.high}°", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE03131))
+        Spacer(Modifier.size(5.dp))
+        Text(weatherEmoji(w.code), fontSize = 15.sp)
+    }
+}
+
 @Composable
 fun HomeScreen(
     vm: AppViewModel,
@@ -130,11 +144,11 @@ fun HomeScreen(
     val nowTime = remember { java.time.LocalTime.now() } // 진입 시각(오늘 일정 지남 판정 기준)
     val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    // 오늘 날씨(최고/최저+아이콘): 일산동구 백석동 고정, 진입 시 + 1시간마다 갱신
-    var weather by remember { mutableStateOf<com.familyboard.app.notif.WeatherApi.TodayWeather?>(null) }
+    // 오늘/내일 날씨(각 최저/최고+아이콘): 일산동구 백석동 고정, 진입 시 + 1시간마다 갱신
+    var weather by remember { mutableStateOf<Pair<com.familyboard.app.notif.WeatherApi.DayWeather, com.familyboard.app.notif.WeatherApi.DayWeather>?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
-            weather = com.familyboard.app.notif.WeatherApi.todayHighLow(HOME_LAT, HOME_LNG)
+            weather = com.familyboard.app.notif.WeatherApi.twoDay(HOME_LAT, HOME_LNG)
             kotlinx.coroutines.delay(3_600_000L)
         }
     }
@@ -420,7 +434,7 @@ private fun ScheduleBoard(
     past: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     upcoming: List<Pair<LocalDate, com.familyboard.app.data.model.CalendarEvent>>,
     today: LocalDate,
-    weather: com.familyboard.app.notif.WeatherApi.TodayWeather?,
+    weather: Pair<com.familyboard.app.notif.WeatherApi.DayWeather, com.familyboard.app.notif.WeatherApi.DayWeather>?,
     onOpenEvent: (String, String) -> Unit,
 ) {
     val shape = RoundedCornerShape(10.dp)
@@ -436,21 +450,18 @@ private fun ScheduleBoard(
                 }
                 .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 14.dp),
         ) {
-            // 상단: 왼쪽=오늘 날짜/요일, 오른쪽=오늘 최고/최저(상하) + 날씨 아이콘 (백석동)
+            // 상단: 왼쪽=오늘 날짜/요일, 오른쪽=오늘·내일 날씨(최저/최고 나란히 + 아이콘, 백석동)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "오늘은 ${today.monthValue}월 ${today.dayOfMonth}일 ${KrDowFull[today.dayOfWeek.value - 1]}",
                     fontFamily = NanumGothic, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = DateUp,
                     modifier = Modifier.weight(1f),
                 )
-                weather?.let { w ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("${w.high}°", fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 13.sp, color = Color(0xFFE03131))
-                            Text("${w.low}°", fontSize = 11.sp, fontWeight = FontWeight.Bold, lineHeight = 13.sp, color = Color(0xFF1971C2))
-                        }
-                        Spacer(Modifier.size(6.dp))
-                        Text(weatherEmoji(w.code), fontSize = 22.sp)
+                weather?.let { (todayW, tomW) ->
+                    Column(horizontalAlignment = Alignment.End) {
+                        WeatherLine("오늘", todayW)
+                        Spacer(Modifier.size(2.dp))
+                        WeatherLine("내일", tomW)
                     }
                 }
             }
