@@ -123,9 +123,10 @@ fun DocListScreen(
                     setDataAndType(fileUri, mime)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                // 항상 '한 번만'으로 열기: createChooser 는 시스템 기본앱을 저장하지 않고 매번 앱을 고르게 함
-                // (기본 실행 startActivity 는 '항상'을 고르면 고정돼 다시 못 바꾸는 문제가 있어 이 방식 사용).
-                context.startActivity(Intent.createChooser(view, "열기"))
+                // 기본 실행(startActivity) → OS '연결 프로그램' 창에 '한 번만 / 항상' 버튼이 뜬다.
+                // 기본은 매번 물어봄(=한 번만). 사용자가 '항상'을 고르면 그때부터 시스템 기본앱으로 고정.
+                // (createChooser 는 그 아래 한 번만/항상 옵션이 안 나오므로 사용하지 않음.)
+                context.startActivity(view)
             }.onFailure { Toast.makeText(context, "이 형식을 열 수 있는 앱이 없어요", Toast.LENGTH_SHORT).show() }
         }
     }
