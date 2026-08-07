@@ -550,6 +550,8 @@ private val Paper = Color(0xFFFDFAF3)
 private val PaperRule = Color(0xFFEADFC9)
 private val DatePast = Color(0xFFA89A86)
 private val DateUp = Color(0xFF6F5C46)
+private val TodayAccent = Color(0xFFE8590C) // 오늘 일정 강조(주황)
+private val TodayHi = Color(0x22E8590C)     // 오늘 행 배경(옅은 주황)
 
 @Composable
 private fun ScheduleBoard(
@@ -596,11 +598,11 @@ private fun ScheduleBoard(
             }
             if (past.isNotEmpty()) {
                 PaperDivider("지난 일정")
-                past.forEach { (d, e) -> EventLine(d, e, pastStyle = true, onOpenEvent = onOpenEvent) }
+                past.forEach { (d, e) -> EventLine(d, e, pastStyle = true, today = today, onOpenEvent = onOpenEvent) }
             }
             if (upcoming.isNotEmpty()) {
                 PaperDivider("다가오는 일정")
-                upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false, onOpenEvent = onOpenEvent) }
+                upcoming.forEach { (d, e) -> EventLine(d, e, pastStyle = false, today = today, onOpenEvent = onOpenEvent) }
             }
         }
         // 집게(불독 클립)
@@ -629,6 +631,7 @@ private fun EventLine(
     date: LocalDate,
     e: com.familyboard.app.data.model.CalendarEvent,
     pastStyle: Boolean,
+    today: LocalDate,
     onOpenEvent: (String, String) -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -638,6 +641,8 @@ private fun EventLine(
     }.getOrDefault(0L).coerceAtLeast(0L)
     val end = date.plusDays(dur)
     val multi = end != date
+    // 오늘 일정 강조: (다가오는) 일정 구간이 오늘을 포함하면. 지난 일정은 강조 안 함.
+    val isToday = !pastStyle && !date.isAfter(today) && !end.isBefore(today)
     val dowS = KrDow[date.dayOfWeek.value - 1]
     val dowE = KrDow[end.dayOfWeek.value - 1]
     // 당일 시간있는 일정은 요일 오른쪽 같은 줄에("8/7(금) 14:00"). 종일은 표시 안 함. 여러 날은 "8/11~8/14(금)".
@@ -647,6 +652,7 @@ private fun EventLine(
     val dotColor = if (pastStyle) Color(0xFFCDBFA8) else Family.colorOfIds(e.memberIds)
     Row(
         Modifier.fillMaxWidth()
+            .then(if (isToday) Modifier.clip(RoundedCornerShape(6.dp)).background(TodayHi) else Modifier)
             .pointerInput(e.id, date) {
                 detectTapGestures(onLongPress = {
                     if (e.id.isNotBlank()) {
@@ -655,15 +661,24 @@ private fun EventLine(
                     }
                 })
             }
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp, horizontal = if (isToday) 6.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 오늘이면 왼쪽에 '오늘' 태그로 명확히 표시
+        if (isToday) {
+            Text(
+                "오늘", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
+                modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(TodayAccent)
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+            Spacer(Modifier.size(5.dp))
+        }
         // 날짜(+당일 시간)를 한 줄로. 여러 날 일정 폭에 딱 맞춰 고정 → 점 정렬은 유지하되 빈 공간 최소화.
         Text(
             dateLabel,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-            color = if (pastStyle) DatePast else DateUp,
-            modifier = Modifier.widthIn(min = 88.dp),
+            color = if (pastStyle) DatePast else if (isToday) TodayAccent else DateUp,
+            modifier = if (isToday) Modifier else Modifier.widthIn(min = 88.dp),
         )
         Spacer(Modifier.size(6.dp))
         Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor))
@@ -712,6 +727,7 @@ private fun CountdownBox(title: String, dday: Int, dateText: String?, examList: 
                 Column(Modifier.weight(1f)) {
                     Text(title, fontFamily = NanumGothic, fontWeight = FontWeight.Bold, color = Chalk, fontSize = 24.sp)
                     if (!examList && dateText != null) {
+                        Spacer(Modifier.height(5.dp))
                         Text(dateText, color = ChalkSoft, fontSize = 13.sp)
                     }
                 }

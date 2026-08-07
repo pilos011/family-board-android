@@ -37,6 +37,16 @@ object RecurrenceExpander {
                 else -> placeSpan(map, e, start, duration, winStart, winEnd)
             }
         }
+        // 각 날 셀 내부 순서: 여러 날 일정을 위 레인에 고정(칸을 넘어 이어지는 막대가 끊기지 않게),
+        // 단일(당일) 일정은 그 아래로(새로 추가한 당일 일정이 막대를 밀어내지 않게). 안정 정렬로 셀마다 동일 순서.
+        for (list in map.values) {
+            list.sortWith(
+                compareByDescending<DayEvent> { it.event.endDateIso.isNotBlank() && it.event.endDateIso != it.event.startDateIso }
+                    .thenBy { it.event.startDateIso }
+                    .thenBy { if (it.event.allDay) "" else it.event.startTime }
+                    .thenBy { it.event.id },
+            )
+        }
         return map
     }
 
