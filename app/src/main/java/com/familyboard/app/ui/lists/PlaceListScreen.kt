@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -259,14 +260,29 @@ fun PlaceListScreen(
                 Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
-                    value = recQuery,
-                    onValueChange = { recQuery = it },
-                    placeholder = { Text("카테고리, 지역 (예: 이자카야, 고양시)", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f).heightIn(min = 50.dp),
-                    shape = RoundedCornerShape(20.dp),
-                )
+                // 입력창(높이 = 추천받기 버튼과 동일 46dp). 비면 안내문구 표시.
+                val recHint = if (boardKey == PlaceBoards.RESTAURANT) "음식명, 지역 (예 : 이자카야, 고양시)"
+                    else "종류, 지역 (예 : 공원, 고양시)"
+                Box(
+                    Modifier.weight(1f).height(46.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFFF1F3F5))
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (recQuery.isEmpty()) {
+                        Text(recHint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    BasicTextField(
+                        value = recQuery,
+                        onValueChange = { recQuery = it },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Spacer(Modifier.size(8.dp))
                 Row(
                     Modifier.clip(RoundedCornerShape(20.dp))
@@ -296,7 +312,8 @@ fun PlaceListScreen(
                                 }
                             }
                         }
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                        .height(46.dp)
+                        .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Default.AutoAwesome, "추천", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
