@@ -297,10 +297,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 쿠팡 공유 텍스트에서 실제 상품명 라인 추출("쿠팡을 추천합니다!" 프로모 헤더 제외). */
+    /** 쿠팡 공유 텍스트에서 실제 상품명 추출. URL만 제거(줄 통째 삭제 금지) 후 "…추천합니다!" 프로모 라인 제외. */
     private fun coupangNameFromText(fullText: String): String {
-        val lines = fullText.split('\n').map { it.trim() }
-            .filter { it.isNotBlank() && !it.contains(Regex("https?://")) }
+        val lines = fullText.replace(Regex("https?://\\S+"), " ").split('\n')
+            .map { it.trim() }.filter { it.isNotBlank() }
         val picked = lines.firstOrNull { !it.contains("추천합니다") } ?: lines.firstOrNull().orEmpty()
         return cleanShopName(picked)
     }
