@@ -451,6 +451,7 @@ fun PlaceListScreen(
                 LazyColumn(
                     Modifier.fillMaxSize().padding(horizontal = 14.dp),
                     state = listState,
+                    flingBehavior = com.familyboard.app.ui.rememberBoostFling(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(sorted, key = { it.id }) { place ->
