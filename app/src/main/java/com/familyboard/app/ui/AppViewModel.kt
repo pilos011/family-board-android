@@ -207,6 +207,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         userStore.navDefaultApp.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     fun setNavDefaultApp(key: String) = viewModelScope.launch { userStore.setNavDefaultApp(key) }
 
+    /** 홈 배경 선택: "cork"(기본) / "family"(우리집 알림판 이미지). */
+    val homeBackground: StateFlow<String> =
+        userStore.homeBackground.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "cork")
+    fun setHomeBackground(v: String) = viewModelScope.launch { userStore.setHomeBackground(v) }
+
     /** 마지막 본 페이지(1-based, 0=없음) 흐름/저장 — 방향별(최신순/등록순) 이어보기용. */
     fun lastFunPage(boardKey: String, ascending: Boolean): kotlinx.coroutines.flow.Flow<Int> =
         userStore.lastFunPage(boardKey, ascending)

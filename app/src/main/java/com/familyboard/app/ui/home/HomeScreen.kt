@@ -154,6 +154,8 @@ fun HomeScreen(
     val today = remember { LocalDate.now() }
     val nowTime = remember { java.time.LocalTime.now() } // 진입 시각(오늘 일정 지남 판정 기준)
     val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
+    val homeBackground by vm.homeBackground.collectAsStateWithLifecycle()
+    var showBgChooser by remember { mutableStateOf(false) }
     val context = LocalContext.current
     // 오늘/내일 날씨(각 최저/최고+아이콘): 일산동구 백석동 고정, 진입 시 + 1시간마다 갱신
     var weather by remember { mutableStateOf<Pair<com.familyboard.app.notif.WeatherApi.DayWeather, com.familyboard.app.notif.WeatherApi.DayWeather>?>(null) }
@@ -224,9 +226,9 @@ fun HomeScreen(
     val others = pinned.filter { it.first.text != "준호 수능" }.sortedBy { it.second }
 
     Box(modifier.fillMaxSize()) {
-        // 코르크 보드 배경(고정)
+        // 홈 배경(기본 코르크 / '우리집 알림판' 이미지 — 타이틀 왼쪽 롱클릭으로 전환)
         Image(
-            painter = painterResource(R.drawable.cork_bg),
+            painter = painterResource(if (homeBackground == "family") R.drawable.family_board else R.drawable.cork_bg),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
@@ -245,6 +247,7 @@ fun HomeScreen(
                     updateAvailable = updateInfo != null,
                     onUpdate = { showUpdate = true },
                     onTitleClick = { showMaker = true },
+                    onPickBackground = { showBgChooser = true },
                 )
             }
             // 타이틀 이미지 바로 아래에 만든이 표시(탭 시 잠깐)
@@ -364,14 +367,35 @@ fun HomeScreen(
             dismissButton = { TextButton(enabled = !downloading, onClick = { showUpdate = false }) { Text("나중에") } },
         )
     }
+
+    if (showBgChooser) {
+        AlertDialog(
+            onDismissRequest = { showBgChooser = false },
+            title = { Text("홈 배경 선택") },
+            text = { Text("현재: " + if (homeBackground == "family") "우리집 알림판 이미지" else "기본 코르크") },
+            confirmButton = {
+                TextButton(onClick = { vm.setHomeBackground("family"); showBgChooser = false }) { Text("우리집 알림판 이미지") }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.setHomeBackground("cork"); showBgChooser = false }) { Text("기본 코르크") }
+            },
+        )
+    }
 }
 
 @Composable
-private fun TitleSign(updateAvailable: Boolean, onUpdate: () -> Unit, onTitleClick: () -> Unit) {
+private fun TitleSign(
+    updateAvailable: Boolean, onUpdate: () -> Unit, onTitleClick: () -> Unit, onPickBackground: () -> Unit,
+) {
     // 사용자 제작 타이틀 이미지 + 약간의 두께감 + 과하지 않은 라운딩. 비율 유지 75% 크기, 가운데.
     // 타이틀 탭 → 만든이 표시(라벨은 상위에서 타이틀 바로 아래에 렌더). 오른쪽 빈 공간 가운데에 업데이트 아이콘(있을 때).
     val shape = RoundedCornerShape(12.dp)
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // 타이틀 왼쪽 빈 곳 롱클릭 → 배경 선택(숨은 제스처)
+        Box(
+            Modifier.align(Alignment.CenterStart).fillMaxWidth(0.12f).height(56.dp)
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { onPickBackground() }) },
+        )
         Box(Modifier.fillMaxWidth(0.75f)) {
             Box(Modifier.matchParentSize().offset(y = 4.dp).clip(shape).background(Color(0xFF4A3018)))
             Image(

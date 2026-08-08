@@ -40,4 +40,11 @@ class CurrentUserStore(private val context: Context) {
     suspend fun setNavDefaultApp(key: String) {
         context.dataStore.edit { if (key.isBlank()) it.remove(keyNavApp) else it[keyNavApp] = key }
     }
+
+    // 홈 배경 선택: "cork"(기본 코르크) / "family"(우리집 알림판 이미지). 기본 cork.
+    private val keyHomeBg = stringPreferencesKey("home_background")
+    val homeBackground: Flow<String> = context.dataStore.data.map { it[keyHomeBg] ?: "cork" }
+    suspend fun setHomeBackground(v: String) {
+        context.dataStore.edit { it[keyHomeBg] = v }
+    }
 }
