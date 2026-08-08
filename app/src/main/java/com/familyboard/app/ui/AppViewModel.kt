@@ -8,6 +8,7 @@ import com.familyboard.app.data.model.BoardType
 import com.familyboard.app.data.model.CalendarEvent
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.data.Family
+import com.familyboard.app.data.FamilyBirthdays
 import com.familyboard.app.notif.NotifyApi
 import com.familyboard.app.notif.ReminderScheduler
 import com.familyboard.app.notif.UpdateChecker
@@ -112,9 +113,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         ddayItems.map { list -> list.mapNotNull(::ddayToEvent) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** 가족 달력·위젯이 그릴 이벤트 = 일반 일정 + D-Day(표시용). D-Day add/edit/delete 자동 반영. */
+    /** 가족 생일(내장, 영구) → 매년 반복 표시 이벤트(각자 색 + 🎂). 삭제 불필요·항상 표시. */
+    private val birthdayEvents: List<CalendarEvent> = FamilyBirthdays.list.map { (id, date) ->
+        CalendarEvent(
+            id = "bday_$id", title = "🎂 ${Family.nameOf(id)}",
+            startDateIso = date.toString(), endDateIso = date.toString(), allDay = true,
+            memberIds = listOf(id), repeat = "yearly",
+        )
+    }
+
+    /** 가족 달력·위젯이 그릴 이벤트 = 일반 일정 + D-Day + 가족 생일(표시용). add/edit/delete 자동 반영. */
     val calendarEvents: StateFlow<List<CalendarEvent>> =
-        combine(events, ddayCalendarEvents) { e, d -> e + d }
+        combine(events, ddayCalendarEvents) { e, d -> e + d + birthdayEvents }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 사용자 커스텀 체크리스트 정의(board="customlists"). 본인만 화면에 표시.

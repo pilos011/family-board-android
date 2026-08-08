@@ -206,8 +206,9 @@ fun CalendarScreen(
             DaySheet(
                 date = selected,
                 holidayName = holidays[selected.toString()],
-                // D-Day 가상 이벤트는 시트에서 제외(편집 대상 아님, 그리드에만 표시)
-                events = eventsByDate[selected.toString()].orEmpty().map { it.event }.filter { !it.id.startsWith("dday_") },
+                // D-Day·생일 가상 이벤트는 시트에서 제외(편집 대상 아님, 그리드에만 표시)
+                events = eventsByDate[selected.toString()].orEmpty().map { it.event }
+                    .filter { !it.id.startsWith("dday_") && !it.id.startsWith("bday_") },
                 onAdd = { sheetOpen = false; onAddEvent(selected, selected) },
                 onView = { id -> sheetOpen = false; onViewEvent(id, selected.toString()) },
             )
