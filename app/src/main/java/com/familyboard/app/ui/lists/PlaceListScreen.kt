@@ -144,9 +144,10 @@ fun PlaceListScreen(
     var catFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var regionFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var showFilter by remember { mutableStateOf(false) }
-    // 발굴 추천(카카오+Groq): 결과 목록 / 로딩
+    // 발굴 추천: 결과 목록 / 로딩 / 직접 입력("카테고리, 지역")
     var recommends by remember { mutableStateOf<List<com.familyboard.app.notif.Recommendation>>(emptyList()) }
     var recommending by remember { mutableStateOf(false) }
+    var recQuery by remember(boardKey) { mutableStateOf("") }
     // 길찾기: 기본앱(항상) + 선택창 대상
     val navDefault by vm.navDefaultApp.collectAsStateWithLifecycle()
     var navTarget by remember { mutableStateOf<Triple<String, Double?, Double?>?>(null) }
@@ -253,9 +254,59 @@ fun PlaceListScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            // 필터 바: [필터] 버튼 + 현재 선택 요약(개수)
+            // AI 추천 입력행: [카테고리, 지역] 입력창 + 추천받기. 비어 있으면 필터값/현재 시군구로 진행.
             Row(
                 Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = recQuery,
+                    onValueChange = { recQuery = it },
+                    placeholder = { Text("카테고리, 지역 (예: 이자카야, 고양시)", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).heightIn(min = 50.dp),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Row(
+                    Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable(enabled = !recommending) {
+                            val loc = myLoc ?: lastKnownLocation(context).also { myLoc = it }
+                            // 입력창("카테고리, 지역") 우선. 비어 있으면 필터값 사용.
+                            val q = recQuery.trim()
+                            val cat: String
+                            val region: String
+                            if (q.isBlank()) {
+                                cat = catFilter ?: ""; region = regionFilter ?: ""
+                            } else {
+                                val p = q.split(",", limit = 2)
+                                cat = p.getOrNull(0)?.trim().orEmpty()
+                                region = p.getOrNull(1)?.trim().orEmpty()
+                            }
+                            if (region.isBlank() && loc == null) {
+                                Toast.makeText(context, "지역을 입력하거나 위치를 켜주세요", Toast.LENGTH_SHORT).show()
+                            } else {
+                                recommending = true; recommends = emptyList()
+                                val savedNames = items.map { it.text }
+                                vm.recommendPlace(boardKey, cat, region, savedNames, loc?.latitude, loc?.longitude) { list ->
+                                    recommending = false
+                                    recommends = list.take(5) // AI 추천 최대 5곳
+                                    if (list.isEmpty()) Toast.makeText(context, "추천할 새 장소를 못 찾았어요", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.AutoAwesome, "추천", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.size(5.dp))
+                    Text(if (recommending) "추천 중…" else "추천받기", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            // 필터 바: [필터] 버튼 + 현재 선택 요약(개수)
+            Row(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
@@ -274,31 +325,6 @@ fun PlaceListScreen(
                 val summary = listOfNotNull(catFilter, regionFilter).joinToString(" · ").ifBlank { "전체" }
                 Text("$summary · ${sorted.size}곳", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // 근처 추천(Groq)
-                Row(
-                    Modifier.clip(RoundedCornerShape(20.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        .clickable(enabled = !recommending) {
-                            val loc = myLoc ?: lastKnownLocation(context).also { myLoc = it }
-                            if (regionFilter == null && loc == null) {
-                                Toast.makeText(context, "지역을 선택하거나 위치를 켜주세요", Toast.LENGTH_SHORT).show()
-                            } else {
-                                recommending = true; recommends = emptyList()
-                                val savedNames = items.map { it.text }
-                                vm.recommendPlace(boardKey, catFilter ?: "", regionFilter ?: "", savedNames, loc?.latitude, loc?.longitude) { list ->
-                                    recommending = false
-                                    recommends = list.take(5) // AI 추천 최대 5곳
-                                    if (list.isEmpty()) Toast.makeText(context, "추천할 새 장소를 못 찾았어요", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.AutoAwesome, "추천", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.size(5.dp))
-                    Text(if (recommending) "추천 중…" else "추천받기", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-                }
             }
             // 발굴 추천 결과: 놓친 곳 2~3개(탭 시 네이버 지도)
             if (recommends.isNotEmpty()) {
