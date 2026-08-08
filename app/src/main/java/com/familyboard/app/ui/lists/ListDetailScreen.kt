@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -108,6 +109,21 @@ fun ListDetailScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
                 },
                 actions = {
+                    // 장보기: 쿠팡 장바구니 바로가기(앱 있으면 앱, 없으면 웹)
+                    if (knownBoard == BoardType.SHOPPING) {
+                        val ctx = LocalContext.current
+                        Row(
+                            Modifier.padding(end = 6.dp).clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFFE03131).copy(alpha = 0.12f))
+                                .clickable { openUrl(ctx, "https://cart.coupang.com/cartView.pang") }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.ShoppingCart, "쿠팡 장바구니", tint = Color(0xFFE03131), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.size(4.dp))
+                            Text("쿠팡", color = Color(0xFFE03131), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     if (isCustom && customDef != null) {
                         IconButton(onClick = { confirmListDelete = true }) {
                             Icon(Icons.Default.Delete, "리스트 삭제")
