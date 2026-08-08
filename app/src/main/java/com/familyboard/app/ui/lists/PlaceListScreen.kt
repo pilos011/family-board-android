@@ -52,7 +52,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -285,8 +284,8 @@ fun PlaceListScreen(
                             val loc = myLoc ?: lastKnownLocation(context).also { myLoc = it }
                             // 입력창("카테고리, 지역") 우선. 비어 있으면 필터값 사용.
                             val q = recQuery.trim()
-                            val cat: String
-                            var region: String
+                            var cat: String
+                            val region: String
                             if (q.isBlank()) {
                                 cat = catFilter ?: ""; region = regionFilter ?: ""
                             } else {
@@ -294,8 +293,13 @@ fun PlaceListScreen(
                                 cat = p.getOrNull(0)?.trim().orEmpty()
                                 region = p.getOrNull(1)?.trim().orEmpty()
                             }
-                            // 지역에 '근처'(또는 '주변') → 현재 위치 반경 600m 모드(평점 4.3 우선, 없으면 3.5까지 5곳)
-                            val near = region == "근처" || region == "주변"
+                            // '근처'/'주변' → 반경 600m 모드. "음식명, 근처" 또는 쉼표 없이 "음식명 근처"/"근처"도 인식.
+                            var near = region == "근처" || region == "주변"
+                            if (!near && region.isBlank()) {
+                                Regex("(^|\\s)(근처|주변)$").find(cat)?.let { m ->
+                                    near = true; cat = cat.removeRange(m.range).trim()
+                                }
+                            }
                             val radius = if (near) 600 else null
                             val regionArg = if (near) "" else region
                             if (regionArg.isBlank() && loc == null) {

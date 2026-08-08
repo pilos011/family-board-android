@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlin.coroutines.resume
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -439,11 +440,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 좌표 → 현재 시군구 문자열(예: "고양시 일산동구"). 실패 시 null. */
     private suspend fun reverseDistrict(lat: Double, lng: Double): String? =
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        kotlinx.coroutines.withTimeoutOrNull(4000) {
             runCatching {
                 val geo = android.location.Geocoder(getApplication<Application>(), java.util.Locale.KOREA)
-                @Suppress("DEPRECATION")
-                val addr = geo.getFromLocation(lat, lng, 1)?.firstOrNull() ?: return@withContext null
+                val addr = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    kotlinx.coroutines.suspendCancellableCoroutine<android.location.Address?> { cont ->
+                        geo.getFromLocation(lat, lng, 1, object : android.location.Geocoder.GeocodeListener {
+                            override fun onGeocode(results: MutableList<android.location.Address>) { if (cont.isActive) cont.resume(results.firstOrNull()) }
+                            override fun onError(errorMessage: String?) { if (cont.isActive) cont.resume(null) }
+                        })
+                    }
+                } else {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        @Suppress("DEPRECATION") geo.getFromLocation(lat, lng, 1)?.firstOrNull()
+                    }
+                } ?: return@runCatching null
                 val line = addr.getAddressLine(0)
                     ?: listOfNotNull(addr.adminArea, addr.locality, addr.subLocality).joinToString(" ")
                 districtFrom(line)
