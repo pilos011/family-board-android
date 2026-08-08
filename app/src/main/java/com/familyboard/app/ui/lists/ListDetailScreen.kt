@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -286,12 +285,7 @@ private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) 
                     .background(srcColor.copy(alpha = 0.15f)).padding(horizontal = 6.dp, vertical = 2.dp),
             ) { Text(srcLabel, fontSize = 10.sp, color = srcColor, fontWeight = FontWeight.Bold) }
         }
-        // 링크 있으면 브라우저로 열기 아이콘
-        if (hasLink) {
-            IconButton(onClick = { openUrl(context, item.link) }) {
-                Icon(Icons.Default.Link, "링크 열기", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            }
-        }
+        // (링크 아이콘 없음 — 링크 있는 항목은 제목이 강조색이고 제목 탭으로 브라우저 열림)
         // 담당자(할 일) 또는 추가한 사람(장보기)
         MemberTagDots(rightIds)
         IconButton(onClick = onDelete) {
