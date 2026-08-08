@@ -41,7 +41,7 @@ import java.util.Calendar
  * 맛집 추천 위젯의 스케줄·위치·사진·렌더링.
  *
  * 핵심 설계(폭주 방지):
- *  - **시간당 1회(09~22시) TICK 알람** → WorkManager 로 최대 20곳 조회+사진 캐시(네트워크는 이때만).
+ *  - **10분마다(09~23시) TICK 알람으로 위치 확인** → 시군구 변경(또는 1시간 경과/무캐시)이면 WorkManager 로 20곳 재검색+사진 캐시.
  *  - **화면 회전은 ROTATE 알람(약 10초)** → 캐시에서 순차(0→n-1→0)로 그려 넣기만(네트워크·WorkManager 없음).
  *  - **onUpdate 에서는 절대 fetch 를 enqueue 하지 않음.** (WorkManager 가 내부 컴포넌트를 토글→PACKAGE_CHANGED
  *    →APPWIDGET_UPDATE→onUpdate→enqueue… 무한 루프가 났던 원인. 초기 fetch 는 onEnabled 에서 1회만.)
@@ -51,17 +51,24 @@ object RestaurantWidgetScheduler {
     private const val PREFS = "restaurant_widget"
     private const val KEY_LIST = "list"
     private const val KEY_LAST = "lastIndex"
+    private const val KEY_CHECK_LAT = "checkLat" // 직전 위치 확인 좌표(이동거리 계산용)
+    private const val KEY_CHECK_LNG = "checkLng"
+    private const val KEY_SIGUNGU = "siGunGu"    // 직전 재검색 시군구(변경 판정용)
+    private const val KEY_FETCH_AT = "fetchAt"   // 마지막 재검색 시각(시간당 폴백용)
     private const val TICK_REQ = 7301
     private const val ROTATE_REQ = 7305
     private const val MAIN_REQ = 7303
     private const val NAVER_REQ = 7304
     private const val PHOTO_MAX_W = 300
     private const val ROTATE_MS = 10_000L
+    private const val TICK_MS = 10 * 60_000L      // 위치 확인 주기(10분)
+    private const val MOVE_THRESHOLD_M = 1000.0   // 이 이상 이동해야 시군구 확인(불필요 지오코딩 방지)
+    const val FALLBACK_MS = 60 * 60_000L          // 이동 없어도 1시간마다 재검색(평점·사진 신선도)
 
     private const val HOME_LAT = 37.6437   // 폴백: 백석동(홈)
     private const val HOME_LNG = 126.7896
-    private const val HOUR_START = 9        // 갱신 시간대 09~22시
-    private const val HOUR_END = 22
+    private const val HOUR_START = 9        // 갱신 시간대 09~23시
+    private const val HOUR_END = 23
     private const val TITLE_BASE = "🍽 맛집 찾기"
 
     data class Pick(
@@ -81,15 +88,54 @@ object RestaurantWidgetScheduler {
         ctx, TICK_REQ, Intent(ctx, RestaurantWidget::class.java).setAction(RestaurantWidget.ACTION_TICK), piFlags,
     )
 
-    /** 다음 정각(:00:05)에 TICK 예약(Doze 친화 inexact). */
+    /** 다음 위치 확인(TICK) 예약: 창(09~23시) 안이면 +10분, 밖이면 다음 09:00. Doze 친화 inexact. */
     fun scheduleNextTick(ctx: Context) {
         val a = am(ctx) ?: return
-        val cal = Calendar.getInstance().apply {
-            set(Calendar.MINUTE, 0); set(Calendar.SECOND, 5); set(Calendar.MILLISECOND, 0)
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance().apply { timeInMillis = now + TICK_MS }
+        if (cal.get(Calendar.HOUR_OF_DAY) !in HOUR_START..HOUR_END) { // 창 밖이면 다음 09:00
+            cal.timeInMillis = now
+            cal.set(Calendar.HOUR_OF_DAY, HOUR_START); cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 5); cal.set(Calendar.MILLISECOND, 0)
+            if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_MONTH, 1)
         }
-        if (cal.timeInMillis <= System.currentTimeMillis()) cal.add(Calendar.HOUR_OF_DAY, 1)
         runCatching { a.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, tickPending(ctx)) }
     }
+
+    /**
+     * 10분 주기 위치 확인. 다음 틱 재예약 후, 창 안 & 실제 위치 있음일 때만:
+     * 무캐시 / 1시간 경과 / 1km 이상 이동 이면 재검색 작업 enqueue.
+     * (실제 시군구 변경 판정·재검색 여부는 Worker 가 지오코딩으로 최종 결정 → 같은 시군구면 재검색 안 함)
+     */
+    fun onTick(ctx: Context) {
+        scheduleNextTick(ctx)
+        if (!inWindow()) return
+        val loc = bestLocation(ctx)
+        if (!loc.real) return // 실제 위치 없으면(폴백뿐) 이번 주기 스킵 — 억지로 GPS 안 켬
+        val p = prefs(ctx)
+        val la = p.getFloat(KEY_CHECK_LAT, 0f).toDouble()
+        val ln = p.getFloat(KEY_CHECK_LNG, 0f).toDouble()
+        val moved = if (la == 0.0 && ln == 0.0) Double.MAX_VALUE else distanceMeters(la, ln, loc.lat, loc.lng)
+        val hourlyDue = System.currentTimeMillis() - p.getLong(KEY_FETCH_AT, 0L) >= FALLBACK_MS
+        if (count(ctx) <= 0 || hourlyDue || moved >= MOVE_THRESHOLD_M) {
+            p.edit().putFloat(KEY_CHECK_LAT, loc.lat.toFloat()).putFloat(KEY_CHECK_LNG, loc.lng.toFloat()).apply()
+            enqueueFetch(ctx)
+        }
+    }
+
+    private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val r = 6371000.0
+        val dLat = Math.toRadians(lat2 - lat1); val dLng = Math.toRadians(lng2 - lng1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    }
+
+    // Worker 가 시군구 변경/시간 경과 판정에 쓰는 상태
+    fun lastSiGunGu(ctx: Context): String? = prefs(ctx).getString(KEY_SIGUNGU, null)
+    fun setSiGunGu(ctx: Context, s: String) { prefs(ctx).edit().putString(KEY_SIGUNGU, s).apply() }
+    fun lastFetchAt(ctx: Context): Long = prefs(ctx).getLong(KEY_FETCH_AT, 0L)
+    fun markFetched(ctx: Context) { prefs(ctx).edit().putLong(KEY_FETCH_AT, System.currentTimeMillis()).apply() }
 
     // ─────────── 알람: 약 10초 ROTATE(화면 회전, 네트워크 없음) ───────────
     private fun rotatePending(ctx: Context) = PendingIntent.getBroadcast(
