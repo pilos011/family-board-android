@@ -136,6 +136,7 @@ object NotifyApi {
     /** 카카오 검색+Groq 선별로 '놓친 장소' 2~3곳 발굴. lat/lng 는 거리 계산·바이어스용(선택). 실패 시 빈 목록. */
     suspend fun recommend(
         board: String, category: String, region: String, savedNames: List<String>, lat: Double?, lng: Double?,
+        radius: Int? = null,
     ): List<Recommendation> {
         if (!enabled()) return emptyList()
         return withContext(Dispatchers.IO) {
@@ -143,7 +144,8 @@ object NotifyApi {
                 val body = JSONObject()
                     .put("board", board).put("category", category).put("region", region)
                     .put("savedNames", JSONArray(savedNames))
-                if (lat != null && lng != null) { body.put("x", lng); body.put("y", lat) } // 카카오: x=경도, y=위도
+                if (lat != null && lng != null) { body.put("x", lng); body.put("y", lat) } // x=경도, y=위도
+                if (radius != null) body.put("radius", radius) // '근처' 모드: 반경(m)
                 val conn = (URL("$base/recommend").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"; connectTimeout = 10000; readTimeout = 20000; doOutput = true
                     setRequestProperty("Content-Type", "application/json")

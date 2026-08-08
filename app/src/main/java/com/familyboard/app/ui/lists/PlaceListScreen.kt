@@ -255,8 +255,8 @@ fun PlaceListScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // 입력창(높이 = 추천받기 버튼과 동일 46dp). 비면 안내문구 표시.
-                val recHint = if (boardKey == PlaceBoards.RESTAURANT) "음식명, 지역 (예 : 이자카야, 고양시)"
-                    else "종류, 지역 (예 : 공원, 고양시)"
+                val recHint = if (boardKey == PlaceBoards.RESTAURANT) "음식명, 지역/근처 (예: 이자카야, 근처)"
+                    else "종류, 지역/근처 (예: 공원, 근처)"
                 Box(
                     Modifier.weight(1f).height(46.dp)
                         .clip(RoundedCornerShape(20.dp))
@@ -286,7 +286,7 @@ fun PlaceListScreen(
                             // 입력창("카테고리, 지역") 우선. 비어 있으면 필터값 사용.
                             val q = recQuery.trim()
                             val cat: String
-                            val region: String
+                            var region: String
                             if (q.isBlank()) {
                                 cat = catFilter ?: ""; region = regionFilter ?: ""
                             } else {
@@ -294,12 +294,16 @@ fun PlaceListScreen(
                                 cat = p.getOrNull(0)?.trim().orEmpty()
                                 region = p.getOrNull(1)?.trim().orEmpty()
                             }
-                            if (region.isBlank() && loc == null) {
+                            // 지역에 '근처'(또는 '주변') → 현재 위치 반경 600m 모드(평점 4.3 우선, 없으면 3.5까지 5곳)
+                            val near = region == "근처" || region == "주변"
+                            val radius = if (near) 600 else null
+                            val regionArg = if (near) "" else region
+                            if (regionArg.isBlank() && loc == null) {
                                 Toast.makeText(context, "지역을 입력하거나 위치를 켜주세요", Toast.LENGTH_SHORT).show()
                             } else {
                                 recommending = true; recommends = emptyList()
                                 val savedNames = items.map { it.text }
-                                vm.recommendPlace(boardKey, cat, region, savedNames, loc?.latitude, loc?.longitude) { list ->
+                                vm.recommendPlace(boardKey, cat, regionArg, savedNames, loc?.latitude, loc?.longitude, radius) { list ->
                                     recommending = false
                                     recommends = list.take(5) // AI 추천 최대 5곳
                                     if (list.isEmpty()) Toast.makeText(context, "추천할 새 장소를 못 찾았어요", Toast.LENGTH_SHORT).show()

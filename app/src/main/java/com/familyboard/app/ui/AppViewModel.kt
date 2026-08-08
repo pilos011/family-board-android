@@ -426,14 +426,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun fetchPlaceInfo(url: String, onResult: (com.familyboard.app.notif.PlaceInfo?) -> Unit) = viewModelScope.launch {
         onResult(com.familyboard.app.notif.NotifyApi.parsePlace(url))
     }
-    /** '놓친 장소' 발굴 추천(저장된 곳 제외). 지역이 비어 있으면(전체) 현재 위치의 시군구로 한정해 먼 곳 추천 방지. */
+    /** '놓친 장소' 발굴 추천(저장된 곳 제외). region 비면(전체) 현재 시군구로 한정. radius 지정 시 '근처' 반경 모드(역지오코딩 생략). */
     fun recommendPlace(
         board: String, category: String, region: String, savedNames: List<String>, lat: Double?, lng: Double?,
+        radius: Int? = null,
         onResult: (List<com.familyboard.app.notif.Recommendation>) -> Unit,
     ) = viewModelScope.launch {
         val effectiveRegion =
-            if (region.isBlank() && lat != null && lng != null) reverseDistrict(lat, lng).orEmpty() else region
-        onResult(com.familyboard.app.notif.NotifyApi.recommend(board, category, effectiveRegion, savedNames, lat, lng))
+            if (radius == null && region.isBlank() && lat != null && lng != null) reverseDistrict(lat, lng).orEmpty() else region
+        onResult(com.familyboard.app.notif.NotifyApi.recommend(board, category, effectiveRegion, savedNames, lat, lng, radius))
     }
 
     /** 좌표 → 현재 시군구 문자열(예: "고양시 일산동구"). 실패 시 null. */
