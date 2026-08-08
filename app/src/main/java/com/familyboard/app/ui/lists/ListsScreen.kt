@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -82,6 +83,7 @@ fun ListsScreen(
     onOpenPlace: (String) -> Unit,
     onOpenFun: () -> Unit,
     onOpenMyFun: () -> Unit,
+    onOpenRecipe: () -> Unit,
     onOpenDocs: () -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
@@ -90,6 +92,7 @@ fun ListsScreen(
     val visit by vm.visitItems.collectAsStateWithLifecycle()
     val funCount by vm.funCount.collectAsStateWithLifecycle()
     val myFunCount by vm.myFunCount.collectAsStateWithLifecycle()
+    val recipeCount by vm.recipeCount.collectAsStateWithLifecycle()
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val docs by vm.docItems.collectAsStateWithLifecycle()
     val docCount = docs?.count { com.familyboard.app.data.model.DocBoard.visibleTo(it, currentMemberId) } ?: 0
@@ -122,7 +125,7 @@ fun ListsScreen(
                 CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
                 CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
                 CompactBoardCard("문서함", docCount, DocsColor, Icons.Default.FolderShared, Modifier.weight(1f)) { onOpenDocs() }
-                Spacer(Modifier.weight(1f))
+                CompactBoardCard("요리법", recipeCount, RecipeColor, Icons.Default.RestaurantMenu, Modifier.weight(1f)) { onOpenRecipe() }
             }
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
@@ -308,6 +311,7 @@ private val VisitColor = Color(0xFF22B8CF)
 private val FunColor = Color(0xFFF06595)
 private val MyFunColor = Color(0xFF9775FA)
 private val DocsColor = Color(0xFF3B5BDB)
+private val RecipeColor = Color(0xFFE8590C)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

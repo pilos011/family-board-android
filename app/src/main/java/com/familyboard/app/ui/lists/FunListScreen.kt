@@ -336,6 +336,7 @@ fun FunListScreen(
     }, onDismiss = { editItem = null }) }
     actionItem?.let { it0 ->
         val editable = canEdit(it0)
+        val isRecipe = boardKey == FunBoard.RECIPE
         val toPrivate = boardKey != FunBoard.PRIVATE
         val transferLabel = if (toPrivate) "내 재미진 곳으로 전달 (나만 보기)" else "재미진 곳으로 전달 (가족과 공유)"
         val transferTarget = if (toPrivate) FunBoard.PRIVATE else FunBoard.BOARD
@@ -346,13 +347,35 @@ fun FunListScreen(
             text = { Text("이 게시물을 어떻게 할까요?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
-                    TextButton(
-                        onClick = {
-                            vm.copyFunTo(it0, transferTarget)
-                            Toast.makeText(context, transferMsg, Toast.LENGTH_SHORT).show(); actionItem = null
-                        },
-                        modifier = Modifier.fillMaxWidth().offset(y = (-10).dp),
-                    ) { Text(transferLabel) }
+                    if (isRecipe) {
+                        // 요리법 → 재미진 곳으로 '이동'(빼내기)
+                        TextButton(
+                            onClick = {
+                                vm.moveFunTo(it0, FunBoard.BOARD)
+                                loaded = loaded.filterNot { it.id == it0.id } // 낙관적 제거
+                                Toast.makeText(context, "재미진 곳으로 옮겼어요", Toast.LENGTH_SHORT).show(); actionItem = null
+                            },
+                            modifier = Modifier.fillMaxWidth().offset(y = (-10).dp),
+                        ) { Text("재미진 곳으로 이동") }
+                    } else {
+                        // 다른 재미진 곳으로 '복사'(전달)
+                        TextButton(
+                            onClick = {
+                                vm.copyFunTo(it0, transferTarget)
+                                Toast.makeText(context, transferMsg, Toast.LENGTH_SHORT).show(); actionItem = null
+                            },
+                            modifier = Modifier.fillMaxWidth().offset(y = (-10).dp),
+                        ) { Text(transferLabel) }
+                        // 요리법으로 '이동'(복사 아님 — 원본이 여기서 빠짐)
+                        TextButton(
+                            onClick = {
+                                vm.moveFunTo(it0, FunBoard.RECIPE)
+                                loaded = loaded.filterNot { it.id == it0.id } // 낙관적 제거
+                                Toast.makeText(context, "요리법으로 옮겼어요", Toast.LENGTH_SHORT).show(); actionItem = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("요리법으로 이동") }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         if (editable) TextButton(onClick = { pendingDelete = it0; actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                         TextButton(onClick = { actionItem = null }) { Text("취소") }

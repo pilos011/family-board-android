@@ -180,8 +180,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    fun funCountFor(boardKey: String): StateFlow<Int> =
-        if (boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE) myFunCount else funCount
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val recipeCount: StateFlow<Int> =
+        funRefresh.flatMapLatest {
+            kotlinx.coroutines.flow.flow {
+                emit(runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.RECIPE) }.getOrDefault(0))
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun funCountFor(boardKey: String): StateFlow<Int> = when (boardKey) {
+        com.familyboard.app.data.model.FunBoard.PRIVATE -> myFunCount
+        com.familyboard.app.data.model.FunBoard.RECIPE -> recipeCount
+        else -> funCount
+    }
 
     /** 페이지 방식 1회성 조회. [afterCreatedAt] 이후부터 [limit]개(최신순/등록순). 내것은 본인 것만. */
     suspend fun fetchFunPage(boardKey: String, ascending: Boolean, afterCreatedAt: Long?, limit: Int): List<ListItem> {
@@ -423,6 +434,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return listOf(fromMime, hintExt).mapNotNull { it?.lowercase() }
             .firstOrNull { it.matches(valid) } ?: "mp4"
     }
+    /** 재미진 곳/내 재미진 곳 항목을 다른 보드로 '이동'(복사 아님 — 같은 항목의 board 만 변경). 요리법 이동에 사용. */
+    fun moveFunTo(item: ListItem, targetBoard: String) = viewModelScope.launch {
+        // 같은 id 유지 → board 변경 = 이동. createdAt 을 now 로 갱신해 대상 목록 최상단에.
+        runCatching { board.upsertItem(item.copy(board = targetBoard, createdAt = System.currentTimeMillis())) }
+        bumpFunRefresh()
+    }
+
     /** 재미진 곳 항목을 다른 재미진 곳 보드(공용/내것)로 복사. */
     fun copyFunTo(item: ListItem, targetBoard: String) = viewModelScope.launch {
         runCatching {

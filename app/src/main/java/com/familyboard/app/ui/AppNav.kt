@@ -69,6 +69,7 @@ private object Routes {
     const val PLACE = "place/{board}"
     const val FUN = "fun"
     const val MYFUN = "myfun"
+    const val RECIPE = "recipe"
     const val DOCS = "docs"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
@@ -198,11 +199,16 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenPlace = { nav.navigate(Routes.place(it)) },
                     onOpenFun = { nav.navigate(Routes.FUN) },
                     onOpenMyFun = { nav.navigate(Routes.MYFUN) },
+                    onOpenRecipe = { nav.navigate(Routes.RECIPE) },
                     onOpenDocs = { nav.navigate(Routes.DOCS) },
                 )
             }
             composable(Routes.FUN) {
                 FunListScreen(vm = vm, boardKey = FunBoard.BOARD, isPrivate = false,
+                    currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.RECIPE) {
+                FunListScreen(vm = vm, boardKey = FunBoard.RECIPE, isPrivate = false,
                     currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.MYFUN) {
