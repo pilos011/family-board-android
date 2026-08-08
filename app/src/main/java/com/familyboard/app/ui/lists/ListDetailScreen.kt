@@ -23,6 +23,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -249,6 +251,8 @@ private fun Chip(label: String, color: Color, on: Boolean, onClick: () -> Unit) 
 
 @Composable
 private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) -> Unit, onDelete: () -> Unit) {
+    val context = LocalContext.current
+    val hasLink = item.link.isNotBlank()
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
@@ -259,17 +263,38 @@ private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) 
         Checkbox(checked = item.checked, onCheckedChange = onToggle)
         Text(
             item.text,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
+                .then(if (hasLink) Modifier.clickable { openUrl(context, item.link) } else Modifier),
             style = MaterialTheme.typography.bodyLarge,
             textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
-            color = if (item.checked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-            else MaterialTheme.colorScheme.onSurface,
+            color = when {
+                item.checked -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                hasLink -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurface
+            },
         )
+        // 링크 있으면 브라우저로 열기 아이콘
+        if (hasLink) {
+            IconButton(onClick = { openUrl(context, item.link) }) {
+                Icon(Icons.Default.Link, "링크 열기", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+        }
         // 담당자(할 일) 또는 추가한 사람(장보기)
         MemberTagDots(rightIds)
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.Close, "삭제", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         }
+    }
+}
+
+/** 링크를 기본 브라우저(또는 해당 앱)로 연다. */
+private fun openUrl(context: android.content.Context, url: String) {
+    runCatching {
+        val u = if (url.startsWith("http")) url else "https://$url"
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 }
 

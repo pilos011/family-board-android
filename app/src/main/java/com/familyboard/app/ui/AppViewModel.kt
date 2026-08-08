@@ -214,7 +214,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 쿠팡 → 공유 텍스트/og:title 이름으로 바로 장보기(단·복수)
         val coupangLinks = allLinks.filter { it.contains("coupang", ignoreCase = true) || it.contains("coupa.ng", ignoreCase = true) }
         if (coupangLinks.isNotEmpty()) {
-            if (coupangLinks.size == 1) addShoppingLink(coupangLinks[0], name) else addShoppingLinks(text, coupangLinks)
+            if (coupangLinks.size == 1) addShoppingLink(coupangLinks[0], coupangNameFromText(text)) else addShoppingLinks(text, coupangLinks)
             return true
         }
 
@@ -297,9 +297,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 상품명에서 "- 쿠팡!"·"- 코코달인" 등 꼬리 제거. */
+    /** 쿠팡 공유 텍스트에서 실제 상품명 라인 추출("쿠팡을 추천합니다!" 프로모 헤더 제외). */
+    private fun coupangNameFromText(fullText: String): String {
+        val lines = fullText.split('\n').map { it.trim() }
+            .filter { it.isNotBlank() && !it.contains(Regex("https?://")) }
+        val picked = lines.firstOrNull { !it.contains("추천합니다") } ?: lines.firstOrNull().orEmpty()
+        return cleanShopName(picked)
+    }
+
+    /** 상품명 정리: 앞 "쿠팡을 추천합니다!" 프로모 제거, 뒤 "- 쿠팡!"·"- 코코달인" 꼬리 제거. */
     private fun cleanShopName(raw: String): String {
-        var s = raw.trim().replace(Regex("\\s*[-|]?\\s*(쿠팡|코코달인)!?\\s*$"), "").trim()
+        var s = raw.trim()
+        s = s.replace(Regex("^쿠팡을?\\s*추천합니다[!.]*\\s*"), "").trim()
+        s = s.replace(Regex("\\s*[-|]?\\s*(쿠팡|코코달인)!?\\s*$"), "").trim()
         if (s == "쿠팡" || s == "쿠팡!" || s == "코코달인") s = ""
         return s.take(80)
     }
