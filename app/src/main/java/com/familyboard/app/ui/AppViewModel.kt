@@ -426,12 +426,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun fetchPlaceInfo(url: String, onResult: (com.familyboard.app.notif.PlaceInfo?) -> Unit) = viewModelScope.launch {
         onResult(com.familyboard.app.notif.NotifyApi.parsePlace(url))
     }
-    /** 카카오+Groq로 '놓친 장소' 2~3곳 발굴 추천(저장된 곳 제외). */
+    /** '놓친 장소' 발굴 추천(저장된 곳 제외). 지역이 비어 있으면(전체) 현재 위치의 시군구로 한정해 먼 곳 추천 방지. */
     fun recommendPlace(
         board: String, category: String, region: String, savedNames: List<String>, lat: Double?, lng: Double?,
         onResult: (List<com.familyboard.app.notif.Recommendation>) -> Unit,
     ) = viewModelScope.launch {
-        onResult(com.familyboard.app.notif.NotifyApi.recommend(board, category, region, savedNames, lat, lng))
+        val effectiveRegion =
+            if (region.isBlank() && lat != null && lng != null) reverseDistrict(lat, lng).orEmpty() else region
+        onResult(com.familyboard.app.notif.NotifyApi.recommend(board, category, effectiveRegion, savedNames, lat, lng))
+    }
+
+    /** 좌표 → 현재 시군구 문자열(예: "고양시 일산동구"). 실패 시 null. */
+    private suspend fun reverseDistrict(lat: Double, lng: Double): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val geo = android.location.Geocoder(getApplication<Application>(), java.util.Locale.KOREA)
+                @Suppress("DEPRECATION")
+                val addr = geo.getFromLocation(lat, lng, 1)?.firstOrNull() ?: return@withContext null
+                val line = addr.getAddressLine(0)
+                    ?: listOfNotNull(addr.adminArea, addr.locality, addr.subLocality).joinToString(" ")
+                districtFrom(line)
+                    ?: listOfNotNull(addr.locality ?: addr.subAdminArea, addr.subLocality)
+                        .filter { it.isNotBlank() }.joinToString(" ").ifBlank { null }
+            }.getOrNull()
+        }
+
+    /** 주소 문자열에서 '시 + 구/군'만 추출(예: "…경기도 고양시 일산동구 백석동…" → "고양시 일산동구"). */
+    private fun districtFrom(addressLine: String): String? {
+        val toks = addressLine.split(' ', ',').map { it.trim() }.filter { it.isNotBlank() }
+        val si = toks.firstOrNull { it.endsWith("시") }
+        val guGun = toks.firstOrNull { it.endsWith("구") || it.endsWith("군") }
+        return listOfNotNull(si, guGun).distinct().joinToString(" ").ifBlank { null }
     }
     fun describePlace(info: com.familyboard.app.notif.PlaceInfo): String = buildPlaceDesc(info)
     fun fetchLinkInfo(url: String, onResult: (com.familyboard.app.notif.LinkInfo?) -> Unit) = viewModelScope.launch {
