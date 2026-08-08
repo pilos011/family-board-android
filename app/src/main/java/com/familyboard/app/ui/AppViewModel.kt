@@ -205,9 +205,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .firstOrNull { it.isNotBlank() && it != "[네이버지도]" }.orEmpty()
         if (name.isBlank()) name = subject?.trim().orEmpty()
 
-        // 쿠팡 링크 → 선택 다이얼로그 없이 바로 장보기에 담기
-        if (url.contains("coupang", ignoreCase = true) || url.contains("coupa.ng", ignoreCase = true)) {
-            addCoupangToShopping(url, name)
+        // 쿠팡·코코달인 링크(들) → 선택 없이 바로 장보기. 여러 개면 전부(목록 공유 대응).
+        val shopLinks = Regex("https?://\\S+").findAll(text)
+            .map { it.value.trimEnd('.', ',', ')', ']', '"') }
+            .filter { val u = it.lowercase(); u.contains("coupang") || u.contains("coupa.ng") || u.contains("cocodalin") }
+            .distinct().toList()
+        if (shopLinks.isNotEmpty()) {
+            if (shopLinks.size == 1) addShoppingLink(shopLinks[0], name)
+            else addShoppingLinks(text, shopLinks)
             return true
         }
 
@@ -237,12 +242,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /** 쿠팡 상품 공유 → 장보기에 바로 추가. 이름은 공유 텍스트 우선, 없으면 링크 파싱(og:title), 그래도 없으면 "쿠팡 상품". */
-    private fun addCoupangToShopping(url: String, textName: String) {
+    /** 쇼핑 링크 1개(쿠팡/코코달인) → 장보기 바로 추가. 이름=공유 텍스트 우선, 없으면 링크 og:title, 폴백 "상품". */
+    private fun addShoppingLink(url: String, textName: String) {
         viewModelScope.launch {
-            var name = cleanCoupangName(textName)
-            if (name.isBlank()) name = cleanCoupangName(com.familyboard.app.notif.NotifyApi.parseLink(url)?.title.orEmpty())
-            if (name.isBlank()) name = "쿠팡 상품"
+            var name = cleanShopName(textName)
+            if (name.isBlank()) name = cleanShopName(com.familyboard.app.notif.NotifyApi.parseLink(url)?.title.orEmpty())
+            if (name.isBlank()) name = "상품"
             runCatching {
                 board.upsertItem(ListItem(
                     text = name, link = url, board = BoardType.SHOPPING.key,
@@ -252,10 +257,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 쿠팡 상품명에서 "- 쿠팡!" 등 꼬리 제거. */
-    private fun cleanCoupangName(raw: String): String {
-        var s = raw.trim().replace(Regex("\\s*[-|]?\\s*쿠팡!?\\s*$"), "").trim()
-        if (s == "쿠팡" || s == "쿠팡!") s = ""
+    /** 쇼핑 링크 여러 개(한 텍스트) → 각 라인에서 이름 뽑아 장보기에 전부 담기. */
+    private fun addShoppingLinks(fullText: String, links: List<String>) {
+        val lines = fullText.split('\n')
+        viewModelScope.launch {
+            var count = 0
+            for (link in links) {
+                val line = lines.firstOrNull { it.contains(link.take(25)) }.orEmpty()
+                var nm = cleanShopName(line.replace(Regex("https?://\\S+"), " ").trim())
+                if (nm.isBlank()) nm = cleanShopName(com.familyboard.app.notif.NotifyApi.parseLink(link)?.title.orEmpty())
+                if (nm.isBlank()) nm = "상품"
+                runCatching {
+                    board.upsertItem(ListItem(text = nm, link = link, board = BoardType.SHOPPING.key,
+                        createdBy = currentMemberId.value.orEmpty(), createdAt = System.currentTimeMillis()))
+                }
+                count++
+            }
+            android.widget.Toast.makeText(getApplication(), "장보기에 ${count}개 담았어요", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** 상품명에서 "- 쿠팡!"·"- 코코달인" 등 꼬리 제거. */
+    private fun cleanShopName(raw: String): String {
+        var s = raw.trim().replace(Regex("\\s*[-|]?\\s*(쿠팡|코코달인)!?\\s*$"), "").trim()
+        if (s == "쿠팡" || s == "쿠팡!" || s == "코코달인") s = ""
         return s.take(80)
     }
     private fun buildPlaceDesc(i: com.familyboard.app.notif.PlaceInfo): String {
