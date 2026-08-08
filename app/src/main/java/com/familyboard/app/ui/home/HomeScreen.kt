@@ -169,8 +169,7 @@ fun HomeScreen(
     var showMaker by remember { mutableStateOf(false) }
     // 타이틀 아래 '만든이' 라벨은 잠깐 보였다 사라짐
     LaunchedEffect(showMaker) { if (showMaker) { kotlinx.coroutines.delay(1800); showMaker = false } }
-    // 앱 시작뿐 아니라 홈 화면으로 진입할 때마다 업데이트 재확인
-    LaunchedEffect(Unit) { vm.refreshUpdate() }
+    // 업데이트 확인은 AppNav 에서 '홈으로 이동 시(route==HOME)' 수행 → 여기선 중복 호출 안 함.
 
     val checkedNotices = remember(notices) { notices.filter { it.checked }.take(4) }
     // 새 공지 강조(스포트라이트): 체크된 공지 중 현재 사용자가 아직 '확인'하지 않은 것(viewedBy 미포함).

@@ -125,6 +125,9 @@ private fun MainScaffold(vm: AppViewModel) {
         vm.clearWidgetNav()
     }
 
+    // 다른 메뉴에서 홈으로 이동할 때마다 업데이트 확인(주기 폴링 대신). route 가 HOME 이 될 때 발동.
+    LaunchedEffect(route) { if (route == Routes.HOME) vm.refreshUpdate() }
+
     Scaffold(
         bottomBar = {
             if (showBar) {

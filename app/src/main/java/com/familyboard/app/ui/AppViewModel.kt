@@ -684,14 +684,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        // 앱 업데이트 확인: 시작 시 즉시 + 앱을 켜둔 동안 30분마다 재확인(계속 실행 중이어도 종이 뜨도록).
-        // 찾으면 유지(일시적 네트워크 실패로 종이 사라지지 않게 — 최신/실패면 그대로).
-        viewModelScope.launch {
-            while (true) {
-                UpdateChecker.check()?.let { updateInfo.value = it }
-                kotlinx.coroutines.delay(30 * 60_000L)
-            }
-        }
+        // 앱 업데이트 확인은 '홈 메뉴로 이동할 때'마다 수행(AppNav 에서 route==HOME 관찰 → refreshUpdate). 주기 폴링 안 함.
         // 장바구니 위젯: 장보기 미체크(살) 항목 수 갱신
         viewModelScope.launch {
             shoppingItems.collect { items ->
