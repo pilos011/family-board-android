@@ -166,6 +166,7 @@ fun ListDetailScreen(
                         item = itm,
                         // 장보기·공지사항: 추가한 사람 표시 / 할 일: 담당자 표시
                         rightIds = if (simpleList) listOf(itm.createdBy) else itm.memberIds,
+                        showSource = knownBoard == BoardType.SHOPPING, // 장보기만 출처 배지(직접/쿠팡/코코달인)
                         onToggle = { vm.toggleItem(itm.id, it) },
                         onDelete = { pendingDelete = itm },
                     )
@@ -250,7 +251,7 @@ private fun Chip(label: String, color: Color, on: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) -> Unit, onDelete: () -> Unit) {
+private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) -> Unit, onDelete: () -> Unit, showSource: Boolean = false) {
     val context = LocalContext.current
     val hasLink = item.link.isNotBlank()
     Row(
@@ -273,6 +274,18 @@ private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) 
                 else -> MaterialTheme.colorScheme.onSurface
             },
         )
+        // 출처 배지(장보기): 직접 / 쿠팡 / 코코달인
+        if (showSource) {
+            val (srcLabel, srcColor) = when {
+                item.link.contains("coupang", ignoreCase = true) || item.link.contains("coupa.ng", ignoreCase = true) -> "쿠팡" to Color(0xFFE03131)
+                item.link.contains("cocodalin", ignoreCase = true) -> "코코달인" to Color(0xFFF08C00)
+                else -> "직접" to Color(0xFF868E96)
+            }
+            Box(
+                Modifier.padding(end = 4.dp).clip(RoundedCornerShape(6.dp))
+                    .background(srcColor.copy(alpha = 0.15f)).padding(horizontal = 6.dp, vertical = 2.dp),
+            ) { Text(srcLabel, fontSize = 10.sp, color = srcColor, fontWeight = FontWeight.Bold) }
+        }
         // 링크 있으면 브라우저로 열기 아이콘
         if (hasLink) {
             IconButton(onClick = { openUrl(context, item.link) }) {
