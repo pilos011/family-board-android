@@ -175,6 +175,32 @@ object NotifyApi {
         }
     }
 
+    /** 코코달인 product_id 목록 → (id,상품명) 목록. 서버(/coco/names)가 코코달인 likeList로 이름 파싱. */
+    suspend fun cocoNames(ids: List<String>): List<Pair<String, String>> {
+        if (!enabled() || ids.isEmpty()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val body = JSONObject().put("ids", JSONArray(ids))
+                val conn = (URL("$base/coco/names").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; connectTimeout = 10000; readTimeout = 15000; doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+                }
+                conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code !in 200..299) return@runCatching emptyList<Pair<String, String>>()
+                val arr = JSONObject(text).optJSONArray("items") ?: return@runCatching emptyList<Pair<String, String>>()
+                (0 until arr.length()).mapNotNull { i ->
+                    val o = arr.getJSONObject(i)
+                    val nm = o.optString("name")
+                    if (nm.isBlank()) null else o.optString("id") to nm
+                }
+            }.onFailure { Log.w(TAG, "cocoNames 실패", it) }.getOrDefault(emptyList())
+        }
+    }
+
     /** 대용량 파일(영상 등) 업로드 → 공개 URL 반환. ext 확장자로 저장(예: "mp4"). 실패 시 null. */
     suspend fun uploadFile(bytes: ByteArray, ext: String): String? {
         if (!enabled()) return null

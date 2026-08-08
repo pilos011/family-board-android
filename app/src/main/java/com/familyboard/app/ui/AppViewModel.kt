@@ -205,14 +205,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .firstOrNull { it.isNotBlank() && it != "[네이버지도]" }.orEmpty()
         if (name.isBlank()) name = subject?.trim().orEmpty()
 
-        // 쿠팡·코코달인 링크(들) → 선택 없이 바로 장보기. 여러 개면 전부(목록 공유 대응).
-        val shopLinks = Regex("https?://\\S+").findAll(text)
-            .map { it.value.trimEnd('.', ',', ')', ']', '"') }
-            .filter { val u = it.lowercase(); u.contains("coupang") || u.contains("coupa.ng") || u.contains("cocodalin") }
-            .distinct().toList()
-        if (shopLinks.isNotEmpty()) {
-            if (shopLinks.size == 1) addShoppingLink(shopLinks[0], name)
-            else addShoppingLinks(text, shopLinks)
+        val allLinks = Regex("https?://\\S+").findAll(text)
+            .map { it.value.trimEnd('.', ',', ')', ']', '"') }.distinct().toList()
+        // 코코달인 → product_id 추출 후 서버가 상품명 파싱해 장보기에 담기(단·복수)
+        val cocoIds = allLinks.filter { it.contains("cocodalin", ignoreCase = true) }
+            .mapNotNull { Regex("product_id=(\\d+)").find(it)?.groupValues?.get(1) }.distinct()
+        if (cocoIds.isNotEmpty()) { addCocodalinToShopping(cocoIds); return true }
+        // 쿠팡 → 공유 텍스트/og:title 이름으로 바로 장보기(단·복수)
+        val coupangLinks = allLinks.filter { it.contains("coupang", ignoreCase = true) || it.contains("coupa.ng", ignoreCase = true) }
+        if (coupangLinks.isNotEmpty()) {
+            if (coupangLinks.size == 1) addShoppingLink(coupangLinks[0], name) else addShoppingLinks(text, coupangLinks)
             return true
         }
 
@@ -242,7 +244,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /** 쇼핑 링크 1개(쿠팡/코코달인) → 장보기 바로 추가. 이름=공유 텍스트 우선, 없으면 링크 og:title, 폴백 "상품". */
+    /** 코코달인 product_id 목록 → 서버가 상품명 파싱 → 장보기에 전부 담기. */
+    private fun addCocodalinToShopping(ids: List<String>) {
+        viewModelScope.launch {
+            val pairs = com.familyboard.app.notif.NotifyApi.cocoNames(ids) // (id, name)
+            val me = currentMemberId.value.orEmpty()
+            val toAdd = if (pairs.isNotEmpty()) pairs else ids.map { it to "코코달인 상품 $it" }
+            toAdd.forEach { (id, nm) ->
+                runCatching {
+                    board.upsertItem(ListItem(
+                        text = nm.take(80),
+                        link = "https://www.cocodalin.com/product_view.html?product_id=$id",
+                        board = BoardType.SHOPPING.key, createdBy = me, createdAt = System.currentTimeMillis()))
+                }
+            }
+            android.widget.Toast.makeText(getApplication(), "장보기에 ${toAdd.size}개 담았어요", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** 쇼핑 링크 1개(쿠팡) → 장보기 바로 추가. 이름=공유 텍스트 우선, 없으면 링크 og:title, 폴백 "상품". */
     private fun addShoppingLink(url: String, textName: String) {
         viewModelScope.launch {
             var name = cleanShopName(textName)
