@@ -132,7 +132,6 @@ fun PlaceListScreen(
     val title = PlaceBoards.titleOf(boardKey)
     val context = LocalContext.current
 
-    var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     // 정렬: 선택한 키들을 탭 순서대로 우선순위 적용(혼합). 기본=거리순(가까운 곳 먼저).
     var sortKeys by remember { mutableStateOf(listOf(SortKey.DISTANCE)) }
@@ -247,11 +246,6 @@ fun PlaceListScreen(
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") } },
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }, containerColor = MaterialTheme.colorScheme.primary) {
-                Icon(Icons.Default.Add, "장소 추가", tint = Color.White)
-            }
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -472,11 +466,6 @@ fun PlaceListScreen(
         }
     }
 
-    if (showAdd) {
-        PlaceEditDialog(vm, null,
-            onSave = { n, l, d, a, img, cat -> vm.addPlace(boardKey, n, l, d, a, img, category = cat); showAdd = false },
-            onDismiss = { showAdd = false })
-    }
     editItem?.let { it0 ->
         PlaceEditDialog(vm, it0,
             onSave = { n, l, d, a, img, cat -> vm.updatePlace(it0, n, l, d, a, img, category = cat); editItem = null },

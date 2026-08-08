@@ -117,7 +117,6 @@ fun FunListScreen(
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     fun canEdit(it: ListItem) = it.createdBy == currentMemberId || isParent
 
-    var showAdd by remember { mutableStateOf(false) }
     var editItem by remember { mutableStateOf<ListItem?>(null) }
     var actionItem by remember { mutableStateOf<ListItem?>(null) }
     var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
@@ -240,11 +239,6 @@ fun FunListScreen(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") } },
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }, containerColor = MaterialTheme.colorScheme.primary) {
-                Icon(Icons.Default.Add, "추가", tint = Color.White)
-            }
-        },
         bottomBar = {
             FunPageBar(
                 page = pageIndex + 1, totalPages = totalPages, loading = loading,
@@ -330,12 +324,6 @@ fun FunListScreen(
 
     playUrl?.let { url -> VideoPlayerDialog(url) { playUrl = null } }
 
-    if (showAdd) FunEditDialog(vm, null, onSave = { t, l, img ->
-        val photos = if (img.isBlank()) emptyList() else listOf(img)
-        // 추가 후 새 항목이 바로 보이도록 1페이지 재로드(비실시간)
-        loadScope.launch { vm.addFun(boardKey, t, l, photos).join(); loaded = emptyList(); pageIndex = 0; ensureLoaded(pageSize) }
-        showAdd = false
-    }, onDismiss = { showAdd = false })
     editItem?.let { it0 -> FunEditDialog(vm, it0, onSave = { t, l, img ->
         vm.updateFun(it0, t, l, img)
         // 낙관적 갱신(비실시간): 로컬 loaded 도 즉시 반영. photoUrls 계산은 VM.updateFun 과 동일 규칙.
