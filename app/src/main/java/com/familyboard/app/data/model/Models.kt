@@ -98,10 +98,10 @@ object PlaceBoards {
 object FunBoard {
     const val BOARD = "fun"
     const val PRIVATE = "myfun"
-    const val RECIPE = "recipe"   // 요리법(재미진 곳과 같은 형식, 공용). 공유 대상 아님 — 재미진 곳에서 '이동'으로만 들어옴
+    const val RECIPE = "recipe"   // 요리 레시피(재미진 곳과 같은 형식, 공용). 공유 대상 아님 — 재미진 곳에서 '이동'으로만 들어옴
     const val TITLE = "재미진 곳"
     const val TITLE_PRIVATE = "내 재미진 곳"
-    const val TITLE_RECIPE = "요리법"
+    const val TITLE_RECIPE = "요리 레시피"
     fun titleOf(board: String) = when (board) {
         PRIVATE -> TITLE_PRIVATE
         RECIPE -> TITLE_RECIPE

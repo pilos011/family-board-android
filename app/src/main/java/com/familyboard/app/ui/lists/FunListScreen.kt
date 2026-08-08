@@ -252,11 +252,12 @@ fun FunListScreen(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                TogglePill("유튜브", youtubeOn) { youtubeOn = !youtubeOn }
-                TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn }
-                TogglePill("이미지", imageOn) { imageOn = !imageOn }
+                // 표시 필터를 바꾸면 현재 페이지가 비어 보일 수 있으니 1페이지로 리셋(등록순은 아래서 전체 리셋)
+                TogglePill("유튜브", youtubeOn) { youtubeOn = !youtubeOn; pageIndex = 0 }
+                TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn; pageIndex = 0 }
+                TogglePill("이미지", imageOn) { imageOn = !imageOn; pageIndex = 0 }
                 TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
-                TogglePill("안 본", hideViewed) { hideViewed = !hideViewed }
+                TogglePill("안 본", hideViewed) { hideViewed = !hideViewed; pageIndex = 0 }
             }
             if (showResume) {
                 ResumeBanner(
@@ -269,7 +270,10 @@ fun FunListScreen(
                 when {
                     loading && shown.isEmpty() -> CircularProgressIndicator()
                     totalCount == 0 -> Text(
-                        "아직 게시물이 없어요.\n유튜브·웹·이미지를 '공유 → 준준가족 보드'\n또는 오른쪽 아래 +로 담아보세요.",
+                        if (boardKey == FunBoard.RECIPE)
+                            "아직 레시피가 없어요.\n재미진 곳/내 재미진 곳에서\n'요리 레시피로 이동'으로 담아보세요."
+                        else
+                            "아직 게시물이 없어요.\n유튜브·웹·이미지를 '공유'로 담아보세요.",
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                     )
                     shown.isEmpty() -> Text(
@@ -371,10 +375,10 @@ fun FunListScreen(
                             onClick = {
                                 vm.moveFunTo(it0, FunBoard.RECIPE)
                                 loaded = loaded.filterNot { it.id == it0.id } // 낙관적 제거
-                                Toast.makeText(context, "요리법으로 옮겼어요", Toast.LENGTH_SHORT).show(); actionItem = null
+                                Toast.makeText(context, "요리 레시피로 옮겼어요", Toast.LENGTH_SHORT).show(); actionItem = null
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("요리법으로 이동") }
+                        ) { Text("요리 레시피로 이동") }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         if (editable) TextButton(onClick = { pendingDelete = it0; actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }

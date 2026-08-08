@@ -125,7 +125,7 @@ fun ListsScreen(
                 CompactBoardCard("재미진 곳", funCount, FunColor, Icons.Default.PlayCircle, Modifier.weight(1f)) { onOpenFun() }
                 CompactBoardCard("내 재미진 곳", myFunCount, MyFunColor, Icons.Default.Lock, Modifier.weight(1f)) { onOpenMyFun() }
                 CompactBoardCard("문서함", docCount, DocsColor, Icons.Default.FolderShared, Modifier.weight(1f)) { onOpenDocs() }
-                CompactBoardCard("요리법", recipeCount, RecipeColor, Icons.Default.RestaurantMenu, Modifier.weight(1f)) { onOpenRecipe() }
+                CompactBoardCard("요리 레시피", recipeCount, RecipeColor, Icons.Default.RestaurantMenu, Modifier.weight(1f)) { onOpenRecipe() }
             }
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
