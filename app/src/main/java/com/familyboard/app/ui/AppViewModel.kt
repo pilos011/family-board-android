@@ -103,7 +103,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun ddayToEvent(item: ListItem): CalendarEvent? {
         if (item.dateIso.isBlank()) return null
         return CalendarEvent(
-            id = "dday_${item.id}", title = item.text,
+            id = "${com.familyboard.app.data.model.SyntheticEvent.DDAY}${item.id}", title = item.text,
             startDateIso = item.dateIso, endDateIso = item.dateIso, allDay = true,
             memberIds = listOf(Family.DDAY_ID),          // 달력에서 D-Day 전용색(주황)
             repeat = if (item.yearly) "yearly" else "",  // 매년 반복이면 올해·이후 해마다 표시
@@ -116,7 +116,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 가족 생일(내장, 영구) → 매년 반복 표시 이벤트(각자 색 + 🎂). 삭제 불필요·항상 표시. */
     private val birthdayEvents: List<CalendarEvent> = FamilyBirthdays.list.map { (id, date) ->
         CalendarEvent(
-            id = "bday_$id", title = "🎂 ${Family.nameOf(id)}",
+            id = "${com.familyboard.app.data.model.SyntheticEvent.BDAY}$id", title = "🎂 ${Family.nameOf(id)}",
             startDateIso = date.toString(), endDateIso = date.toString(), allDay = true,
             memberIds = listOf(id), repeat = "yearly",
         )

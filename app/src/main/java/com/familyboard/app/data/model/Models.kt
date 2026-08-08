@@ -19,6 +19,16 @@ data class CalendarEvent(
     val exdates: List<String> = emptyList(),   // 반복 일정에서 제외된 날짜(yyyy-MM-dd)
 )
 
+/**
+ * 달력·위젯에 '표시 전용'으로 얹는 가상 이벤트의 id 접두어(D-Day 항목/가족 생일).
+ * 저장·편집 대상이 아니므로 날짜 시트 등에서 이 접두어면 제외한다. (접두어 중복 하드코딩 방지)
+ */
+object SyntheticEvent {
+    const val DDAY = "dday_"
+    const val BDAY = "bday_"
+    fun isDisplayOnly(id: String): Boolean = id.startsWith(DDAY) || id.startsWith(BDAY)
+}
+
 /** 리스트(장보기/할 일/용돈 정산) 항목. */
 data class ListItem(
     val id: String = "",
