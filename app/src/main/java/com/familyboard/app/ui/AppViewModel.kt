@@ -684,8 +684,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        // 앱 업데이트 확인
-        viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
+        // 앱 업데이트 확인: 시작 시 즉시 + 앱을 켜둔 동안 30분마다 재확인(계속 실행 중이어도 종이 뜨도록).
+        // 찾으면 유지(일시적 네트워크 실패로 종이 사라지지 않게 — 최신/실패면 그대로).
+        viewModelScope.launch {
+            while (true) {
+                UpdateChecker.check()?.let { updateInfo.value = it }
+                kotlinx.coroutines.delay(30 * 60_000L)
+            }
+        }
         // 장바구니 위젯: 장보기 미체크(살) 항목 수 갱신
         viewModelScope.launch {
             shoppingItems.collect { items ->
@@ -702,8 +708,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 홈 화면 진입 등에서 업데이트를 다시 확인(최신이거나 확인 실패 시 배지 사라짐). */
-    fun refreshUpdate() = viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
+    /** 홈 화면 진입 등에서 업데이트를 다시 확인. 새 버전을 찾을 때만 설정(실패/최신이면 기존 상태 유지). */
+    fun refreshUpdate() = viewModelScope.launch { UpdateChecker.check()?.let { updateInfo.value = it } }
 
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
         BoardType.TODO.key -> todoItems
