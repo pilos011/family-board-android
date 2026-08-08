@@ -244,13 +244,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /** 코코달인 product_id 목록 → 서버가 상품명 파싱 → 장보기에 전부 담기. */
+    /** 코코달인 product_id 목록 → 서버가 상품명 파싱 → 장보기에 전부 담기(요청 id마다 1개, 못 받으면 폴백 이름). */
     private fun addCocodalinToShopping(ids: List<String>) {
         viewModelScope.launch {
-            val pairs = com.familyboard.app.notif.NotifyApi.cocoNames(ids) // (id, name)
+            val nameById = com.familyboard.app.notif.NotifyApi.cocoNames(ids).toMap() // id→name(서버가 준 것만)
             val me = currentMemberId.value.orEmpty()
-            val toAdd = if (pairs.isNotEmpty()) pairs else ids.map { it to "코코달인 상품 $it" }
-            toAdd.forEach { (id, nm) ->
+            ids.forEach { id ->
+                val nm = nameById[id]?.ifBlank { null } ?: "코코달인 상품 $id"
                 runCatching {
                     board.upsertItem(ListItem(
                         text = nm.take(80),
@@ -258,7 +258,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         board = BoardType.SHOPPING.key, createdBy = me, createdAt = System.currentTimeMillis()))
                 }
             }
-            android.widget.Toast.makeText(getApplication(), "장보기에 ${toAdd.size}개 담았어요", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(getApplication(), "장보기에 ${ids.size}개 담았어요", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
