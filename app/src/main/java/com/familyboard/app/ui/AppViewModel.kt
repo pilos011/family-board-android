@@ -98,6 +98,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.DDayBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** D-Day 항목 → '표시 전용' 캘린더 이벤트. 전역 events 엔 넣지 않음(알림·홈 보드 부작용 방지). */
+    private fun ddayToEvent(item: ListItem): CalendarEvent? {
+        if (item.dateIso.isBlank()) return null
+        return CalendarEvent(
+            id = "dday_${item.id}", title = item.text,
+            startDateIso = item.dateIso, endDateIso = item.dateIso, allDay = true,
+            memberIds = listOf(Family.DDAY_ID),          // 달력에서 D-Day 전용색(주황)
+            repeat = if (item.yearly) "yearly" else "",  // 매년 반복이면 올해·이후 해마다 표시
+        )
+    }
+    val ddayCalendarEvents: StateFlow<List<CalendarEvent>> =
+        ddayItems.map { list -> list.mapNotNull(::ddayToEvent) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 가족 달력·위젯이 그릴 이벤트 = 일반 일정 + D-Day(표시용). D-Day add/edit/delete 자동 반영. */
+    val calendarEvents: StateFlow<List<CalendarEvent>> =
+        combine(events, ddayCalendarEvents) { e, d -> e + d }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // 사용자 커스텀 체크리스트 정의(board="customlists"). 본인만 화면에 표시.
     val customLists: StateFlow<List<ListItem>> =
         board.items("customlists")
@@ -649,7 +668,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val ym = YearMonth.now()
             ensureHolidays(ym.minusMonths(1)); ensureHolidays(ym); ensureHolidays(ym.plusMonths(1))
-            combine(events, holidays) { e, h -> e to h }.collect { (e, h) ->
+            combine(calendarEvents, holidays) { e, h -> e to h }.collect { (e, h) ->
                 com.familyboard.app.widget.CalendarWidgetData.update(getApplication(), e, h)
             }
         }

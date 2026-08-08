@@ -25,10 +25,17 @@ object Family {
     const val ALL_ID = "all"
     val allColor = Color(0xFF4C6EF5)
 
+    /** D-Day 항목을 달력에 표시할 때 쓰는 전용 색(주황) + 가상 멤버 id. */
+    const val DDAY_ID = "dday"
+    val ddayColor = Color(0xFFF08C00)
+
     fun byId(id: String?): Member? = members.firstOrNull { it.id == id }
 
-    fun colorOf(id: String?): Color =
-        if (id == ALL_ID || id == null) allColor else byId(id)?.color ?: allColor
+    fun colorOf(id: String?): Color = when (id) {
+        DDAY_ID -> ddayColor
+        ALL_ID, null -> allColor
+        else -> byId(id)?.color ?: allColor
+    }
 
     fun nameOf(id: String?): String =
         if (id == ALL_ID || id == null) "모두" else byId(id)?.name ?: "모두"

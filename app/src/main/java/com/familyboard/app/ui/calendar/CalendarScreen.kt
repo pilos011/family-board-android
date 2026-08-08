@@ -128,7 +128,7 @@ fun CalendarScreen(
     var sheetOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
-    val events by vm.events.collectAsStateWithLifecycle()
+    val events by vm.calendarEvents.collectAsStateWithLifecycle() // 일반 일정 + D-Day(표시용)
     val holidays by vm.holidays.collectAsStateWithLifecycle()
 
     var showYearPicker by remember { mutableStateOf(false) }
@@ -206,7 +206,8 @@ fun CalendarScreen(
             DaySheet(
                 date = selected,
                 holidayName = holidays[selected.toString()],
-                events = eventsByDate[selected.toString()].orEmpty().map { it.event },
+                // D-Day 가상 이벤트는 시트에서 제외(편집 대상 아님, 그리드에만 표시)
+                events = eventsByDate[selected.toString()].orEmpty().map { it.event }.filter { !it.id.startsWith("dday_") },
                 onAdd = { sheetOpen = false; onAddEvent(selected, selected) },
                 onView = { id -> sheetOpen = false; onViewEvent(id, selected.toString()) },
             )
