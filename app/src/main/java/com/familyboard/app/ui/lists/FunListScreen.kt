@@ -130,7 +130,6 @@ fun FunListScreen(
     // 페이지 방식: 한 페이지 pageSize개. 최신순(기본)/등록순은 서버 정렬로 페이지 이동.
     val pageSize = 60
     val totalCount by vm.funCountFor(boardKey).collectAsStateWithLifecycle()
-    val totalPages = if (totalCount <= 0) 1 else (totalCount + pageSize - 1) / pageSize
 
     // 현재 방향으로 위에서부터 순서대로 불러온 항목(연속). 방향 바뀌면 초기화.
     var loaded by remember(boardKey) { mutableStateOf<List<ListItem>>(emptyList()) }
@@ -139,7 +138,17 @@ fun FunListScreen(
     var resumeDismissed by remember(boardKey) { mutableStateOf(false) }
     var entrySavedPage by remember(boardKey) { mutableStateOf(0) }
 
-    // 필요한 개수만큼 로드 보장(부족하면 1회 조회로 채움 → 이어보기 점프도 한 번에).
+    // 표시 필터(유튜브/웹/이미지/안 본)가 하나라도 걸려 있으면 '필터 모드'.
+    val filtering = !(youtubeOn && websiteOn && imageOn && !hideViewed)
+    fun matches(it: ListItem): Boolean {
+        val yt = isYoutube(it.link)
+        val img = it.link.isBlank() && it.photoUrls.isNotEmpty()
+        val web = !yt && !img
+        return ((youtubeOn && yt) || (imageOn && img) || (websiteOn && web)) &&
+            (!hideViewed || !it.viewedBy.contains(currentMemberId))
+    }
+
+    // 필요한 개수만큼 로드 보장(부족하면 1회 조회로 채움 → 이어보기 점프/전체 로드도 한 번에).
     // Mutex 로 직렬화 → 페이지 연타 시 동시 조회 경합(중복/누락) 방지.
     val loadMutex = remember(boardKey) { Mutex() }
     suspend fun ensureLoaded(target: Int) = loadMutex.withLock {
@@ -155,12 +164,22 @@ fun FunListScreen(
             loaded = loaded + batch.filter { seen.add(it.id) }
         } finally { loading = false }
     }
+
+    // 필터 모드면 '전체 로드분을 필터한 목록'으로, 아니면 서버 페이징 목록(loaded)으로 페이징.
+    val filtered = remember(loaded, filtering, youtubeOn, websiteOn, imageOn, hideViewed, currentMemberId) {
+        if (filtering) loaded.filter(::matches) else loaded
+    }
+    // 페이지 수: 필터 모드는 '필터 결과' 기준(그래서 실제 보이는 만큼만), 비필터는 서버 전체 개수 기준.
+    val totalPages = (if (filtering) (filtered.size + pageSize - 1) / pageSize
+        else (totalCount + pageSize - 1) / pageSize).coerceAtLeast(1)
+
     fun goToPage(n: Int) {
-        val clamped = n.coerceIn(0, (totalPages - 1).coerceAtLeast(0))
+        val clamped = n.coerceIn(0, totalPages - 1)
         pageIndex = clamped
         resumeDismissed = true
         vm.saveLastFunPage(boardKey, oldestFirst, clamped + 1)
-        loadScope.launch { ensureLoaded((clamped + 1) * pageSize) }
+        // 필터 모드면 전체가 있어야 정확히 페이징되므로 전체 로드, 아니면 해당 페이지까지만.
+        loadScope.launch { ensureLoaded(if (filtering) totalCount else (clamped + 1) * pageSize) }
     }
 
     // 첫 진입 & 방향(등록순) 변경 시: 초기화 → 그 방향의 마지막 본 페이지 스냅샷 → 1페이지 로드
@@ -169,22 +188,19 @@ fun FunListScreen(
         entrySavedPage = vm.lastFunPage(boardKey, oldestFirst).first()
         ensureLoaded(pageSize)
     }
-    // 삭제 등으로 총 페이지가 줄면 현재 페이지를 범위 안으로 보정
+    // 필터가 켜지면 전체를 한 번에 불러와(한 쿼리) 필터 결과로 정확히 페이징.
+    LaunchedEffect(filtering, totalCount) {
+        if (filtering && totalCount > 0) ensureLoaded(totalCount)
+    }
+    // 총 페이지가 줄면(삭제·필터) 현재 페이지를 범위 안으로 보정
     LaunchedEffect(totalPages) {
         if (pageIndex > totalPages - 1) pageIndex = (totalPages - 1).coerceAtLeast(0)
     }
 
-    // 현재 페이지 구간을 잘라 필터 적용(필터는 페이지 안에서만 숨김)
-    val shown = remember(loaded, pageIndex, youtubeOn, websiteOn, imageOn, hideViewed, currentMemberId) {
+    // 현재 페이지 구간(필터 모드는 필터 결과에서, 비필터는 loaded 에서).
+    val shown = remember(filtered, pageIndex) {
         val start = pageIndex * pageSize
-        val slice = if (start < loaded.size) loaded.subList(start, minOf(loaded.size, start + pageSize)) else emptyList()
-        slice.filter {
-            val yt = isYoutube(it.link)
-            val img = it.link.isBlank() && it.photoUrls.isNotEmpty()
-            val web = !yt && !img
-            ((youtubeOn && yt) || (imageOn && img) || (websiteOn && web)) &&
-                (!hideViewed || !it.viewedBy.contains(currentMemberId))
-        }
+        if (start < filtered.size) filtered.subList(start, minOf(filtered.size, start + pageSize)) else emptyList()
     }
     val showResume = entrySavedPage > 1 && entrySavedPage <= totalPages && pageIndex == 0 && !resumeDismissed
 
