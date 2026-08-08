@@ -240,8 +240,8 @@ fun HomeScreen(
         Box(Modifier.fillMaxSize().background(Color(0x14000000))) // 살짝 어둡게
 
         // 지연 렌더(LazyColumn) → 보이는 항목만 구성/그려 스와이프가 부드러움.
-        // 시원한 스크롤: 초기 속도 3.0배 + 저마찰 감속 → 한 번의 스와이프로 더 멀리.
-        val boostedFling = remember { BoostFling(exponentialDecay(frictionMultiplier = 0.5f), 3.0f) }
+        // 시원한 스크롤: 초기 속도 3.0배 + 저마찰(0.3) 감속 → 한 번의 스와이프로 더 멀리.
+        val boostedFling = remember { BoostFling(exponentialDecay(frictionMultiplier = 0.3f), 3.0f) }
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
