@@ -716,6 +716,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val presence: MutableStateFlow<List<com.familyboard.app.data.model.Presence>> = MutableStateFlow(emptyList())
     fun refreshPresence() = viewModelScope.launch { runCatching { presence.value = board.getPresence() } }
 
+    /** 관리자 → 특정 가족에게 앱 업데이트 요청 알림(FCM). */
+    fun sendUpdateRequest(memberId: String) = viewModelScope.launch {
+        val actor = currentMemberId.value.orEmpty()
+        runCatching {
+            NotifyApi.notify(
+                actor, listOf(memberId), "🔔 앱 업데이트 요청",
+                "${Family.nameOf(actor)}님이 가족 알림판 업데이트를 요청했어요. 홈 화면 종 아이콘으로 업데이트해 주세요.",
+            )
+        }
+    }
+
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
         BoardType.TODO.key -> todoItems
         BoardType.NOTICE.key -> noticeItems
