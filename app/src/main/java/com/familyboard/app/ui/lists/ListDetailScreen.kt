@@ -115,7 +115,7 @@ fun ListDetailScreen(
                         Row(
                             Modifier.padding(end = 6.dp).clip(RoundedCornerShape(16.dp))
                                 .background(Color(0xFFE03131).copy(alpha = 0.12f))
-                                .clickable { openUrl(ctx, "https://cart.coupang.com/cartView.pang") }
+                                .clickable { openCoupangCart(ctx) }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -307,6 +307,24 @@ private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) 
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.Close, "삭제", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         }
+    }
+}
+
+/** 쿠팡 장바구니를 연다: 앱이 있으면 쿠팡 앱으로 강제(웹뷰/네이티브 장바구니), 없으면 브라우저 폴백. */
+private fun openCoupangCart(context: android.content.Context) {
+    val pkg = "com.coupang.mobile"
+    val cart = "https://cart.coupang.com/cartView.pang"
+    val attempts = listOf(
+        // 1) 장바구니 URL을 쿠팡 앱으로 강제
+        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(cart)).setPackage(pkg),
+        // 2) 쿠팡 앱 스킴(인앱 웹뷰로 장바구니)
+        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("coupang://web?url=" + android.net.Uri.encode(cart))).setPackage(pkg),
+        // 3) 웹 폴백(앱 미설치)
+        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(cart)),
+    )
+    for (i in attempts) {
+        i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(i); true }.getOrDefault(false)) return
     }
 }
 
