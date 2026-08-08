@@ -195,16 +195,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearPendingDoc() { pendingDoc.value = null }
 
-    /** 공유 텍스트 처리. 네이버 플레이스 링크 → 장소(맛집/가볼곳), 그 외 링크 → 재미진 곳. 서버로 정보 파싱. */
-    fun handleSharedText(raw: String?, subject: String?) {
+    /** 공유 텍스트 처리. 쿠팡→장보기(바로 담기), 네이버 플레이스→장소, 그 외 링크→재미진 곳. 링크 인식 시 true. */
+    fun handleSharedText(raw: String?, subject: String?): Boolean {
         val text = raw?.trim().orEmpty()
-        if (text.isBlank()) return
+        if (text.isBlank()) return false
         val url = Regex("https?://\\S+").find(text)?.value?.trimEnd('.', ',', ')', ']') ?: ""
+        if (url.isBlank()) return false
         var name = text.replace(url, " ").split('\n').map { it.trim() }
             .firstOrNull { it.isNotBlank() && it != "[네이버지도]" }.orEmpty()
         if (name.isBlank()) name = subject?.trim().orEmpty()
-        val isNaverPlace = url.contains("naver.me") || url.contains("map.naver.com") || url.contains("place.naver.com")
 
+        // 쿠팡 링크 → 선택 다이얼로그 없이 바로 장보기에 담기
+        if (url.contains("coupang", ignoreCase = true) || url.contains("coupa.ng", ignoreCase = true)) {
+            addCoupangToShopping(url, name)
+            return true
+        }
+
+        val isNaverPlace = url.contains("naver.me") || url.contains("map.naver.com") || url.contains("place.naver.com")
         if (isNaverPlace) {
             pendingShare.value = SharedPlace(name.ifBlank { "장소 불러오는 중…" }, url, loading = true, isFun = false)
             viewModelScope.launch {
@@ -216,7 +223,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         lat = info.lat ?: 0.0, lng = info.lng ?: 0.0, loading = false)
                 else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
             }
-        } else if (url.isNotBlank()) {
+        } else {
             // 유튜브/웹 링크 → 재미진 곳
             pendingShare.value = SharedPlace(name.ifBlank { "불러오는 중…" }, url, loading = true, isFun = true)
             viewModelScope.launch {
@@ -227,6 +234,29 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else cur.copy(name = name.ifBlank { "링크" }, loading = false, isFun = true)
             }
         }
+        return true
+    }
+
+    /** 쿠팡 상품 공유 → 장보기에 바로 추가. 이름은 공유 텍스트 우선, 없으면 링크 파싱(og:title), 그래도 없으면 "쿠팡 상품". */
+    private fun addCoupangToShopping(url: String, textName: String) {
+        viewModelScope.launch {
+            var name = cleanCoupangName(textName)
+            if (name.isBlank()) name = cleanCoupangName(com.familyboard.app.notif.NotifyApi.parseLink(url)?.title.orEmpty())
+            if (name.isBlank()) name = "쿠팡 상품"
+            runCatching {
+                board.upsertItem(ListItem(
+                    text = name, link = url, board = BoardType.SHOPPING.key,
+                    createdBy = currentMemberId.value.orEmpty(), createdAt = System.currentTimeMillis()))
+            }
+            android.widget.Toast.makeText(getApplication(), "장보기에 담았어요: $name", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** 쿠팡 상품명에서 "- 쿠팡!" 등 꼬리 제거. */
+    private fun cleanCoupangName(raw: String): String {
+        var s = raw.trim().replace(Regex("\\s*[-|]?\\s*쿠팡!?\\s*$"), "").trim()
+        if (s == "쿠팡" || s == "쿠팡!") s = ""
+        return s.take(80)
     }
     private fun buildPlaceDesc(i: com.familyboard.app.notif.PlaceInfo): String {
         val lines = mutableListOf<String>()

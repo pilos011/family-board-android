@@ -88,10 +88,10 @@ class MainActivity : ComponentActivity() {
                         ?: Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
                     type.startsWith("video/") -> stream?.let { vm.handleSharedVideo(it, type.substringAfter('/')) }
                         ?: Toast.makeText(this, "영상을 읽지 못했어요", Toast.LENGTH_SHORT).show()
-                    // 링크(텍스트) 공유 → 재미진 곳/장소
+                    // 링크(텍스트) 공유 → 쿠팡=장보기 바로 / 네이버=장소 / 그 외=재미진 곳
                     !sharedText.isNullOrBlank() && stream == null -> {
-                        vm.handleSharedText(sharedText, intent.getStringExtra(Intent.EXTRA_SUBJECT))
-                        if (vm.pendingShare.value == null) Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
+                        val handled = vm.handleSharedText(sharedText, intent.getStringExtra(Intent.EXTRA_SUBJECT))
+                        if (!handled) Toast.makeText(this, "링크가 없어 담지 못했어요", Toast.LENGTH_SHORT).show()
                     }
                     // 그 외 파일(pdf·docx·엑셀·hwp 등) → 가족 공유 문서함
                     stream != null -> vm.handleSharedDocument(stream)
