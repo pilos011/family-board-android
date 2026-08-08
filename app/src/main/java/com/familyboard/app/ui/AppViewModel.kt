@@ -297,20 +297,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 쿠팡 공유 텍스트에서 실제 상품명 추출. URL만 제거(줄 통째 삭제 금지) 후 "…추천합니다!" 프로모 라인 제외. */
+    /**
+     * 쿠팡 공유 텍스트에서 상품명 추출. 공유 형식은 보통 [프로모]\n[상품명]\n[링크].
+     * 프로모 문구는 바뀔 수 있으니 문구 매칭에 의존하지 않고 **링크 바로 위 줄**을 상품명으로 본다.
+     */
     private fun coupangNameFromText(fullText: String): String {
-        val lines = fullText.replace(Regex("https?://\\S+"), " ").split('\n')
-            .map { it.trim() }.filter { it.isNotBlank() }
-        val picked = lines.firstOrNull { !it.contains("추천합니다") } ?: lines.firstOrNull().orEmpty()
+        val lines = fullText.split('\n').map { it.trim() }
+        val urlIdx = lines.indexOfFirst { it.contains(Regex("https?://")) }
+        val picked = if (urlIdx > 0) {
+            (urlIdx - 1 downTo 0).map { lines[it] }.firstOrNull { it.isNotBlank() }.orEmpty()
+        } else {
+            // 링크가 첫 줄이거나 없음 → URL만 지운 마지막 텍스트 줄
+            lines.map { it.replace(Regex("https?://\\S+"), "").trim() }.lastOrNull { it.isNotBlank() }.orEmpty()
+        }
         return cleanShopName(picked)
     }
 
-    /** 상품명 정리: 앞 "쿠팡을 추천합니다!" 프로모 제거, 뒤 "- 쿠팡!"·"- 코코달인" 꼬리 제거. */
+    /** 상품명 정리: og:title 등의 뒤쪽 "- 쿠팡!"/"- 코코달인" 꼬리만 제거(프로모는 위치 기반 추출로 이미 회피). */
     private fun cleanShopName(raw: String): String {
-        var s = raw.trim()
-        s = s.replace(Regex("^쿠팡을?\\s*추천합니다[!.]*\\s*"), "").trim()
-        s = s.replace(Regex("\\s*[-|]?\\s*(쿠팡|코코달인)!?\\s*$"), "").trim()
-        if (s == "쿠팡" || s == "쿠팡!" || s == "코코달인") s = ""
+        val s = raw.trim().replace(Regex("\\s*[-|]\\s*(쿠팡|코코달인)!?\\s*$"), "").trim()
         return s.take(80)
     }
     private fun buildPlaceDesc(i: com.familyboard.app.notif.PlaceInfo): String {
