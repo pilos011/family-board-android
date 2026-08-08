@@ -83,7 +83,14 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_SEND -> {
                 val stream = singleStream(intent)
                 val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+                // 쿠팡/코코달인은 이미지+캡션 형태로도 공유됨 → 텍스트에 쇼핑 링크가 있으면 이미지 무시하고 장보기로
+                val shopLinkInText = !sharedText.isNullOrBlank() &&
+                    Regex("coupang|coupa\\.ng|cocodalin", RegexOption.IGNORE_CASE).containsMatchIn(sharedText)
                 when {
+                    shopLinkInText -> {
+                        val handled = vm.handleSharedText(sharedText, intent.getStringExtra(Intent.EXTRA_SUBJECT))
+                        if (!handled) Toast.makeText(this, "담지 못했어요", Toast.LENGTH_SHORT).show()
+                    }
                     type.startsWith("image/") -> stream?.let { vm.handleSharedImage(it) }
                         ?: Toast.makeText(this, "이미지를 읽지 못했어요", Toast.LENGTH_SHORT).show()
                     type.startsWith("video/") -> stream?.let { vm.handleSharedVideo(it, type.substringAfter('/')) }
