@@ -93,6 +93,9 @@ class InMemoryBoardRepository : BoardRepository {
         itemsFlow.value = itemsFlow.value.filter { it.board != board }
     }
 
+    override suspend fun updatePresence(presence: com.familyboard.app.data.model.Presence) {}
+    override suspend fun getPresence(): List<com.familyboard.app.data.model.Presence> = emptyList()
+
     private fun seedEvents(): List<CalendarEvent> {
         val today = LocalDate.now().toString()
         return listOf(

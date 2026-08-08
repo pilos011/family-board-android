@@ -102,4 +102,12 @@ class FirestoreBoardRepository(
         val snap = itemsCol.whereEqualTo("board", board).get().await()
         for (doc in snap.documents) doc.reference.delete().await()
     }
+
+    private val presenceCol get() = db.collection("presence")
+    override suspend fun updatePresence(presence: com.familyboard.app.data.model.Presence) {
+        if (presence.memberId.isBlank()) return
+        presenceCol.document(presence.memberId).set(presence).await()
+    }
+    override suspend fun getPresence(): List<com.familyboard.app.data.model.Presence> =
+        presenceCol.get().await().documents.mapNotNull { it.toObject(com.familyboard.app.data.model.Presence::class.java) }
 }

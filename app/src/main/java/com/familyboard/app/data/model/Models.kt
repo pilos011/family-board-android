@@ -29,6 +29,14 @@ object SyntheticEvent {
     fun isDisplayOnly(id: String): Boolean = id.startsWith(DDAY) || id.startsWith(BDAY)
 }
 
+/** 사용자 접속 현황(관리자 확인용): 마지막 접속 시각 + 앱 버전. Firestore presence/{memberId}. */
+data class Presence(
+    val memberId: String = "",
+    val lastSeen: Long = 0,        // epoch millis(마지막 앱 실행 시각)
+    val versionName: String = "",  // 예: "1.0.54"
+    val versionCode: Int = 0,
+)
+
 /** 리스트(장보기/할 일/용돈 정산) 항목. */
 data class ListItem(
     val id: String = "",

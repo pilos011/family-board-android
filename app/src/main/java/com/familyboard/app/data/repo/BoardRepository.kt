@@ -2,6 +2,7 @@ package com.familyboard.app.data.repo
 
 import com.familyboard.app.data.model.CalendarEvent
 import com.familyboard.app.data.model.ListItem
+import com.familyboard.app.data.model.Presence
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -34,4 +35,8 @@ interface BoardRepository {
     suspend fun markViewed(id: String, memberId: String)
     suspend fun deleteItem(id: String)
     suspend fun deleteByBoard(board: String)
+
+    /** 접속 현황(관리자용): 내 접속 기록 upsert / 전체 조회. */
+    suspend fun updatePresence(presence: Presence)
+    suspend fun getPresence(): List<Presence>
 }

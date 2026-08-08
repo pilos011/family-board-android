@@ -270,6 +270,7 @@ private fun MainScaffold(vm: AppViewModel) {
             }
             composable(Routes.MANAGE) {
                 ManageScreen(
+                    vm = vm,
                     onOpenEmergency = { nav.navigate(Routes.EMERGENCY) },
                     onOpenNotice = { nav.navigate(Routes.listDetail("notice")) },
                 )

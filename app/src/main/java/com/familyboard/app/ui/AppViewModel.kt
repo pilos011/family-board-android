@@ -682,6 +682,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     com.familyboard.app.notif.HaReporter.report(getApplication(), mid)
                     com.familyboard.app.notif.HaReportScheduler.schedule(getApplication())
                 }
+                // 접속 현황 기록(관리자 확인용): 마지막 접속 시각 + 앱 버전
+                runCatching {
+                    board.updatePresence(com.familyboard.app.data.model.Presence(
+                        memberId = mid, lastSeen = System.currentTimeMillis(),
+                        versionName = com.familyboard.app.BuildConfig.VERSION_NAME,
+                        versionCode = com.familyboard.app.BuildConfig.VERSION_CODE,
+                    ))
+                }
             }
         }
         // 앱 업데이트 확인은 '홈 메뉴로 이동할 때'마다 수행(AppNav 에서 route==HOME 관찰 → refreshUpdate). 주기 폴링 안 함.
@@ -703,6 +711,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 홈 화면 진입 등에서 업데이트를 다시 확인. 새 버전을 찾을 때만 설정(실패/최신이면 기존 상태 유지). */
     fun refreshUpdate() = viewModelScope.launch { UpdateChecker.check()?.let { updateInfo.value = it } }
+
+    /** 가족 접속 현황(관리자 화면 전용). 화면 진입 시 refreshPresence 로 최신화. */
+    val presence: MutableStateFlow<List<com.familyboard.app.data.model.Presence>> = MutableStateFlow(emptyList())
+    fun refreshPresence() = viewModelScope.launch { runCatching { presence.value = board.getPresence() } }
 
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
         BoardType.TODO.key -> todoItems

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.familyboard.app.data.Family
+import com.familyboard.app.data.model.Presence
+import com.familyboard.app.ui.AppViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,13 +38,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun ManageScreen(
     modifier: Modifier = Modifier,
+    vm: AppViewModel,
     onOpenEmergency: () -> Unit,
     onOpenNotice: () -> Unit,
 ) {
+    LaunchedEffect(Unit) { vm.refreshPresence() }
+    val presence by vm.presence.collectAsStateWithLifecycle()
     Column(
         modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
     ) {
@@ -61,6 +72,59 @@ fun ManageScreen(
             desc = "가족이 함께 지킬 안내·규칙 (부모 관리)",
             onClick = onOpenNotice,
         )
+        Spacer(Modifier.height(20.dp))
+        PresenceCard(presence)
+    }
+}
+
+/** 가족 접속 현황: 각 구성원의 마지막 접속 시각·앱 버전(관리자 확인용). */
+@Composable
+private fun PresenceCard(presence: List<Presence>) {
+    val byId = presence.associateBy { it.memberId }
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("가족 접속 현황", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("각자 마지막 접속·설치 버전", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Spacer(Modifier.height(10.dp))
+            Family.members.forEach { m ->
+                val p = byId[m.id]
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(m.color))
+                    Spacer(Modifier.size(8.dp))
+                    Text(m.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(44.dp))
+                    Text(
+                        if (p != null && p.versionName.isNotBlank()) "v${p.versionName}" else "—",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.width(74.dp),
+                    )
+                    Text(
+                        relTime(p?.lastSeen ?: 0),
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** epoch millis → "방금/N분 전/N시간 전/N일 전/날짜". 0 이면 기록 없음. */
+private fun relTime(ts: Long): String {
+    if (ts <= 0L) return "기록 없음"
+    val m = (System.currentTimeMillis() - ts) / 60000L
+    return when {
+        m < 0 -> "방금"
+        m < 1 -> "방금"
+        m < 60 -> "${m}분 전"
+        m < 1440 -> "${m / 60}시간 전"
+        m < 43200 -> "${m / 1440}일 전"
+        else -> java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.KOREA).format(java.util.Date(ts))
     }
 }
 
