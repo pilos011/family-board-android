@@ -30,8 +30,8 @@ android {
         applicationId "com.jun.family_board"
         minSdk 24
         targetSdk 34
-        versionCode 173
-        versionName "1.0.31"
+        versionCode 187
+        versionName "1.0.45"
         buildConfigField "String", "HOLIDAY_API_KEY", "\"${holidayApiKey}\""
         buildConfigField "String", "NOTIFY_BASE_URL", "\"${notifyBaseUrl}\""
         buildConfigField "String", "NOTIFY_SECRET", "\"${notifySecret}\""
@@ -85,6 +85,8 @@ dependencies {
     implementation "com.davemorrissey.labs:subsampling-scale-image-view-androidx:3.10.0"
     implementation libs.kotlinx.coroutines.android
     implementation libs.kotlinx.coroutines.play.services
+    // 홈 위젯 백그라운드 갱신(맛집 추천 위젯)
+    implementation "androidx.work:work-runtime-ktx:2.9.1"
 
     implementation platform(libs.compose.bom)
     implementation libs.compose.ui

@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import android.widget.Toast
 import androidx.compose.ui.Alignment
@@ -109,6 +110,19 @@ private fun MainScaffold(vm: AppViewModel) {
     val pendingShare by vm.pendingShare.collectAsStateWithLifecycle()
     val docShare by vm.pendingDoc.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // 위젯 탭 → 해당 보드 화면으로 이동(맛집/가볼곳=place, 장보기 등=listDetail). 한 번 이동 후 clear.
+    val pendingWidgetNav by vm.pendingWidgetNav.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingWidgetNav) {
+        val board = pendingWidgetNav ?: return@LaunchedEffect
+        val route = when (board) {
+            Routes.CALENDAR -> Routes.CALENDAR
+            PlaceBoards.RESTAURANT, PlaceBoards.VISIT -> Routes.place(board)
+            else -> Routes.listDetail(board)
+        }
+        nav.navigateShare(route)
+        vm.clearWidgetNav()
+    }
 
     Scaffold(
         bottomBar = {

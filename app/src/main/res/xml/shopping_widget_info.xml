@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 장바구니 바로가기 1x1 위젯. 개수 갱신은 앱이 setCount 로 직접 → updatePeriodMillis=0. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="40dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="1"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_shopping"
+    android:previewLayout="@layout/widget_shopping"
+    android:description="@string/widget_shopping_desc" />

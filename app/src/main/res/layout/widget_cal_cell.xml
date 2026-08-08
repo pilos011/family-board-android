@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 달력 한 칸(앱 DayCell 과 동일): 좌측 상단 날짜(20dp 박스, 오늘=원) + 아래 라벨. 가로 패딩 없음(막대가 칸 끝까지). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1"
+    android:orientation="vertical"
+    android:background="@drawable/widget_cal_cell_bg"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
+
+    <TextView
+        android:id="@+id/cal_cell_day"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="start"
+        android:layout_marginStart="3dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textSize="12sp"
+        android:text="" />
+
+    <LinearLayout
+        android:id="@+id/cal_cell_labels"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="2dp" />
+</LinearLayout>

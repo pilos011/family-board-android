@@ -36,6 +36,7 @@ data class Recommendation(
     val name: String, val naverName: String, val category: String, val address: String, val dist: Double?,
     val rating: Double?, val ratingCount: Int, val reason: String,
     val lat: Double?, val lng: Double?,
+    val image: String = "", // 구글 플레이스 사진 프록시 URL(서버 /placephoto). 없으면 빈 문자열.
 )
 
 object NotifyApi {
@@ -136,7 +137,7 @@ object NotifyApi {
     /** 카카오 검색+Groq 선별로 '놓친 장소' 2~3곳 발굴. lat/lng 는 거리 계산·바이어스용(선택). 실패 시 빈 목록. */
     suspend fun recommend(
         board: String, category: String, region: String, savedNames: List<String>, lat: Double?, lng: Double?,
-        radius: Int? = null,
+        radius: Int? = null, limit: Int? = null,
     ): List<Recommendation> {
         if (!enabled()) return emptyList()
         return withContext(Dispatchers.IO) {
@@ -146,6 +147,7 @@ object NotifyApi {
                     .put("savedNames", JSONArray(savedNames))
                 if (lat != null && lng != null) { body.put("x", lng); body.put("y", lat) } // x=경도, y=위도
                 if (radius != null) body.put("radius", radius) // '근처' 모드: 반경(m)
+                if (limit != null) body.put("limit", limit) // 반환 개수(위젯=10곳)
                 val conn = (URL("$base/recommend").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"; connectTimeout = 10000; readTimeout = 20000; doOutput = true
                     setRequestProperty("Content-Type", "application/json")
@@ -169,6 +171,7 @@ object NotifyApi {
                         reason = o.optString("reason"),
                         lat = if (o.isNull("lat")) null else o.optDouble("lat"),
                         lng = if (o.isNull("lng")) null else o.optDouble("lng"),
+                        image = o.optString("image"),
                     )
                 }
             }.onFailure { Log.w(TAG, "recommend 실패", it) }.getOrDefault(emptyList())

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 가족 달력 위젯(4x5). 헤더 + 요일 + 6주 그리드(주 행은 코드에서 addView). 탭→가족 달력. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cal_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="12dp">
+
+    <!-- 헤더: 연/월 -->
+    <TextView
+        android:id="@+id/cal_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="가족 달력"
+        android:textColor="#FF2B2B2E"
+        android:textStyle="bold"
+        android:textSize="17sp"
+        android:paddingBottom="6dp" />
+
+    <!-- 요일 헤더(앱과 동일: 격자 없음, 가운데 정렬) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="일" android:textSize="13sp" android:textColor="#FFE03131" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="월" android:textSize="13sp" android:textColor="#FF2B2B2E" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="화" android:textSize="13sp" android:textColor="#FF2B2B2E" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="수" android:textSize="13sp" android:textColor="#FF2B2B2E" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="목" android:textSize="13sp" android:textColor="#FF2B2B2E" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="금" android:textSize="13sp" android:textColor="#FF2B2B2E" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:paddingTop="6dp" android:paddingBottom="6dp" android:textStyle="bold"
+            android:gravity="center" android:text="토" android:textSize="13sp" android:textColor="#FF1C7ED6" />
+    </LinearLayout>
+
+    <!-- 6주 그리드(주 행을 코드에서 addView) -->
+    <LinearLayout
+        android:id="@+id/cal_grid"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:weightSum="6" />
+</LinearLayout>

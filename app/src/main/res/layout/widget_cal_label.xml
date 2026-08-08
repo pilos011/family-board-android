@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 달력 셀 안의 라벨 1개(공휴일/일정). 배경색은 코드에서 setBackgroundColor 로 지정.
+     여러 날 이어지는 칸은 text="" 로 색 막대만(앱과 동일). -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/cal_label"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="1dp"
+    android:minHeight="12dp"
+    android:gravity="center_vertical"
+    android:includeFontPadding="false"
+    android:maxLines="1"
+    android:ellipsize="end"
+    android:textColor="#FFFFFFFF"
+    android:textSize="8sp"
+    android:paddingLeft="3dp"
+    android:paddingRight="3dp"
+    android:text="" />

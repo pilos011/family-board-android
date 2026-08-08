@@ -179,6 +179,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 다른 앱에서 '공유'로 받은 파일(문서함 저장 대기). */
     val pendingDoc: MutableStateFlow<PendingDoc?> = MutableStateFlow(null)
 
+    /** 위젯 등에서 특정 화면으로 이동 요청(보드 키). AppNav 가 관찰해 이동 후 clear. */
+    val pendingWidgetNav: MutableStateFlow<String?> = MutableStateFlow(null)
+    fun requestWidgetNav(board: String) { pendingWidgetNav.value = board }
+    fun clearWidgetNav() { pendingWidgetNav.value = null }
+
     /** 공유받은 파일(pdf·docx·엑셀 등) → 문서함 저장 확인 대기. */
     fun handleSharedDocument(uri: android.net.Uri) {
         val (name, _) = queryFileNameSize(getApplication<Application>().contentResolver, uri)
@@ -634,6 +639,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         // 앱 업데이트 확인
         viewModelScope.launch { updateInfo.value = UpdateChecker.check() }
+        // 장바구니 위젯: 장보기 미체크(살) 항목 수 갱신
+        viewModelScope.launch {
+            shoppingItems.collect { items ->
+                com.familyboard.app.widget.ShoppingWidget.setCount(getApplication(), items.count { !it.checked })
+            }
+        }
+        // 가족 달력 위젯: 이번 달(±1) 공휴일 로드 후, 일정/공휴일 변경 시 위젯 데이터 재계산
+        viewModelScope.launch {
+            val ym = YearMonth.now()
+            ensureHolidays(ym.minusMonths(1)); ensureHolidays(ym); ensureHolidays(ym.plusMonths(1))
+            combine(events, holidays) { e, h -> e to h }.collect { (e, h) ->
+                com.familyboard.app.widget.CalendarWidgetData.update(getApplication(), e, h)
+            }
+        }
     }
 
     /** 홈 화면 진입 등에서 업데이트를 다시 확인(최신이거나 확인 실패 시 배지 사라짐). */

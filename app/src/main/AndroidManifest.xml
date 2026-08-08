@@ -131,5 +131,47 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- 맛집 추천 홈 위젯 -->
+        <receiver
+            android:name=".widget.RestaurantWidget"
+            android:exported="true"
+            android:label="맛집 찾기">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/restaurant_widget_info" />
+        </receiver>
+
+        <!-- 장바구니(장보기) 바로가기 1x1 위젯 -->
+        <receiver
+            android:name=".widget.ShoppingWidget"
+            android:exported="true"
+            android:label="장바구니 바로가기">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/shopping_widget_info" />
+        </receiver>
+
+        <!-- 가족 달력 위젯 4x5 -->
+        <receiver
+            android:name=".widget.CalendarWidget"
+            android:exported="true"
+            android:label="가족 달력">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calendar_widget_info" />
+        </receiver>
     </application>
 </manifest>

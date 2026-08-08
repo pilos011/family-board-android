@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 사진 자리 placeholder 배경(로딩 전/사진 없음) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFEDEDED" />
+    <corners android:radius="12dp" />
+</shape>

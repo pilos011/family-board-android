@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 달력 위젯: 오늘 날짜 강조(앱과 동일한 primary 인디고 원). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#FF4C6EF5" />
+</shape>

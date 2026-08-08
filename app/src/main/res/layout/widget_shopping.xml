@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1x1 장바구니 바로가기: 🛒 + 우상단 개수 배지. 탭→장보기 화면. RemoteViews 호환 뷰만. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/shopping_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_shopping_bg"
+    android:padding="2dp">
+
+    <TextView
+        android:id="@+id/shopping_icon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="🛒"
+        android:includeFontPadding="false"
+        android:textSize="52sp" />
+
+    <TextView
+        android:id="@+id/shopping_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:background="@drawable/widget_badge_bg"
+        android:text=""
+        android:visibility="gone"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:includeFontPadding="false"
+        android:textSize="16sp"
+        android:minWidth="24dp"
+        android:gravity="center"
+        android:paddingLeft="5dp"
+        android:paddingRight="5dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp" />
+</FrameLayout>

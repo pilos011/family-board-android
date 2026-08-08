@@ -29,6 +29,11 @@ class MainActivity : ComponentActivity() {
     // AppRoot 의 viewModel() 과 동일 인스턴스(액티비티 스코프) — 공유 인텐트를 여기서 넣는다.
     private val vm: AppViewModel by viewModels()
 
+    companion object {
+        /** 위젯 상단 탭 인텐트에 담기는 대상 보드 키(예: "restaurant"). */
+        const val EXTRA_WIDGET_NAV = "widget_nav"
+    }
+
     // 시스템 글자 크기(폰트 스케일)와 무관하게 앱 내부는 항상 '기본(1.0)'으로 강제.
     // (은선폰처럼 시스템 글자 크기를 최대로 둔 경우 UI가 넘치는 문제 방지)
     override fun attachBaseContext(newBase: Context) {
@@ -62,6 +67,7 @@ class MainActivity : ComponentActivity() {
             nextPermStep()
         }
         handleShareIntent(intent)
+        handleWidgetIntent(intent)
         setContent {
             FamilyBoardTheme(darkTheme = false) {
                 AppRoot()
@@ -73,6 +79,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleShareIntent(intent)
+        handleWidgetIntent(intent)
+    }
+
+    /** 위젯 상단 탭 → 해당 보드 화면으로 이동 요청. AppNav 가 pendingWidgetNav 를 관찰해 이동. */
+    private fun handleWidgetIntent(intent: Intent?) {
+        val board = intent?.getStringExtra(EXTRA_WIDGET_NAV) ?: return
+        if (board.isNotBlank()) vm.requestWidgetNav(board)
     }
 
     /** '공유 → 가족 알림판'으로 들어온 텍스트/이미지/영상/파일 처리. */
