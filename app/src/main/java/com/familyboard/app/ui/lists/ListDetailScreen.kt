@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Delete
@@ -109,9 +110,22 @@ fun ListDetailScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") }
                 },
                 actions = {
-                    // 장보기: 쿠팡 장바구니 바로가기(앱 있으면 앱, 없으면 웹)
+                    // 장보기: 코코달인 앱 실행 + 쿠팡 장바구니 바로가기
                     if (knownBoard == BoardType.SHOPPING) {
                         val ctx = LocalContext.current
+                        // 코코달인 앱 실행(딥링크 불필요)
+                        Row(
+                            Modifier.padding(end = 6.dp).clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF1971C2).copy(alpha = 0.12f))
+                                .clickable { openCocodalin(ctx) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.ShoppingBag, "코코달인", tint = Color(0xFF1971C2), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.size(4.dp))
+                            Text("코코달인", color = Color(0xFF1971C2), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        // 쿠팡 장바구니 바로가기(앱 있으면 앱, 없으면 웹)
                         Row(
                             Modifier.padding(end = 6.dp).clip(RoundedCornerShape(16.dp))
                                 .background(Color(0xFFE03131).copy(alpha = 0.12f))
@@ -308,6 +322,16 @@ private fun ItemRow(item: ListItem, rightIds: List<String>, onToggle: (Boolean) 
             Icon(Icons.Default.Close, "삭제", tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         }
     }
+}
+
+/** 코코달인 앱을 실행한다(딥링크 불필요, 런처 인텐트). 미설치 시 플레이스토어로. */
+private fun openCocodalin(context: android.content.Context) {
+    val pkg = "com.idataground.cocomaster"
+    val launch = context.packageManager.getLaunchIntentForPackage(pkg)
+    val intent = launch?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        ?: android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
 
 /** 쿠팡 장바구니를 연다: 앱이 있으면 쿠팡 앱으로 강제(웹뷰/네이티브 장바구니), 없으면 브라우저 폴백. */
