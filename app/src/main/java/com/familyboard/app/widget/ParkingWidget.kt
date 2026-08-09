@@ -7,12 +7,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Typeface
-import android.text.Spannable
-import android.text.SpannableStringBuilder
-import android.text.style.ForegroundColorSpan
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
 import android.view.View
 import android.widget.RemoteViews
 import com.familyboard.app.R
@@ -37,7 +31,7 @@ class ParkingWidget : AppWidgetProvider() {
         when (intent.action) {
             ACTION_REFRESH -> {
                 // 탭: 즉시 '조회 중' 표시 후 백그라운드 조회.
-                applyRows(context, "1 : …", "2 : …")
+                applyRows(context, "조회", "중…")
                 val pending = goAsync()
                 Thread {
                     try {
@@ -51,7 +45,7 @@ class ParkingWidget : AppWidgetProvider() {
                             render(context)
                             scheduleRevert(context)
                         } else {
-                            applyRows(context, "조회 실패", "다시 탭")
+                            applyRows(context, "조회", "실패")
                         }
                     } finally {
                         pending.finish()
@@ -86,27 +80,9 @@ class ParkingWidget : AppWidgetProvider() {
             val ts = p.getLong(KEY_TS, 0L)
             val fresh = ts > 0L && System.currentTimeMillis() - ts <= WINDOW_MS
             if (!fresh) { applyClick(ctx); return }
-            applyRows(ctx, rowText("1", p.getString(KEY_M, null)), rowText("2", p.getString(KEY_G, null)))
-        }
-
-        // "N : 값" — 라벨은 옅은 흰색, 값(층)은 차량별 강조색·굵게·크게. 데이터 없으면 회색 "출".
-        private const val C_LABEL = 0xB3FFFFFF.toInt()  // 옅은 흰색
-        private const val C_CAR1 = 0xFFFFD54F.toInt()   // 모닝: 앰버
-        private const val C_CAR2 = 0xFF69F0AE.toInt()   // 그랜저: 민트
-        private const val C_OUT = 0xFFB0BEC5.toInt()    // 출차: 청회색(비활성 느낌)
-
-        private fun rowText(num: String, floor: String?): CharSequence {
-            val out = floor.isNullOrBlank()
-            val value = if (out) "출" else floor!!
-            val accent = when { out -> C_OUT; num == "1" -> C_CAR1; else -> C_CAR2 }
-            val label = "$num : "
-            val sb = SpannableStringBuilder(label).append(value)
-            val f = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            sb.setSpan(ForegroundColorSpan(C_LABEL), 0, label.length, f)
-            sb.setSpan(ForegroundColorSpan(accent), label.length, sb.length, f)
-            sb.setSpan(StyleSpan(Typeface.BOLD), label.length, sb.length, f)
-            sb.setSpan(RelativeSizeSpan(1.2f), label.length, sb.length, f)
-            return sb
+            // 라벨 없이 층만: 첫째 줄=모닝(베이지), 둘째 줄=그랜저(검정). 데이터 없으면 "출차".
+            fun v(floor: String?) = if (floor.isNullOrBlank()) "출차" else floor
+            applyRows(ctx, v(p.getString(KEY_M, null)), v(p.getString(KEY_G, null)))
         }
 
         private fun fetch(): Pair<String, String>? = try {
@@ -133,9 +109,10 @@ class ParkingWidget : AppWidgetProvider() {
             return m.groupValues[1].trim().ifBlank { null }
         }
 
-        /** 조회값 두 줄 모드(1:B2 / 2:B4, 로딩·실패 문구도 여기로). line 은 Spannable 가능. */
-        private fun applyRows(ctx: Context, line1: CharSequence, line2: CharSequence) {
+        /** 조회값 두 줄 모드(위=모닝 베이지 / 아래=그랜저 검정). 로딩·실패 문구도 여기로. */
+        private fun applyRows(ctx: Context, line1: String, line2: String) {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
+            rv.setInt(R.id.parking_root, "setBackgroundResource", R.drawable.widget_parking_bg_split)
             rv.setViewVisibility(R.id.parking_click, View.GONE)
             rv.setViewVisibility(R.id.parking_morning, View.VISIBLE)
             rv.setViewVisibility(R.id.parking_grandeur, View.VISIBLE)
@@ -144,13 +121,14 @@ class ParkingWidget : AppWidgetProvider() {
             push(ctx, rv)
         }
 
-        /** 20분 경과: 1/2 구분 없이 큰 "클릭" 한 줄. */
+        /** 20분 경과: 1/2 구분 없이 "주차 / 확인" 두 줄(파란 배경으로 전환). */
         private fun applyClick(ctx: Context) {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
+            rv.setInt(R.id.parking_root, "setBackgroundResource", R.drawable.widget_parking_bg)
             rv.setViewVisibility(R.id.parking_morning, View.GONE)
             rv.setViewVisibility(R.id.parking_grandeur, View.GONE)
             rv.setViewVisibility(R.id.parking_click, View.VISIBLE)
-            rv.setTextViewText(R.id.parking_click, "클릭")
+            rv.setTextViewText(R.id.parking_click, "주차\n확인")
             push(ctx, rv)
         }
 

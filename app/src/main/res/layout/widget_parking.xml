@@ -1,54 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 1x1 주차 위치. 두 모드: (조회값) 1:B2 / 2:B4 두 줄  |  (20분 경과) 큰 "클릭" 한 줄. 탭→조회. -->
+<!-- 1x1 주차 위치. 데이터 모드: 층만 상하로 꽉(위=모닝 베이지 / 아래=그랜저 검정).
+     대기 모드: "주차/확인" 두 줄. 탭→조회. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/parking_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@drawable/widget_parking_bg"
-    android:padding="4dp">
+    android:background="@drawable/widget_parking_bg_split"
+    android:padding="2dp">
 
-    <!-- 20분 경과/확인 필요: 큰 글씨 한 줄 -->
+    <!-- 대기: "주차/확인" 두 줄(파란 배경으로 전환됨) -->
     <TextView
         android:id="@+id/parking_click"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:maxLines="1"
+        android:maxLines="2"
+        android:lineSpacingMultiplier="0.95"
         android:includeFontPadding="false"
-        android:textColor="#FFFFD54F"
+        android:textColor="#FFFFFFFF"
         android:textStyle="bold"
         android:textSize="26sp"
         android:visibility="gone"
-        android:text="클릭" />
+        android:text="주차\n확인" />
 
-    <!-- 조회값: 1 : B2 -->
+    <!-- 모닝(첫째 줄): 베이지 -->
     <TextView
         android:id="@+id/parking_morning"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:gravity="center"
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
-        android:textColor="#FFFFFFFF"
+        android:textColor="#FFF3E5B3"
         android:textStyle="bold"
-        android:textSize="18sp"
-        android:text="1 : B2" />
+        android:textSize="30sp"
+        android:text="B2" />
 
-    <!-- 조회값: 2 : B4 -->
+    <!-- 그랜저(둘째 줄): 검정 -->
     <TextView
         android:id="@+id/parking_grandeur"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:gravity="center"
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
-        android:textColor="#FFFFFFFF"
+        android:textColor="#FF000000"
         android:textStyle="bold"
-        android:textSize="18sp"
-        android:layout_marginTop="3dp"
-        android:text="2 : B4" />
+        android:textSize="30sp"
+        android:text="B4" />
 </LinearLayout>

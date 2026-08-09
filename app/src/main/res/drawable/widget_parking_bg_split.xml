@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 데이터 표시용: 위=진파랑(모닝 베이지 글씨 대비), 아래=밝은 크림(그랜저 검정 글씨 대비). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="270"
+        android:startColor="#FF0D3E8F"
+        android:centerColor="#FF5C7FB8"
+        android:endColor="#FFF3ECD8" />
+    <corners android:radius="20dp" />
+    <stroke android:width="1dp" android:color="#59FFFFFF" />
+</shape>
