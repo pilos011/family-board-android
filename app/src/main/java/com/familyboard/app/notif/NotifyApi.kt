@@ -52,6 +52,25 @@ object NotifyApi {
         post("/register", body)
     }
 
+    /** 설치 이력(FCM 토큰 등록된) member id 목록. 관리자 접속현황에서 '설치 안 한 사람' 제외용. */
+    suspend fun registeredMembers(): List<String> {
+        if (!enabled()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL("$base/tokens/members").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"; connectTimeout = 10000; readTimeout = 10000
+                    if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+                }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code !in 200..299) return@runCatching emptyList<String>()
+                val arr = JSONObject(text).optJSONArray("members") ?: return@runCatching emptyList<String>()
+                (0 until arr.length()).map { arr.getString(it) }
+            }.onFailure { Log.w(TAG, "registeredMembers 실패", it) }.getOrDefault(emptyList())
+        }
+    }
+
     suspend fun notify(actor: String, targets: List<String>, title: String, body: String) {
         notifyData(actor, targets, title, body, emptyMap())
     }

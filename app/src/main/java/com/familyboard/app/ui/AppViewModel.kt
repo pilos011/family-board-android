@@ -719,7 +719,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 가족 접속 현황(관리자 화면 전용). 화면 진입 시 refreshPresence 로 최신화. */
     val presence: MutableStateFlow<List<com.familyboard.app.data.model.Presence>> = MutableStateFlow(emptyList())
-    fun refreshPresence() = viewModelScope.launch { runCatching { presence.value = board.getPresence() } }
+    /** 설치 이력(FCM 토큰 등록된) member id — '한 번도 설치 안 한 사람' 제외용. */
+    val installedMembers: MutableStateFlow<List<String>> = MutableStateFlow(emptyList())
+    fun refreshPresence() = viewModelScope.launch {
+        runCatching { presence.value = board.getPresence() }
+        runCatching { installedMembers.value = NotifyApi.registeredMembers() }
+    }
 
     /** 관리자 → 특정 가족에게 앱 업데이트 요청 알림(FCM). */
     fun sendUpdateRequest(memberId: String) = viewModelScope.launch {

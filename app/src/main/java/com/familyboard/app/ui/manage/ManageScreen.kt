@@ -59,6 +59,8 @@ fun ManageScreen(
 ) {
     LaunchedEffect(Unit) { vm.refreshPresence() }
     val presence by vm.presence.collectAsStateWithLifecycle()
+    val installed by vm.installedMembers.collectAsStateWithLifecycle()
+    val me by vm.currentMemberId.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var confirmUpdate by remember { mutableStateOf<Member?>(null) }
     Column(
@@ -85,7 +87,7 @@ fun ManageScreen(
             onClick = onOpenNotice,
         )
         Spacer(Modifier.height(20.dp))
-        PresenceCard(presence) { m -> confirmUpdate = m }
+        PresenceCard(presence, installed, me) { m -> confirmUpdate = m }
     }
 
     confirmUpdate?.let { m ->
@@ -105,9 +107,9 @@ fun ManageScreen(
     }
 }
 
-/** 가족 접속 현황: 각 구성원의 마지막 접속·앱 버전. 낮은 버전(현재 최신보다 낮음)은 이름을 눌러 업데이트 요청. */
+/** 가족 접속 현황: 각 구성원의 마지막 접속·앱 버전. 설치했으나 최신이 아닌(버전 미확인 포함) 사람은 이름을 눌러 업데이트 요청. */
 @Composable
-private fun PresenceCard(presence: List<Presence>, onRequestUpdate: (Member) -> Unit) {
+private fun PresenceCard(presence: List<Presence>, installed: List<String>, me: String?, onRequestUpdate: (Member) -> Unit) {
     val byId = presence.associateBy { it.memberId }
     // 최신 = 관리자 설치 버전과 접속기록 중 최댓값. 이보다 낮으면 '업데이트 필요'.
     val latest = maxOf(BuildConfig.VERSION_CODE, presence.maxOfOrNull { it.versionCode } ?: 0)
@@ -120,15 +122,16 @@ private fun PresenceCard(presence: List<Presence>, onRequestUpdate: (Member) -> 
         Column(Modifier.padding(16.dp)) {
             Text("가족 접속 현황", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.height(4.dp))
-            Text("낮은 버전은 이름을 눌러 업데이트 요청", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text("최신이 아닌 가족(버전 미확인 포함) 이름을 눌러 업데이트 요청", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(Modifier.height(10.dp))
             Family.members.forEach { m ->
                 val p = byId[m.id]
-                val outdated = p != null && p.versionCode in 1 until latest
+                // 설치 이력 있고(한 번도 설치 안 한 사람 제외) 본인 아님 + 최신 아님(기록 없음=구버전 포함)
+                val needsUpdate = m.id != me && installed.contains(m.id) && (p == null || p.versionCode < latest)
                 Row(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .then(if (outdated) Modifier.clickable { onRequestUpdate(m) } else Modifier)
+                        .then(if (needsUpdate) Modifier.clickable { onRequestUpdate(m) } else Modifier)
                         .padding(vertical = 6.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -145,7 +148,7 @@ private fun PresenceCard(presence: List<Presence>, onRequestUpdate: (Member) -> 
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         modifier = Modifier.weight(1f),
                     )
-                    if (outdated) Text(
+                    if (needsUpdate) Text(
                         "업데이트 요청 ›", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                         color = Color(0xFFE8590C),
                     )
