@@ -2,6 +2,12 @@
 
 이 프로젝트의 모든 주요 변경 사항을 기록한다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따른다.
 
+## [1.0.67] - 2026-08-09
+
+### Changed
+- **빠른 연락 요청: 받는 사람이 폰을 사용 중이어도 전체화면으로 표시.** 기존엔 전체화면 인텐트(FSI)라 사용 중일 때 안드로이드가 상단 배너로 낮췄음(OS 설계). `SYSTEM_ALERT_WINDOW`(다른 앱 위에 표시) 권한을 추가해 백그라운드 액티비티 실행 제한(Android 10+)의 예외로 만들어, `showEmergency`의 `startActivity(EmergencyActivity)`가 사용 중에도 성공. 권한 미허용 시 기존 FSI(잠금/화면 꺼짐 전체화면)로 폴백.
+- MainActivity 시작 권한 체인에 오버레이 권한 요청 단계(`ACTION_MANAGE_OVERLAY_PERMISSION`) 추가 — 앱 첫 실행/업데이트 후 자동 요청. **받는 사람 폰에 이 권한이 켜져 있어야 사용 중 전체화면 동작**(보내는 사람은 불필요).
+
 ## [1.0.66] - 2026-08-08
 
 ### Added
