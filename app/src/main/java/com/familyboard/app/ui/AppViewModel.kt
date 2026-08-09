@@ -439,6 +439,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return listOf(fromMime, hintExt).mapNotNull { it?.lowercase() }
             .firstOrNull { it.matches(valid) } ?: "mp4"
     }
+    /** id로 항목 1건 조회(공유받은 항목 열기용). */
+    suspend fun fetchItemById(id: String): ListItem? = runCatching { board.getItemById(id) }.getOrNull()
+
+    /** 공유받은 재미진 항목 열기 대기 id(알림 탭 → 그 항목 자동 열림). FunListScreen 이 관찰 후 clear. */
+    val pendingSharedFun = MutableStateFlow<String?>(null)
+    fun requestOpenSharedFun(itemId: String) { pendingSharedFun.value = itemId }
+    fun clearSharedFun() { pendingSharedFun.value = null }
+
+    /** 재미진 곳/내 재미진 곳 항목을 선택한 가족에게 공유(FCM). 받는 사람이 탭하면 그 항목이 열린다. */
+    fun shareFunToFamily(item: ListItem, targetIds: List<String>) = viewModelScope.launch {
+        val actor = currentMemberId.value.orEmpty()
+        val targets = targetIds.filter { it != actor }.distinct()
+        if (targets.isEmpty() || item.id.isBlank()) return@launch
+        runCatching {
+            NotifyApi.notifyData(
+                actor, targets, "🎬 재미진 항목 공유",
+                "${Family.nameOf(actor)}님이 재미진 항목을 공유했습니다. 확인해 보세요.",
+                mapOf("type" to "funshare", "itemId" to item.id),
+            )
+        }
+    }
+
     /** 재미진 곳/내 재미진 곳 항목을 다른 보드로 '이동'(복사 아님 — 같은 항목의 board 만 변경). 요리법 이동에 사용. */
     fun moveFunTo(item: ListItem, targetBoard: String) = viewModelScope.launch {
         // 같은 id 유지 → board 변경 = 이동. createdAt 을 now 로 갱신해 대상 목록 최상단에.

@@ -29,6 +29,9 @@ interface BoardRepository {
         ascending: Boolean = false, afterCreatedAt: Long? = null,
     ): List<ListItem>
 
+    /** id로 항목 1건 조회(보드/작성자 무관). 공유받은 항목 열기용. 없으면 null. */
+    suspend fun getItemById(id: String): ListItem?
+
     suspend fun upsertItem(item: ListItem)
     suspend fun setChecked(id: String, checked: Boolean)
     suspend fun updateFields(id: String, fields: Map<String, Any>)

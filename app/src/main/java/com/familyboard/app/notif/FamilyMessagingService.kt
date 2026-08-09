@@ -57,6 +57,11 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 lat = data["lat"] ?: return,
                 lng = data["lng"] ?: return,
             )
+            "funshare" -> showFunShare(
+                title = data["title"] ?: "재미진 항목 공유",
+                body = data["body"] ?: "",
+                itemId = data["itemId"] ?: return,
+            )
             else -> {
                 val n = message.notification
                 val title = n?.title ?: data["title"] ?: "가족보드"
@@ -118,6 +123,28 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setContentIntent(pi)
             .build()
         if (canNotify()) NotificationManagerCompat.from(this).notify(("loc$sender").hashCode(), notif)
+    }
+
+    // ─────────── 재미진 항목 공유: 탭하면 그 항목이 열리도록 itemId 전달 ───────────
+    private fun showFunShare(title: String, body: String, itemId: String) {
+        ReminderScheduler.ensureChannel(this)
+        val open = Intent(this, com.familyboard.app.MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(com.familyboard.app.MainActivity.EXTRA_OPEN_FUN, itemId)
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(this, ("fun$itemId").hashCode(), open, flags)
+        val notif = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        if (canNotify()) NotificationManagerCompat.from(this).notify(("fun$itemId").hashCode(), notif)
     }
 
     // ─────────── 일반 알림 ───────────

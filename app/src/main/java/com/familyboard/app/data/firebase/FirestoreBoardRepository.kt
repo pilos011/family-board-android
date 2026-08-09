@@ -75,6 +75,9 @@ class FirestoreBoardRepository(
         return q.get().await().documents.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() }
     }
 
+    override suspend fun getItemById(id: String): ListItem? =
+        runCatching { itemsCol.document(id).get().await().toObject(ListItem::class.java) }.getOrNull()
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsCol.document(i.id).set(i).await()

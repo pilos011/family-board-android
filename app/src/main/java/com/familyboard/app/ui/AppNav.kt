@@ -128,6 +128,10 @@ private fun MainScaffold(vm: AppViewModel) {
     // 다른 메뉴에서 홈으로 이동할 때마다 업데이트 확인(주기 폴링 대신). route 가 HOME 이 될 때 발동.
     LaunchedEffect(route) { if (route == Routes.HOME) vm.refreshUpdate() }
 
+    // 공유받은 재미진 항목(알림 탭): 재미진 곳 화면으로 이동 → FunListScreen 이 그 항목을 열고 clear.
+    val pendingSharedFun by vm.pendingSharedFun.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSharedFun) { if (pendingSharedFun != null) nav.navigateShare(Routes.FUN) }
+
     Scaffold(
         bottomBar = {
             if (showBar) {

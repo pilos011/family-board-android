@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -91,6 +92,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import com.familyboard.app.data.Family
 import com.familyboard.app.data.model.FunBoard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -121,6 +123,8 @@ fun FunListScreen(
     var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
     var viewerImages by remember { mutableStateOf<List<String>?>(null) }
     var playUrl by remember { mutableStateOf<String?>(null) }
+    var shareTarget by remember { mutableStateOf<ListItem?>(null) }        // 가족에게 공유할 항목
+    var shareSel by remember { mutableStateOf<Set<String>>(emptySet()) }   // 공유 대상 선택(멤버 id)
     var youtubeOn by remember { mutableStateOf(true) }
     var websiteOn by remember { mutableStateOf(true) }
     var imageOn by remember { mutableStateOf(true) }
@@ -208,6 +212,20 @@ fun FunListScreen(
         if (link.isBlank()) return
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+    }
+
+    // 공유받은 항목 열기(알림 탭): 재미진 곳 보드에서 id로 조회해 영상/이미지/링크로 자동 오픈.
+    val pendingShared by vm.pendingSharedFun.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingShared, boardKey) {
+        val id = pendingShared ?: return@LaunchedEffect
+        if (boardKey != FunBoard.BOARD) return@LaunchedEffect
+        val item = vm.fetchItemById(id)
+        vm.clearSharedFun()
+        if (item != null) when {
+            isVideo(item.link) -> playUrl = item.link
+            item.link.isBlank() && item.photoUrls.isNotEmpty() -> viewerImages = item.photoUrls
+            else -> open(item.link)
+        }
     }
     fun shareText(text: String) {
         runCatching {
@@ -396,6 +414,11 @@ fun FunListScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("요리 레시피로 이동") }
                     }
+                    // 가족에게 공유: 선택한 가족에게 알림 → 받는 사람이 탭하면 이 항목이 열림
+                    TextButton(
+                        onClick = { shareTarget = it0; actionItem = null },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("👨‍👩‍👧‍👦 가족에게 공유", color = MaterialTheme.colorScheme.primary) }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         if (editable) TextButton(onClick = { pendingDelete = it0; actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                         TextButton(onClick = { actionItem = null }) { Text("취소") }
@@ -406,6 +429,44 @@ fun FunListScreen(
             },
         )
     }
+    // 가족에게 공유: 받을 가족 선택(나 제외, 복수 선택)
+    shareTarget?.let { it0 ->
+        val others = Family.members.filter { it.id != currentMemberId }
+        AlertDialog(
+            onDismissRequest = { shareTarget = null; shareSel = emptySet() },
+            title = { Text("가족에게 공유") },
+            text = {
+                Column {
+                    Text("받을 가족을 선택하세요 (여러 명 가능)", fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Spacer(Modifier.height(6.dp))
+                    others.forEach { m ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .clickable { shareSel = if (shareSel.contains(m.id)) shareSel - m.id else shareSel + m.id }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = shareSel.contains(m.id),
+                                onCheckedChange = { on -> shareSel = if (on) shareSel + m.id else shareSel - m.id },
+                            )
+                            Text(m.name, fontSize = 15.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = shareSel.isNotEmpty(), onClick = {
+                    vm.shareFunToFamily(it0, shareSel.toList())
+                    Toast.makeText(context, "${shareSel.size}명에게 공유했어요", Toast.LENGTH_SHORT).show()
+                    shareTarget = null; shareSel = emptySet()
+                }) { Text("보내기") }
+            },
+            dismissButton = { TextButton(onClick = { shareTarget = null; shareSel = emptySet() }) { Text("취소") } },
+        )
+    }
+
     // 삭제 확인
     pendingDelete?.let { target ->
         AlertDialog(

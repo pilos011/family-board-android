@@ -47,6 +47,8 @@ class InMemoryBoardRepository : BoardRepository {
         return list.take(limit)
     }
 
+    override suspend fun getItemById(id: String): ListItem? = itemsFlow.value.find { it.id == id }
+
     override suspend fun upsertItem(item: ListItem) {
         val i = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
         itemsFlow.value = itemsFlow.value.filter { it.id != i.id } + i
