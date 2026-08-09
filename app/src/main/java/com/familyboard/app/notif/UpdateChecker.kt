@@ -51,6 +51,19 @@ object UpdateChecker {
         }.onFailure { Log.w(TAG, "업데이트 확인 실패", it) }.getOrNull()
     }
 
+    /** 설치 버전 비교 없이 서버 version.json 의 최신 릴리스 notes 만 조회(업데이트 요청 알림 문구용). 실패 시 "". */
+    suspend fun latestNotes(): String = withContext(Dispatchers.IO) {
+        if (base.isBlank()) return@withContext ""
+        runCatching {
+            val conn = (URL("$base/apk/version.json").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000; readTimeout = 8000
+            }
+            val txt = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            JSONObject(txt).optString("notes")
+        }.onFailure { Log.w(TAG, "latestNotes 실패", it) }.getOrDefault("")
+    }
+
     /** APK 다운로드 → 캐시에 저장 (성공 시 File). expectedSha256 이 있으면 무결성 검증 후 불일치 시 실패. */
     suspend fun downloadApk(context: Context, url: String, expectedSha256: String = ""): File? =
         withContext(Dispatchers.IO) {
