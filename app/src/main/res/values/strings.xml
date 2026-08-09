@@ -3,4 +3,5 @@
     <string name="widget_restaurant_desc">근처 맛집을 AI가 매시간 추천 · 탭하면 맛집 화면/네이버지도</string>
     <string name="widget_shopping_desc">장보기 바로가기 · 담긴 항목 수 표시</string>
     <string name="widget_calendar_desc">이번 달 달력 · 탭하면 가족 달력으로</string>
+    <string name="widget_parking_desc">주차 위치 · 탭하면 모닝/그랜저 주차 층 조회(20분 유지)</string>
 </resources>

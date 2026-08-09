@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 주차 위치 1x1 위젯. 탭할 때만 조회 → updatePeriodMillis=0(자동 폴링 없음). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="40dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="1"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_parking"
+    android:previewLayout="@layout/widget_parking"
+    android:description="@string/widget_parking_desc" />

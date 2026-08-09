@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1x1 주차 위치 배경(둥근 짙은 청록 타일). 흰 글씨 대비용. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FF37474F" />
+    <corners android:radius="18dp" />
+</shape>

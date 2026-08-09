@@ -175,5 +175,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/calendar_widget_info" />
         </receiver>
+
+        <!-- 주차 위치 1x1 위젯 (탭 시 RTLS 조회) -->
+        <receiver
+            android:name=".widget.ParkingWidget"
+            android:exported="true"
+            android:label="주차 위치">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/parking_widget_info" />
+        </receiver>
     </application>
 </manifest>

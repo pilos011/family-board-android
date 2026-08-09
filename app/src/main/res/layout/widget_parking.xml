@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1x1 주차 위치: 두 줄(모닝/그랜저). 탭→조회. RemoteViews 호환 뷰만. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/parking_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@drawable/widget_parking_bg"
+    android:padding="4dp">
+
+    <TextView
+        android:id="@+id/parking_morning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:textSize="13sp"
+        android:text="모닝 확인" />
+
+    <TextView
+        android:id="@+id/parking_grandeur"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:textSize="13sp"
+        android:layout_marginTop="3dp"
+        android:text="그랜저 확인" />
+</LinearLayout>
