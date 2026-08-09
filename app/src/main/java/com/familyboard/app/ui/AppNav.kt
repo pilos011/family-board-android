@@ -132,6 +132,10 @@ private fun MainScaffold(vm: AppViewModel) {
     val pendingSharedFun by vm.pendingSharedFun.collectAsStateWithLifecycle()
     LaunchedEffect(pendingSharedFun) { if (pendingSharedFun != null) nav.navigateShare(Routes.FUN) }
 
+    // 업데이트 요청 알림 탭: 홈으로 이동 → HomeScreen 이 업데이트 창 자동 표시.
+    val pendingOpenUpdate by vm.pendingOpenUpdate.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingOpenUpdate) { if (pendingOpenUpdate) nav.navigateShare(Routes.HOME) }
+
     Scaffold(
         bottomBar = {
             if (showBar) {

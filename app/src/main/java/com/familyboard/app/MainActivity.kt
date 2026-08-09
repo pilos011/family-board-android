@@ -34,6 +34,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_WIDGET_NAV = "widget_nav"
         /** 재미진 항목 공유 알림 탭 시 열 항목 id. */
         const val EXTRA_OPEN_FUN = "open_fun_item"
+        /** 업데이트 요청 알림 탭 시 업데이트 창 자동 표시. */
+        const val EXTRA_OPEN_UPDATE = "open_update"
     }
 
     // 시스템 글자 크기(폰트 스케일)와 무관하게 앱 내부는 항상 '기본(1.0)'으로 강제.
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
     private fun handleWidgetIntent(intent: Intent?) {
         intent?.getStringExtra(EXTRA_WIDGET_NAV)?.takeIf { it.isNotBlank() }?.let { vm.requestWidgetNav(it) }
         intent?.getStringExtra(EXTRA_OPEN_FUN)?.takeIf { it.isNotBlank() }?.let { vm.requestOpenSharedFun(it) }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_UPDATE, false) == true) vm.requestOpenUpdate()
     }
 
     /** '공유 → 가족 알림판'으로 들어온 텍스트/이미지/영상/파일 처리. */

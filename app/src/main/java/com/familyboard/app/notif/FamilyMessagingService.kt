@@ -62,6 +62,10 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 body = data["body"] ?: "",
                 itemId = data["itemId"] ?: return,
             )
+            "updatereq" -> showUpdateReq(
+                title = data["title"] ?: "앱 업데이트 안내",
+                body = data["body"] ?: "",
+            )
             else -> {
                 val n = message.notification
                 val title = n?.title ?: data["title"] ?: "가족보드"
@@ -145,6 +149,28 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setContentIntent(pi)
             .build()
         if (canNotify()) NotificationManagerCompat.from(this).notify(("fun$itemId").hashCode(), notif)
+    }
+
+    // ─────────── 업데이트 요청: 탭하면 앱에서 업데이트 창이 바로 뜨도록 ───────────
+    private fun showUpdateReq(title: String, body: String) {
+        ReminderScheduler.ensureChannel(this)
+        val open = Intent(this, com.familyboard.app.MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(com.familyboard.app.MainActivity.EXTRA_OPEN_UPDATE, true)
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(this, "updatereq".hashCode(), open, flags)
+        val notif = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        if (canNotify()) NotificationManagerCompat.from(this).notify("updatereq".hashCode(), notif)
     }
 
     // ─────────── 일반 알림 ───────────

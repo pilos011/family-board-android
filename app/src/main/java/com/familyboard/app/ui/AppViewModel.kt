@@ -748,17 +748,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { installedMembers.value = NotifyApi.registeredMembers() }
     }
 
-    /** 관리자 → 특정 가족에게 앱 업데이트 요청 알림(FCM). 보낸이 이름 없이, 주요 개선은 최신 릴리스 노트에서. */
+    /** 관리자 → 특정 가족에게 앱 업데이트 요청 알림(FCM). 탭하면 앱에서 바로 업데이트 창이 뜬다. */
     fun sendUpdateRequest(memberId: String) = viewModelScope.launch {
         val actor = currentMemberId.value.orEmpty()
         val notes = com.familyboard.app.notif.UpdateChecker.latestNotes() // version.json notes = 그 릴리스 개선사항
         val body = buildString {
             append("앱 업데이트가 가능합니다.\n")
-            append("홈 화면 상단의 붉은 원 ⬆ 업데이트 아이콘을 눌러 업데이트해 주세요.")
+            append("이 알림을 누르면 바로 업데이트됩니다.")
             if (notes.isNotBlank()) { append("\n\n주요 개선\n"); append(notes) }
         }
-        runCatching { NotifyApi.notify(actor, listOf(memberId), "⬆️ 앱 업데이트 안내", body) }
+        runCatching {
+            NotifyApi.notifyData(
+                actor, listOf(memberId), "⬆️ 앱 업데이트 안내", body,
+                mapOf("type" to "updatereq"), // 탭 → 앱에서 업데이트 창 자동 표시
+            )
+        }
     }
+
+    /** 업데이트 요청 알림 탭 → 홈에서 업데이트 창 자동 표시 대기. HomeScreen 이 관찰 후 clear. */
+    val pendingOpenUpdate = MutableStateFlow(false)
+    fun requestOpenUpdate() { pendingOpenUpdate.value = true }
+    fun clearOpenUpdate() { pendingOpenUpdate.value = false }
 
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
         BoardType.TODO.key -> todoItems
