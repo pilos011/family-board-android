@@ -30,12 +30,12 @@
         android:id="@+id/parking_morning"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="10"
+        android:layout_weight="20"
         android:gravity="center_horizontal|bottom"
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
-        android:textColor="#FFEAD79A"
+        android:textColor="#FFD9C06A"
         android:textStyle="bold"
         android:textSize="34sp"
         android:text="B2" />
@@ -45,14 +45,14 @@
         android:id="@+id/parking_gap"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="3" />
+        android:layout_weight="1.5" />
 
     <!-- 그랜저(둘째 줄): 흰색, 위쪽 정렬(간격 쪽으로) -->
     <TextView
         android:id="@+id/parking_grandeur"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="10"
+        android:layout_weight="20"
         android:gravity="center_horizontal|top"
         android:maxLines="1"
         android:ellipsize="end"
