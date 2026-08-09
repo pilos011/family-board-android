@@ -17,7 +17,7 @@
         android:gravity="center"
         android:maxLines="1"
         android:includeFontPadding="false"
-        android:textColor="#FFFFFFFF"
+        android:textColor="#FFFFD54F"
         android:textStyle="bold"
         android:textSize="26sp"
         android:visibility="gone"
