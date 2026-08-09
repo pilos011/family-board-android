@@ -419,6 +419,7 @@ fun FunListScreen(
                         onClick = { shareTarget = it0; actionItem = null },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("👨‍👩‍👧‍👦 가족에게 공유", color = MaterialTheme.colorScheme.primary) }
+                    Spacer(Modifier.height(10.dp)) // 전달↔요리 레시피와 같은 간격
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         if (editable) TextButton(onClick = { pendingDelete = it0; actionItem = null }) { Text("삭제", color = Color(0xFFE03131)) }
                         TextButton(onClick = { actionItem = null }) { Text("취소") }
