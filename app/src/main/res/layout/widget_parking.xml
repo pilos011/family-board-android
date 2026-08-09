@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 1x1 주차 위치. 남색 전체 배경. 데이터: 위=모닝(진한 아이보리) / 아래=그랜저(흰색) 층만 크게.
-     대기: "주차/확인" 두 줄. 탭→조회. -->
+<!-- 1x1 주차 위치. 남색 전체 배경. 데이터: 모닝(아이보리)·그랜저(흰색) 층을 가운데로 모아 표시
+     (사이 간격은 parking_gap 가중치로 조절). 대기: "주차/확인" 두 줄. 탭→조회. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/parking_root"
     android:layout_width="match_parent"
@@ -25,13 +25,13 @@
         android:visibility="gone"
         android:text="주차\n확인" />
 
-    <!-- 모닝(첫째 줄): 진한 아이보리 -->
+    <!-- 모닝(첫째 줄): 진한 아이보리, 아래쪽 정렬(간격 쪽으로) -->
     <TextView
         android:id="@+id/parking_morning"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center"
+        android:layout_weight="10"
+        android:gravity="center_horizontal|bottom"
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
@@ -40,13 +40,20 @@
         android:textSize="34sp"
         android:text="B2" />
 
-    <!-- 그랜저(둘째 줄): 흰색 -->
+    <!-- 두 층 사이 간격(가중치로 조절) -->
+    <LinearLayout
+        android:id="@+id/parking_gap"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="3" />
+
+    <!-- 그랜저(둘째 줄): 흰색, 위쪽 정렬(간격 쪽으로) -->
     <TextView
         android:id="@+id/parking_grandeur"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center"
+        android:layout_weight="10"
+        android:gravity="center_horizontal|top"
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
