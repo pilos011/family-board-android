@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 1x1 주차 위치. 데이터 모드: 층만 상하로 꽉(위=모닝 베이지 / 아래=그랜저 검정).
-     대기 모드: "주차/확인" 두 줄. 탭→조회. -->
+<!-- 1x1 주차 위치. 데이터: 위=남색칸+진한아이보리 층 / 아래=흰색칸+검정 층(각 글씨색의 보색 배경).
+     대기: "주차/확인" 두 줄(남색 전체). 탭→조회. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/parking_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@drawable/widget_parking_bg_split"
-    android:padding="2dp">
+    android:background="@android:color/transparent"
+    android:padding="0dp">
 
-    <!-- 대기: "주차/확인" 두 줄(파란 배경으로 전환됨) -->
+    <!-- 대기: "주차/확인" 두 줄 -->
     <TextView
         android:id="@+id/parking_click"
         android:layout_width="match_parent"
@@ -19,13 +19,13 @@
         android:maxLines="2"
         android:lineSpacingMultiplier="0.95"
         android:includeFontPadding="false"
-        android:textColor="#FFFFFFFF"
+        android:textColor="#FFEAD79A"
         android:textStyle="bold"
-        android:textSize="26sp"
+        android:textSize="28sp"
         android:visibility="gone"
         android:text="주차\n확인" />
 
-    <!-- 모닝(첫째 줄): 베이지 -->
+    <!-- 모닝(첫째 줄): 남색 칸 + 진한 아이보리 -->
     <TextView
         android:id="@+id/parking_morning"
         android:layout_width="match_parent"
@@ -35,12 +35,13 @@
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
-        android:textColor="#FFF3E5B3"
+        android:background="@drawable/widget_parking_top"
+        android:textColor="#FFEAD79A"
         android:textStyle="bold"
-        android:textSize="30sp"
+        android:textSize="34sp"
         android:text="B2" />
 
-    <!-- 그랜저(둘째 줄): 검정 -->
+    <!-- 그랜저(둘째 줄): 흰색 칸 + 검정 -->
     <TextView
         android:id="@+id/parking_grandeur"
         android:layout_width="match_parent"
@@ -50,8 +51,9 @@
         android:maxLines="1"
         android:ellipsize="end"
         android:includeFontPadding="false"
+        android:background="@drawable/widget_parking_bottom"
         android:textColor="#FF000000"
         android:textStyle="bold"
-        android:textSize="30sp"
+        android:textSize="34sp"
         android:text="B4" />
 </LinearLayout>

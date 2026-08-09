@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 대기("주차/확인") 배경: 아이보리 글씨의 보색 = 남색, 전체 둥글게. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FF15275F" />
+    <corners android:radius="20dp" />
+</shape>

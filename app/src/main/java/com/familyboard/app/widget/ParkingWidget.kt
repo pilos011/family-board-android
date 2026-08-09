@@ -112,7 +112,7 @@ class ParkingWidget : AppWidgetProvider() {
         /** 조회값 두 줄 모드(위=모닝 베이지 / 아래=그랜저 검정). 로딩·실패 문구도 여기로. */
         private fun applyRows(ctx: Context, line1: String, line2: String) {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
-            rv.setInt(R.id.parking_root, "setBackgroundResource", R.drawable.widget_parking_bg_split)
+            // 데이터 모드는 각 줄의 칸 배경(위 남색/아래 흰색)을 쓰므로 루트는 투명(레이아웃 기본).
             rv.setViewVisibility(R.id.parking_click, View.GONE)
             rv.setViewVisibility(R.id.parking_morning, View.VISIBLE)
             rv.setViewVisibility(R.id.parking_grandeur, View.VISIBLE)
@@ -124,7 +124,7 @@ class ParkingWidget : AppWidgetProvider() {
         /** 20분 경과: 1/2 구분 없이 "주차 / 확인" 두 줄(파란 배경으로 전환). */
         private fun applyClick(ctx: Context) {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
-            rv.setInt(R.id.parking_root, "setBackgroundResource", R.drawable.widget_parking_bg)
+            rv.setInt(R.id.parking_root, "setBackgroundResource", R.drawable.widget_parking_solid)
             rv.setViewVisibility(R.id.parking_morning, View.GONE)
             rv.setViewVisibility(R.id.parking_grandeur, View.GONE)
             rv.setViewVisibility(R.id.parking_click, View.VISIBLE)
