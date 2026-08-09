@@ -32,7 +32,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.familyboard.app.notif.UpdateChecker
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,11 +60,13 @@ fun ManageScreen(
     onOpenEmergency: () -> Unit,
     onOpenNotice: () -> Unit,
 ) {
-    LaunchedEffect(Unit) { vm.refreshPresence() }
+    LaunchedEffect(Unit) { vm.refreshPresence(); vm.refreshUpdate() }
     val presence by vm.presence.collectAsStateWithLifecycle()
     val installed by vm.installedMembers.collectAsStateWithLifecycle()
     val me by vm.currentMemberId.collectAsStateWithLifecycle()
+    val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var confirmUpdate by remember { mutableStateOf<Member?>(null) }
     Column(
         modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
@@ -87,7 +92,22 @@ fun ManageScreen(
             onClick = onOpenNotice,
         )
         Spacer(Modifier.height(20.dp))
-        PresenceCard(presence, installed, me) { m -> confirmUpdate = m }
+        PresenceCard(
+            presence = presence, installed = installed, me = me,
+            deployedCode = updateInfo?.versionCode ?: 0,
+            selfUpdateAvailable = updateInfo != null,
+            onRequestUpdate = { m -> confirmUpdate = m },
+            onSelfUpdate = {
+                updateInfo?.let { info ->
+                    Toast.makeText(ctx, "업데이트 다운로드 중…", Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        val f = UpdateChecker.downloadApk(ctx, info.url, info.sha256)
+                        if (f != null) UpdateChecker.installApk(ctx, f)
+                        else Toast.makeText(ctx, "다운로드 실패", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+        )
     }
 
     confirmUpdate?.let { m ->
@@ -107,12 +127,16 @@ fun ManageScreen(
     }
 }
 
-/** 가족 접속 현황: 각 구성원의 마지막 접속·앱 버전. 설치했으나 최신이 아닌(버전 미확인 포함) 사람은 이름을 눌러 업데이트 요청. */
+/** 가족 접속 현황: 각 구성원의 마지막 접속·앱 버전. 남=업데이트 요청(FCM), 나=업데이트(다운로드·설치). */
 @Composable
-private fun PresenceCard(presence: List<Presence>, installed: List<String>, me: String?, onRequestUpdate: (Member) -> Unit) {
+private fun PresenceCard(
+    presence: List<Presence>, installed: List<String>, me: String?,
+    deployedCode: Int, selfUpdateAvailable: Boolean,
+    onRequestUpdate: (Member) -> Unit, onSelfUpdate: () -> Unit,
+) {
     val byId = presence.associateBy { it.memberId }
-    // 최신 = 관리자 설치 버전과 접속기록 중 최댓값. 이보다 낮으면 '업데이트 필요'.
-    val latest = maxOf(BuildConfig.VERSION_CODE, presence.maxOfOrNull { it.versionCode } ?: 0)
+    // 최신 = 설치 버전·배포(version.json) 버전·접속기록 중 최댓값. 이보다 낮으면 '업데이트 필요'.
+    val latest = maxOf(BuildConfig.VERSION_CODE, deployedCode, presence.maxOfOrNull { it.versionCode } ?: 0)
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -122,16 +146,19 @@ private fun PresenceCard(presence: List<Presence>, installed: List<String>, me: 
         Column(Modifier.padding(16.dp)) {
             Text("가족 접속 현황", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.height(4.dp))
-            Text("최신이 아닌 가족(버전 미확인 포함) 이름을 눌러 업데이트 요청", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text("최신 아닌 가족 이름 눌러 업데이트 요청 · 본인은 바로 업데이트", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(Modifier.height(10.dp))
             Family.members.forEach { m ->
                 val p = byId[m.id]
-                // 설치 이력 있고(한 번도 설치 안 한 사람 제외) 본인 아님 + 최신 아님(기록 없음=구버전 포함)
-                val needsUpdate = m.id != me && installed.contains(m.id) && (p == null || p.versionCode < latest)
+                val isSelf = m.id == me
+                val outdated = p == null || p.versionCode < latest
+                val showSelfUpdate = isSelf && selfUpdateAvailable                 // 나 → 업데이트(다운로드·설치)
+                val showRequest = !isSelf && installed.contains(m.id) && outdated  // 남 → 업데이트 요청(FCM), 미설치 제외
+                val act = showSelfUpdate || showRequest
                 Row(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .then(if (needsUpdate) Modifier.clickable { onRequestUpdate(m) } else Modifier)
+                        .then(if (act) Modifier.clickable { if (showSelfUpdate) onSelfUpdate() else onRequestUpdate(m) } else Modifier)
                         .padding(vertical = 6.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -148,10 +175,16 @@ private fun PresenceCard(presence: List<Presence>, installed: List<String>, me: 
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         modifier = Modifier.weight(1f),
                     )
-                    if (needsUpdate) Text(
-                        "업데이트 요청 ›", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE8590C),
-                    )
+                    when {
+                        showSelfUpdate -> Text(
+                            "업데이트 ›", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        showRequest -> Text(
+                            "업데이트 요청 ›", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE8590C),
+                        )
+                    }
                 }
             }
         }
