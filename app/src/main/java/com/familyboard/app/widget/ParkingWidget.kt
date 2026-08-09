@@ -121,10 +121,9 @@ class ParkingWidget : AppWidgetProvider() {
             push(ctx, rv)
         }
 
-        /** 20분 경과: 1/2 구분 없이 "주차 / 확인" 두 줄(파란 배경으로 전환). */
+        /** 20분 경과: 1/2 구분 없이 "주차 / 확인" 두 줄(배경은 레이아웃 기본 남색). */
         private fun applyClick(ctx: Context) {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
-            rv.setInt(R.id.parking_root, "setBackgroundResource", R.drawable.widget_parking_solid)
             rv.setViewVisibility(R.id.parking_morning, View.GONE)
             rv.setViewVisibility(R.id.parking_grandeur, View.GONE)
             rv.setViewVisibility(R.id.parking_click, View.VISIBLE)
