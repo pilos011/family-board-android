@@ -68,6 +68,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -171,7 +175,16 @@ fun HomeScreen(
     var showMaker by remember { mutableStateOf(false) }
     // 타이틀 아래 '만든이' 라벨은 잠깐 보였다 사라짐
     LaunchedEffect(showMaker) { if (showMaker) { kotlinx.coroutines.delay(1800); showMaker = false } }
-    // 업데이트 확인은 AppNav 에서 '홈으로 이동 시(route==HOME)' 수행 → 여기선 중복 호출 안 함.
+    // 홈이 활성화될 때(진입/백그라운드→포그라운드 복귀)마다 업데이트 확인 1회.
+    // (route 변경 기반은 앱이 계속 살아있으면 같은 화면 복귀 시 재실행이 안 돼 갱신 누락 → ON_RESUME 로)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.refreshUpdate()
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
     // 업데이트 요청 알림을 탭해 들어온 경우: 업데이트 정보가 준비되면 업데이트 창 자동 표시.
     val pendingOpenUpdate by vm.pendingOpenUpdate.collectAsStateWithLifecycle()
     LaunchedEffect(pendingOpenUpdate, updateInfo) {

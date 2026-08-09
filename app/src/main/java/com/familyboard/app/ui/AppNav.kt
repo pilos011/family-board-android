@@ -125,8 +125,8 @@ private fun MainScaffold(vm: AppViewModel) {
         vm.clearWidgetNav()
     }
 
-    // 다른 메뉴에서 홈으로 이동할 때마다 업데이트 확인(주기 폴링 대신). route 가 HOME 이 될 때 발동.
-    LaunchedEffect(route) { if (route == Routes.HOME) vm.refreshUpdate() }
+    // 업데이트 확인은 HomeScreen 의 ON_RESUME(진입/포그라운드 복귀)에서 수행 → 여기선 안 함.
+    // (route 변경 기반은 앱이 계속 살아있으면 같은 화면 복귀 때 재실행이 안 됨)
 
     // 공유받은 재미진 항목(알림 탭): 재미진 곳 화면으로 이동 → FunListScreen 이 그 항목을 열고 clear.
     val pendingSharedFun by vm.pendingSharedFun.collectAsStateWithLifecycle()

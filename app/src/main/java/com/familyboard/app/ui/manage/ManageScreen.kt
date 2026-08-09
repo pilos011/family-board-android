@@ -28,7 +28,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,7 +37,10 @@ import androidx.compose.runtime.setValue
 import com.familyboard.app.notif.UpdateChecker
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.familyboard.app.BuildConfig
 import com.familyboard.app.data.Family
@@ -60,7 +63,16 @@ fun ManageScreen(
     onOpenEmergency: () -> Unit,
     onOpenNotice: () -> Unit,
 ) {
-    LaunchedEffect(Unit) { vm.refreshPresence(); vm.refreshUpdate() }
+    // 화면 진입/백그라운드→포그라운드 복귀(ON_RESUME)마다 최신화.
+    // (LaunchedEffect(Unit) 은 앱이 계속 살아있으면 재진입/복귀 때 다시 안 돌아서 갱신 누락됨)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) { vm.refreshPresence(); vm.refreshUpdate() }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
     val presence by vm.presence.collectAsStateWithLifecycle()
     val installed by vm.installedMembers.collectAsStateWithLifecycle()
     val me by vm.currentMemberId.collectAsStateWithLifecycle()
