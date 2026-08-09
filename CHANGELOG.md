@@ -2,6 +2,14 @@
 
 이 프로젝트의 모든 주요 변경 사항을 기록한다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따른다.
 
+## [1.0.78] - 2026-08-09
+
+### Fixed
+- **앱이 백그라운드에 계속 살아있을 때 홈·관리 화면 정보가 갱신되지 않던 문제.** 갱신이 route(화면) 변경 시에만 걸려 있어, 같은 화면인 채로 포그라운드 복귀하면 갱신이 안 됨. 각 화면 라이프사이클 **ON_RESUME**(진입/복귀)마다 최소 1회 갱신하도록 변경.
+  - 홈: `refreshUpdate()`(업데이트 아이콘 최신화).
+  - 관리: `refreshPresence()` + `refreshUpdate()`(가족 접속 시간·버전, 업데이트 상태 최신화).
+  - AppNav 의 `route==HOME` 갱신 로직은 제거(HomeScreen ON_RESUME 가 대체, 중복 호출 방지).
+
 ## [1.0.77] - 2026-08-09
 
 ### Changed
