@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.view.View
 import android.widget.RemoteViews
 import com.familyboard.app.R
 import java.net.HttpURLConnection
@@ -30,7 +31,7 @@ class ParkingWidget : AppWidgetProvider() {
         when (intent.action) {
             ACTION_REFRESH -> {
                 // 탭: 즉시 '조회 중' 표시 후 백그라운드 조회.
-                apply(context, "1 : …", "2 : …")
+                applyRows(context, "1 : …", "2 : …")
                 val pending = goAsync()
                 Thread {
                     try {
@@ -44,7 +45,7 @@ class ParkingWidget : AppWidgetProvider() {
                             render(context)
                             scheduleRevert(context)
                         } else {
-                            apply(context, "조회 실패", "다시 탭")
+                            applyRows(context, "조회 실패", "다시 탭")
                         }
                     } finally {
                         pending.finish()
@@ -73,17 +74,16 @@ class ParkingWidget : AppWidgetProvider() {
         private const val SERIAL_MORNING = "A006524"   // 차량1 모닝
         private const val SERIAL_GRANDEUR = "A033882"  // 차량2 그랜저
 
-        /** 캐시 + 20분 규칙으로 현재 표시 문구 계산해 렌더. */
+        /** 캐시 + 20분 규칙으로 현재 표시 렌더. 20분 경과면 큰 "클릭" 한 줄, 아니면 조회값 두 줄. */
         fun render(ctx: Context) {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val ts = p.getLong(KEY_TS, 0L)
             val fresh = ts > 0L && System.currentTimeMillis() - ts <= WINDOW_MS
-            fun label(num: String, floor: String?): String = when {
-                !fresh -> "$num : 확인"
-                floor.isNullOrBlank() -> "$num : 출차"
-                else -> "$num : $floor"
-            }
-            apply(ctx, label("1", p.getString(KEY_M, null)), label("2", p.getString(KEY_G, null)))
+            if (!fresh) { applyClick(ctx); return }
+            // 층 없으면(출차) 자리 절약 위해 "출"만 표시.
+            fun label(num: String, floor: String?): String =
+                if (floor.isNullOrBlank()) "$num : 출" else "$num : $floor"
+            applyRows(ctx, label("1", p.getString(KEY_M, null)), label("2", p.getString(KEY_G, null)))
         }
 
         private fun fetch(): Pair<String, String>? = try {
@@ -110,14 +110,32 @@ class ParkingWidget : AppWidgetProvider() {
             return m.groupValues[1].trim().ifBlank { null }
         }
 
-        /** 두 줄 텍스트 적용 + 탭(=조회) 클릭 인텐트 연결. */
-        private fun apply(ctx: Context, line1: String, line2: String) {
+        /** 조회값 두 줄 모드(1:B2 / 2:B4, 로딩·실패 문구도 여기로). */
+        private fun applyRows(ctx: Context, line1: String, line2: String) {
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
+            rv.setViewVisibility(R.id.parking_click, View.GONE)
+            rv.setViewVisibility(R.id.parking_morning, View.VISIBLE)
+            rv.setViewVisibility(R.id.parking_grandeur, View.VISIBLE)
+            rv.setTextViewText(R.id.parking_morning, line1)
+            rv.setTextViewText(R.id.parking_grandeur, line2)
+            push(ctx, rv)
+        }
+
+        /** 20분 경과: 1/2 구분 없이 큰 "클릭" 한 줄. */
+        private fun applyClick(ctx: Context) {
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
+            rv.setViewVisibility(R.id.parking_morning, View.GONE)
+            rv.setViewVisibility(R.id.parking_grandeur, View.GONE)
+            rv.setViewVisibility(R.id.parking_click, View.VISIBLE)
+            rv.setTextViewText(R.id.parking_click, "클릭")
+            push(ctx, rv)
+        }
+
+        /** ids 확인 + 탭(=조회) 클릭 인텐트 연결 후 반영. */
+        private fun push(ctx: Context, rv: RemoteViews) {
             val mgr = AppWidgetManager.getInstance(ctx)
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, ParkingWidget::class.java))
             if (ids == null || ids.isEmpty()) return
-            val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
-            rv.setTextViewText(R.id.parking_morning, line1)
-            rv.setTextViewText(R.id.parking_grandeur, line2)
             val tap = Intent(ctx, ParkingWidget::class.java).setAction(ACTION_REFRESH)
             val pi = PendingIntent.getBroadcast(
                 ctx, REQ_TAP, tap, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
