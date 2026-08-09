@@ -59,6 +59,8 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
     private val fullScreenLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
+    private val overlayLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -66,7 +68,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        if (needNotif() || needFineLoc() || needBgLoc() || needBattery() || needFullScreen()) {
+        if (needNotif() || needFineLoc() || needBgLoc() || needBattery() || needFullScreen() || needOverlay()) {
             permStep = 0
             nextPermStep()
         }
@@ -173,6 +175,17 @@ class MainActivity : ComponentActivity() {
                 }.onFailure { nextPermStep() }
             } else nextPermStep()
 
+            // 빠른 연락을 '사용 중에도 전체화면'으로 띄우려면 오버레이(다른 앱 위에 표시) 권한 필요
+            // — 백그라운드 액티비티 실행 제한(Android 10+)의 예외가 되어 EmergencyActivity 강제 실행 가능.
+            5 -> if (needOverlay()) {
+                runCatching {
+                    overlayLauncher.launch(
+                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                            .setData(Uri.parse("package:$packageName"))
+                    )
+                }.onFailure { nextPermStep() }
+            } else nextPermStep()
+
             else -> { /* 완료 */ }
         }
     }
@@ -203,4 +216,8 @@ class MainActivity : ComponentActivity() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         return !nm.canUseFullScreenIntent()
     }
+
+    // 빠른 연락 강제 전체화면용: '다른 앱 위에 표시' 미허용이면 요청 대상.
+    private fun needOverlay(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)
 }

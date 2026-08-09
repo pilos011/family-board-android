@@ -102,7 +102,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .build()
 
         if (canNotify()) NotificationManagerCompat.from(this).notify(9001, notif)
-        // 앱이 포그라운드면 곧바로 전체화면 시도(백그라운드는 FSI가 처리)
+        // 사용 중에도 강제 전체화면: 오버레이(다른 앱 위에 표시) 권한이 있으면 백그라운드에서도
+        // 이 직접 실행이 성공(BAL 예외). 권한이 없으면 실패→위 FSI 알림(잠금/화면꺼짐에서 전체화면)이 폴백.
         runCatching { startActivity(full) }
     }
 
