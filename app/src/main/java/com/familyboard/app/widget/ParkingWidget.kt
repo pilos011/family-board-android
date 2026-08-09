@@ -30,7 +30,7 @@ class ParkingWidget : AppWidgetProvider() {
         when (intent.action) {
             ACTION_REFRESH -> {
                 // 탭: 즉시 '조회 중' 표시 후 백그라운드 조회.
-                apply(context, "조회 중…", "")
+                apply(context, "1 : …", "2 : …")
                 val pending = goAsync()
                 Thread {
                     try {
@@ -78,12 +78,12 @@ class ParkingWidget : AppWidgetProvider() {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val ts = p.getLong(KEY_TS, 0L)
             val fresh = ts > 0L && System.currentTimeMillis() - ts <= WINDOW_MS
-            fun label(name: String, floor: String?): String = when {
-                !fresh -> "$name 확인"
-                floor.isNullOrBlank() -> "$name 출차"
-                else -> "$name $floor"
+            fun label(num: String, floor: String?): String = when {
+                !fresh -> "$num : 확인"
+                floor.isNullOrBlank() -> "$num : 출차"
+                else -> "$num : $floor"
             }
-            apply(ctx, label("모닝", p.getString(KEY_M, null)), label("그랜저", p.getString(KEY_G, null)))
+            apply(ctx, label("1", p.getString(KEY_M, null)), label("2", p.getString(KEY_G, null)))
         }
 
         private fun fetch(): Pair<String, String>? = try {

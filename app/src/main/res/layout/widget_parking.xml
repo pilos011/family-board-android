@@ -19,8 +19,8 @@
         android:includeFontPadding="false"
         android:textColor="#FFFFFFFF"
         android:textStyle="bold"
-        android:textSize="13sp"
-        android:text="모닝 확인" />
+        android:textSize="18sp"
+        android:text="1 : 확인" />
 
     <TextView
         android:id="@+id/parking_grandeur"
@@ -32,7 +32,7 @@
         android:includeFontPadding="false"
         android:textColor="#FFFFFFFF"
         android:textStyle="bold"
-        android:textSize="13sp"
+        android:textSize="18sp"
         android:layout_marginTop="3dp"
-        android:text="그랜저 확인" />
+        android:text="2 : 확인" />
 </LinearLayout>
