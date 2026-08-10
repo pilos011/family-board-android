@@ -51,10 +51,12 @@ object RestaurantWidgetScheduler {
     private const val PREFS = "restaurant_widget"
     private const val KEY_LIST = "list"
     private const val KEY_LAST = "lastIndex"
-    private const val KEY_CHECK_LAT = "checkLat" // 직전 위치 확인 좌표(이동거리 계산용)
+    private const val KEY_CHECK_LAT = "checkLat" // 직전 틱 좌표(직전 10분 이동량=주행 판정용)
     private const val KEY_CHECK_LNG = "checkLng"
+    private const val KEY_SEARCH_LAT = "searchLat" // 마지막 재검색 좌표(도착 판정: 여기서 1km↑ 벗어나야 재검색)
+    private const val KEY_SEARCH_LNG = "searchLng"
     private const val KEY_SIGUNGU = "siGunGu"    // 직전 재검색 시군구(변경 판정용)
-    private const val KEY_FETCH_AT = "fetchAt"   // 마지막 재검색 시각(시간당 폴백용)
+    private const val KEY_FETCH_AT = "fetchAt"   // 마지막 재검색 시각(쿨다운용)
     private const val TICK_REQ = 7301
     private const val ROTATE_REQ = 7305
     private const val MAIN_REQ = 7303
@@ -62,8 +64,9 @@ object RestaurantWidgetScheduler {
     private const val PHOTO_MAX_W = 300
     private const val ROTATE_MS = 10_000L
     private const val TICK_MS = 10 * 60_000L      // 위치 확인 주기(10분)
-    private const val MOVE_THRESHOLD_M = 1000.0   // 이 이상 이동해야 시군구 확인(불필요 지오코딩 방지)
-    const val FALLBACK_MS = 60 * 60_000L          // 이동 없어도 1시간마다 재검색(평점·사진 신선도)
+    private const val MOVE_THRESHOLD_M = 2000.0   // 마지막 검색지에서 2km 이상 벗어나야 새 동네로 간주(재검색 검사)
+    private const val SETTLE_M = 400.0            // 직전 10분 이동이 이 미만이면 '정지(도착)' — 이때만 재검색(주행 중 호출 방지)
+    const val MIN_FETCH_MS = 20 * 60_000L         // 재검색 최소 간격(쿨다운 20분) — 연속 호출 방지
 
     private const val HOME_LAT = 37.6437   // 폴백: 백석동(홈)
     private const val HOME_LNG = 126.7896
@@ -115,13 +118,17 @@ object RestaurantWidgetScheduler {
         val p = prefs(ctx)
         val la = p.getFloat(KEY_CHECK_LAT, 0f).toDouble()
         val ln = p.getFloat(KEY_CHECK_LNG, 0f).toDouble()
-        val moved = if (la == 0.0 && ln == 0.0) Double.MAX_VALUE else distanceMeters(la, ln, loc.lat, loc.lng)
-        // '이동 시에만' 재검색: 시간 기반(hourly) 트리거 제거 → 무캐시(최초)이거나 1km 이상 이동했을 때만 검사.
-        // (Google API 과다호출 절감. 실제 재검색 여부는 Worker 가 시군구 변경으로 최종 결정)
-        if (count(ctx) <= 0 || moved >= MOVE_THRESHOLD_M) {
-            p.edit().putFloat(KEY_CHECK_LAT, loc.lat.toFloat()).putFloat(KEY_CHECK_LNG, loc.lng.toFloat()).apply()
-            enqueueFetch(ctx)
-        }
+        val movedSinceTick = if (la == 0.0 && ln == 0.0) Double.MAX_VALUE else distanceMeters(la, ln, loc.lat, loc.lng)
+        p.edit().putFloat(KEY_CHECK_LAT, loc.lat.toFloat()).putFloat(KEY_CHECK_LNG, loc.lng.toFloat()).apply()
+        if (count(ctx) <= 0) { enqueueFetch(ctx); return } // 최초 1회
+        // 주행 중(직전 10분간 SETTLE_M 이상 이동)이면 호출 안 함 — 차로 지나가는 동네에서 호출 방지.
+        if (movedSinceTick >= SETTLE_M) return
+        // 정지(도착) 상태 + 마지막 검색 위치에서 2km 이상 벗어남 → 새 동네 도착으로 보고 재검색 검사.
+        // (실제 재검색 여부·쿨다운은 Worker 가 시군구 변경으로 최종 결정)
+        val sla = p.getFloat(KEY_SEARCH_LAT, 0f).toDouble()
+        val sln = p.getFloat(KEY_SEARCH_LNG, 0f).toDouble()
+        val fromSearch = if (sla == 0.0 && sln == 0.0) Double.MAX_VALUE else distanceMeters(sla, sln, loc.lat, loc.lng)
+        if (fromSearch >= MOVE_THRESHOLD_M) enqueueFetch(ctx)
     }
 
     private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
@@ -137,6 +144,9 @@ object RestaurantWidgetScheduler {
     fun setSiGunGu(ctx: Context, s: String) { prefs(ctx).edit().putString(KEY_SIGUNGU, s).apply() }
     fun lastFetchAt(ctx: Context): Long = prefs(ctx).getLong(KEY_FETCH_AT, 0L)
     fun markFetched(ctx: Context) { prefs(ctx).edit().putLong(KEY_FETCH_AT, System.currentTimeMillis()).apply() }
+    fun setSearchLoc(ctx: Context, lat: Double, lng: Double) {
+        prefs(ctx).edit().putFloat(KEY_SEARCH_LAT, lat.toFloat()).putFloat(KEY_SEARCH_LNG, lng.toFloat()).apply()
+    }
 
     // ─────────── 알람: 약 10초 ROTATE(화면 회전, 네트워크 없음) ───────────
     private fun rotatePending(ctx: Context) = PendingIntent.getBroadcast(

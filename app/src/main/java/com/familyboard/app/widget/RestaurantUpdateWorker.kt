@@ -28,9 +28,11 @@ class RestaurantUpdateWorker(ctx: Context, params: WorkerParameters) : Coroutine
         val siGunGu = currentDistrict(ctx, loc.lat, loc.lng) // 실패 시 null
         val nocache = RestaurantWidgetScheduler.count(ctx) <= 0
         val districtChanged = siGunGu != null && siGunGu != RestaurantWidgetScheduler.lastSiGunGu(ctx)
+        val cooldown = System.currentTimeMillis() - RestaurantWidgetScheduler.lastFetchAt(ctx) < RestaurantWidgetScheduler.MIN_FETCH_MS
 
-        // '이동 시에만': 무캐시(최초)이거나 시군구가 바뀐 경우에만 재검색(시간 기반 재검색 제거 → Google 호출 절감).
-        if (!(nocache || districtChanged)) {
+        // 무캐시(최초)만 예외. 그 외엔 '시군구 변경 + 쿨다운(20분) 경과'일 때만 재검색.
+        // (onTick 에서 이미 '정지=도착' 일 때만 enqueue 하므로 주행 중 호출 없음. 쿨다운은 이중 안전장치.)
+        if (!(nocache || (districtChanged && !cooldown))) {
             RestaurantWidgetScheduler.renderCurrent(ctx)
             RestaurantWidgetScheduler.scheduleRotate(ctx)
             return@withContext Result.success()
@@ -57,6 +59,7 @@ class RestaurantUpdateWorker(ctx: Context, params: WorkerParameters) : Coroutine
         recs.forEachIndexed { i, r -> if (r.image.isNotBlank()) RestaurantWidgetScheduler.cachePhoto(ctx, r.image, i) }
         RestaurantWidgetScheduler.markFetched(ctx)
         if (siGunGu != null) RestaurantWidgetScheduler.setSiGunGu(ctx, siGunGu)
+        RestaurantWidgetScheduler.setSearchLoc(ctx, loc.lat, loc.lng) // 도착 판정 기준점 갱신
         RestaurantWidgetScheduler.renderNext(ctx)
         RestaurantWidgetScheduler.scheduleRotate(ctx)
         Result.success()
