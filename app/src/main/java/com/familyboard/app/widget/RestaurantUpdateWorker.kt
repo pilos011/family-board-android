@@ -27,12 +27,11 @@ class RestaurantUpdateWorker(ctx: Context, params: WorkerParameters) : Coroutine
         val loc = RestaurantWidgetScheduler.bestLocation(ctx)
         val siGunGu = currentDistrict(ctx, loc.lat, loc.lng) // 실패 시 null
         val nocache = RestaurantWidgetScheduler.count(ctx) <= 0
-        val districtChanged = siGunGu != null && siGunGu != RestaurantWidgetScheduler.lastSiGunGu(ctx)
         val cooldown = System.currentTimeMillis() - RestaurantWidgetScheduler.lastFetchAt(ctx) < RestaurantWidgetScheduler.MIN_FETCH_MS
 
-        // 무캐시(최초)만 예외. 그 외엔 '시군구 변경 + 쿨다운(20분) 경과'일 때만 재검색.
-        // (onTick 에서 이미 '정지=도착' 일 때만 enqueue 하므로 주행 중 호출 없음. 쿨다운은 이중 안전장치.)
-        if (!(nocache || (districtChanged && !cooldown))) {
+        // 재검색 조건 = 정지(도착) + 마지막 검색지 5km↑ 이탈(← onTick 에서 이때만 enqueue) + 20분 쿨다운.
+        // 여기선 무캐시(최초)이거나 쿨다운(20분)이 지났을 때만 실제 /recommend (시군구 조건 없음).
+        if (!(nocache || !cooldown)) {
             RestaurantWidgetScheduler.renderCurrent(ctx)
             RestaurantWidgetScheduler.scheduleRotate(ctx)
             return@withContext Result.success()

@@ -64,7 +64,7 @@ object RestaurantWidgetScheduler {
     private const val PHOTO_MAX_W = 300
     private const val ROTATE_MS = 10_000L
     private const val TICK_MS = 10 * 60_000L      // 위치 확인 주기(10분)
-    private const val MOVE_THRESHOLD_M = 2000.0   // 마지막 검색지에서 2km 이상 벗어나야 새 동네로 간주(재검색 검사)
+    private const val MOVE_THRESHOLD_M = 5000.0   // 마지막 검색지에서 5km 이상 벗어나야 새 지역으로 간주(재검색 검사)
     private const val SETTLE_M = 400.0            // 직전 10분 이동이 이 미만이면 '정지(도착)' — 이때만 재검색(주행 중 호출 방지)
     const val MIN_FETCH_MS = 20 * 60_000L         // 재검색 최소 간격(쿨다운 20분) — 연속 호출 방지
 
@@ -123,7 +123,7 @@ object RestaurantWidgetScheduler {
         if (count(ctx) <= 0) { enqueueFetch(ctx); return } // 최초 1회
         // 주행 중(직전 10분간 SETTLE_M 이상 이동)이면 호출 안 함 — 차로 지나가는 동네에서 호출 방지.
         if (movedSinceTick >= SETTLE_M) return
-        // 정지(도착) 상태 + 마지막 검색 위치에서 2km 이상 벗어남 → 새 동네 도착으로 보고 재검색 검사.
+        // 정지(도착) 상태 + 마지막 검색 위치에서 5km 이상 벗어남 → 새 지역 도착으로 보고 재검색 검사.
         // (실제 재검색 여부·쿨다운은 Worker 가 시군구 변경으로 최종 결정)
         val sla = p.getFloat(KEY_SEARCH_LAT, 0f).toDouble()
         val sln = p.getFloat(KEY_SEARCH_LNG, 0f).toDouble()
