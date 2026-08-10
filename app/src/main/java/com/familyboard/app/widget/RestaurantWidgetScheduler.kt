@@ -116,8 +116,9 @@ object RestaurantWidgetScheduler {
         val la = p.getFloat(KEY_CHECK_LAT, 0f).toDouble()
         val ln = p.getFloat(KEY_CHECK_LNG, 0f).toDouble()
         val moved = if (la == 0.0 && ln == 0.0) Double.MAX_VALUE else distanceMeters(la, ln, loc.lat, loc.lng)
-        val hourlyDue = System.currentTimeMillis() - p.getLong(KEY_FETCH_AT, 0L) >= FALLBACK_MS
-        if (count(ctx) <= 0 || hourlyDue || moved >= MOVE_THRESHOLD_M) {
+        // '이동 시에만' 재검색: 시간 기반(hourly) 트리거 제거 → 무캐시(최초)이거나 1km 이상 이동했을 때만 검사.
+        // (Google API 과다호출 절감. 실제 재검색 여부는 Worker 가 시군구 변경으로 최종 결정)
+        if (count(ctx) <= 0 || moved >= MOVE_THRESHOLD_M) {
             p.edit().putFloat(KEY_CHECK_LAT, loc.lat.toFloat()).putFloat(KEY_CHECK_LNG, loc.lng.toFloat()).apply()
             enqueueFetch(ctx)
         }

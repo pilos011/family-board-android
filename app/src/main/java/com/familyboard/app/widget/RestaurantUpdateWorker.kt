@@ -27,11 +27,10 @@ class RestaurantUpdateWorker(ctx: Context, params: WorkerParameters) : Coroutine
         val loc = RestaurantWidgetScheduler.bestLocation(ctx)
         val siGunGu = currentDistrict(ctx, loc.lat, loc.lng) // 실패 시 null
         val nocache = RestaurantWidgetScheduler.count(ctx) <= 0
-        val hourlyDue = System.currentTimeMillis() - RestaurantWidgetScheduler.lastFetchAt(ctx) >= RestaurantWidgetScheduler.FALLBACK_MS
         val districtChanged = siGunGu != null && siGunGu != RestaurantWidgetScheduler.lastSiGunGu(ctx)
 
-        // 시군구 그대로 + 신선 + 캐시 있음 → 재검색 안 함(현재 카드 유지)
-        if (!(nocache || hourlyDue || districtChanged)) {
+        // '이동 시에만': 무캐시(최초)이거나 시군구가 바뀐 경우에만 재검색(시간 기반 재검색 제거 → Google 호출 절감).
+        if (!(nocache || districtChanged)) {
             RestaurantWidgetScheduler.renderCurrent(ctx)
             RestaurantWidgetScheduler.scheduleRotate(ctx)
             return@withContext Result.success()
@@ -40,7 +39,7 @@ class RestaurantUpdateWorker(ctx: Context, params: WorkerParameters) : Coroutine
         val recs = runCatching {
             NotifyApi.recommend(
                 board = PlaceBoards.RESTAURANT, category = "", region = "",
-                savedNames = emptyList(), lat = loc.lat, lng = loc.lng, radius = 5000, limit = 20,
+                savedNames = emptyList(), lat = loc.lat, lng = loc.lng, radius = 5000, limit = 10,
             )
         }.getOrDefault(emptyList())
 
