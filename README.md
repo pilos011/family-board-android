@@ -40,3 +40,10 @@ Jetpack Compose + Material 3, Firebase(Firestore 실시간 공유 + FCM 알림),
 gradlew.bat assembleDebug
 ```
 APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+## 버전 관리
+- `main` = **안정 버전**. 새 기능은 `feature/<이름>` 브랜치에서 개발 후 병합.
+- 버전마다 `vX.Y.Z` 태그 + GitHub Release — **APK + 소스 압축파일(zip)** 첨부로 바로 다운로드.
+- 변경 이력: [CHANGELOG.md](CHANGELOG.md) · 기술 인수인계: [HANDOVER.md](HANDOVER.md)
+- 최신 릴리즈: https://github.com/pilos011/family-board-android/releases/latest
+
