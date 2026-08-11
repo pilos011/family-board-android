@@ -64,6 +64,10 @@ data class ListItem(
     val lng: Double = 0.0,         // 경도(거리 정렬용)
     val createdAt: Long = 0,       // 생성 시각(epoch millis). 등록순 정렬용(재미진 곳/문서함 등)
     val viewedBy: List<String> = emptyList(), // 이 항목을 본(클릭한) 멤버 id 목록(재미진 곳)
+    val likes: List<String> = emptyList(),    // 좋아요 누른 멤버 id 목록(가족 사진첩 ❤️)
+    val takenAt: Long = 0,         // 가족 사진첩: 사진 촬영 시각(epoch millis, EXIF). 0=미상→dateIso/createdAt 사용. 월 구분·정렬 기준
+    val rotation: Int = 0,         // 가족 사진첩: 표시 회전 각도(0/90/180/270, 시계방향). 원본은 보존, 화면에서만 회전. 공유·다운로드 시 적용
+    // 가족 사진첩 촬영 위치는 lat/lng(GPS EXIF) + address(역지오코딩 지명) 재사용
     val fileName: String = "",     // 문서함: 원본 파일명(확장자 포함). text=표시 제목(편집 가능)
     val fileMime: String = "",     // 문서함: MIME 타입(열기용)
     val fileSize: Long = 0,        // 문서함: 파일 크기(bytes)
@@ -122,6 +126,13 @@ object FunBoard {
  * photoUrls[0]=서버 파일 URL, fileName/fileMime/fileSize=원본 메타, createdAt=올린 시각(최신순),
  * memberIds=열람 대상(["all"]=모두 / 지정 시 해당 멤버만·올린이·관리자는 항상).
  */
+/** 가족 사진첩 보드 키. 한 장=한 항목(photoUrls[0]), dateIso=촬영일, likes=❤️, progress=댓글. */
+object AlbumBoard {
+    const val BOARD = "album"
+    const val TITLE = "가족 사진첩"
+    const val ADMIN = "seonil" // 선일: 모든 사진 삭제 권한
+}
+
 object DocBoard {
     const val BOARD = "docs"
     const val TITLE = "가족 공유 문서함"

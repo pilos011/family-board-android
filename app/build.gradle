@@ -30,8 +30,8 @@ android {
         applicationId "com.jun.family_board"
         minSdk 24
         targetSdk 34
-        versionCode 224
-        versionName "1.0.82"
+        versionCode 248
+        versionName "1.0.106"
         buildConfigField "String", "HOLIDAY_API_KEY", "\"${holidayApiKey}\""
         buildConfigField "String", "NOTIFY_BASE_URL", "\"${notifyBaseUrl}\""
         buildConfigField "String", "NOTIFY_SECRET", "\"${notifySecret}\""
@@ -87,6 +87,9 @@ dependencies {
     implementation libs.kotlinx.coroutines.play.services
     // 홈 위젯 백그라운드 갱신(맛집 추천 위젯)
     implementation "androidx.work:work-runtime-ktx:2.9.1"
+
+    // 가족 사진첩: 사진 EXIF(촬영시각·GPS) 읽기(구글 권장, 안정적)
+    implementation "androidx.exifinterface:exifinterface:1.3.7"
 
     implementation platform(libs.compose.bom)
     implementation libs.compose.ui

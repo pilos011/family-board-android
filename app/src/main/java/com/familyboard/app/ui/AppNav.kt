@@ -71,6 +71,7 @@ private object Routes {
     const val MYFUN = "myfun"
     const val RECIPE = "recipe"
     const val DOCS = "docs"
+    const val ALBUM = "album"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -188,6 +189,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenDday = { nav.navigate(Routes.DDAY) },
                     onOpenNotice = { nav.navigate(Routes.listDetail("notice")) },
                     canManageNotice = isParent,
+                    onOpenAlbum = { nav.navigate(Routes.ALBUM) },
                 )
             }
             composable(Routes.CALENDAR) {
@@ -212,6 +214,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenMyFun = { nav.navigate(Routes.MYFUN) },
                     onOpenRecipe = { nav.navigate(Routes.RECIPE) },
                     onOpenDocs = { nav.navigate(Routes.DOCS) },
+                    onOpenAlbum = { nav.navigate(Routes.ALBUM) },
                 )
             }
             composable(Routes.FUN) {
@@ -228,6 +231,9 @@ private fun MainScaffold(vm: AppViewModel) {
             }
             composable(Routes.DOCS) {
                 DocListScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.ALBUM) {
+                com.familyboard.app.ui.lists.AlbumScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable(Routes.PLACE) { entry ->
                 PlaceListScreen(

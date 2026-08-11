@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Restaurant
@@ -85,6 +86,7 @@ fun ListsScreen(
     onOpenMyFun: () -> Unit,
     onOpenRecipe: () -> Unit,
     onOpenDocs: () -> Unit,
+    onOpenAlbum: () -> Unit,
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
@@ -96,6 +98,8 @@ fun ListsScreen(
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val docs by vm.docItems.collectAsStateWithLifecycle()
     val docCount = docs?.count { com.familyboard.app.data.model.DocBoard.visibleTo(it, currentMemberId) } ?: 0
+    val album by vm.albumItems.collectAsStateWithLifecycle()
+    val albumCount = album?.size ?: 0
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
     val customLists by vm.customLists.collectAsStateWithLifecycle()
@@ -127,6 +131,8 @@ fun ListsScreen(
                 CompactBoardCard("문서함", docCount, DocsColor, Icons.Default.FolderShared, Modifier.weight(1f)) { onOpenDocs() }
                 CompactBoardCard("요리 레시피", recipeCount, RecipeColor, Icons.Default.RestaurantMenu, Modifier.weight(1f)) { onOpenRecipe() }
             }
+            Spacer(Modifier.height(16.dp))
+            AlbumWideCard(count = albumCount, onClick = onOpenAlbum)
             Spacer(Modifier.height(16.dp))
             DDayWideCard(onClick = onOpenDday)
 
@@ -233,6 +239,33 @@ private fun CreateListDialog(onCreate: (String, String) -> Unit, onDismiss: () -
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlbumWideCard(count: Int, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(96.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8590C)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Row(
+            Modifier.fillMaxSize().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("가족 사진첩", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (count > 0) "우리 가족 추억 ${count}장" else "가족 사진을 모아보세요",
+                    color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.Medium,
+                )
+            }
+            Icon(Icons.Default.PhotoLibrary, null, tint = Color.White, modifier = Modifier.height(44.dp))
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

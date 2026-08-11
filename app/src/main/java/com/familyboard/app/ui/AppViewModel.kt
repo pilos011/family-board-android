@@ -23,8 +23,10 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import java.time.LocalDate
 import java.time.LocalTime
@@ -150,6 +152,123 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val docItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.DocBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // 가족 사진첩(한 장=한 항목). 실시간 전체 조회 + 클라 정렬(촬영일)/월별 그룹. null=로딩.
+    val albumItems: StateFlow<List<ListItem>?> =
+        board.items(com.familyboard.app.data.model.AlbumBoard.BOARD)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 사진 메타: 촬영 시각 + GPS 좌표 + 지명. (방향은 서버 썸네일 Jimp가 EXIF 자동보정하므로 앱에서 회전 안 함) */
+    private data class PhotoMeta(val takenAt: Long, val lat: Double, val lng: Double, val place: String)
+
+    /** 사진첩에 사진 여러 장 업로드(원본 보존). 촬영 시각·장소를 EXIF에서 읽어 함께 저장.
+     *  중복(같은 촬영시각이 이미 앨범에 있음)은 업로드하지 않고 건너뛴다. */
+    fun addAlbumPhotos(uris: List<android.net.Uri>) = viewModelScope.launch {
+        val me = currentMemberId.value.orEmpty()
+        val cr = getApplication<android.app.Application>().contentResolver
+        // 이미 있는 촬영시각(중복 판별용) + 이번 배치에서 올린 것도 누적
+        val seenTaken = (albumItems.value ?: emptyList()).mapNotNull { it.takenAt.takeIf { t -> t > 0 } }.toHashSet()
+        var added = 0
+        var skipped = 0
+        for (uri in uris) {
+            runCatching {
+                val bytes = withContext(Dispatchers.IO) { cr.openInputStream(uri)?.use { it.readBytes() } }
+                    ?: return@runCatching
+                val mime = cr.getType(uri) ?: ""
+                val ext = when {
+                    mime.contains("png") -> "png"; mime.contains("webp") -> "webp"
+                    mime.contains("gif") -> "gif"; mime.contains("heic") || mime.contains("heif") -> "heic"
+                    else -> "jpg"
+                }
+                val meta = withContext(Dispatchers.IO) { readPhotoMeta(bytes, uri) }
+                if (meta.takenAt > 0 && seenTaken.contains(meta.takenAt)) { skipped++; return@runCatching } // 중복 스킵
+                val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, ext) ?: return@runCatching
+                val dateIso = java.time.Instant.ofEpochMilli(meta.takenAt)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                board.upsertItem(
+                    ListItem(
+                        id = java.util.UUID.randomUUID().toString(),
+                        board = com.familyboard.app.data.model.AlbumBoard.BOARD,
+                        photoUrls = listOf(url), dateIso = dateIso, takenAt = meta.takenAt,
+                        lat = meta.lat, lng = meta.lng, address = meta.place,
+                        createdBy = me, createdAt = System.currentTimeMillis(),
+                    )
+                )
+                added++
+                if (meta.takenAt > 0) seenTaken.add(meta.takenAt)
+            }
+        }
+        if (uris.isNotEmpty()) {
+            val msg = if (skipped > 0) "${added}장 추가 · 중복 ${skipped}장 제외" else "${added}장 추가했어요"
+            android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** EXIF(촬영시각·GPS) 읽기. androidx ExifInterface(안정) → MediaStore DATE_TAKEN → 현재 시각 순. */
+    private fun readPhotoMeta(bytes: ByteArray, uri: android.net.Uri): PhotoMeta {
+        var takenAt = 0L
+        var lat = 0.0
+        var lng = 0.0
+        // 1) 선택기가 준 바이트에서 EXIF(촬영시각·GPS). 방향은 서버 썸네일이 자동보정하므로 앱에선 읽지 않음.
+        runCatching {
+            val exif = androidx.exifinterface.media.ExifInterface(java.io.ByteArrayInputStream(bytes))
+            takenAt = exif.dateTimeOriginal ?: exif.dateTimeDigitized ?: exif.dateTime ?: 0L
+            exif.latLong?.let { lat = it[0]; lng = it[1] }
+        }
+        // 2) GPS가 없으면(선택기가 위치 제거) 원본 요청으로 재시도(ACCESS_MEDIA_LOCATION 필요, MediaStore uri일 때)
+        if (lat == 0.0 && lng == 0.0 && android.os.Build.VERSION.SDK_INT >= 29) {
+            runCatching {
+                val cr = getApplication<android.app.Application>().contentResolver
+                val orig = android.provider.MediaStore.setRequireOriginal(uri)
+                cr.openInputStream(orig)?.use { ins ->
+                    val e2 = androidx.exifinterface.media.ExifInterface(ins)
+                    e2.latLong?.let { lat = it[0]; lng = it[1] }
+                    if (takenAt <= 0L) takenAt = e2.dateTimeOriginal ?: e2.dateTime ?: 0L
+                }
+            }
+        }
+        // 3) 촬영시각을 못 읽으면 갤러리 DATE_TAKEN
+        if (takenAt <= 0L) {
+            takenAt = runCatching {
+                getApplication<android.app.Application>().contentResolver.query(
+                    uri, arrayOf(android.provider.MediaStore.Images.Media.DATE_TAKEN), null, null, null
+                )?.use { c ->
+                    val i = c.getColumnIndex(android.provider.MediaStore.Images.Media.DATE_TAKEN)
+                    if (c.moveToFirst() && i >= 0 && !c.isNull(i)) c.getLong(i) else 0L
+                } ?: 0L
+            }.getOrDefault(0L)
+        }
+        if (takenAt <= 0L) takenAt = System.currentTimeMillis()
+        val place = if (lat != 0.0 || lng != 0.0) reverseGeocodeShort(lat, lng) else ""
+        return PhotoMeta(takenAt, lat, lng, place)
+    }
+
+    /** GPS 좌표 → 짧은 지명(시/구·동). 실패 시 빈 문자열. */
+    private fun reverseGeocodeShort(lat: Double, lng: Double): String = runCatching {
+        val gc = android.location.Geocoder(getApplication(), java.util.Locale.KOREA)
+        @Suppress("DEPRECATION")
+        val list = gc.getFromLocation(lat, lng, 1)
+        val a = list?.firstOrNull() ?: return ""
+        listOfNotNull(a.locality ?: a.adminArea, a.subLocality ?: a.thoroughfare)
+            .distinct().joinToString(" ").trim()
+    }.getOrDefault("")
+
+    /** 사진첩 좋아요 토글(likes 배열). */
+    fun toggleAlbumLike(item: ListItem) = viewModelScope.launch {
+        val me = currentMemberId.value.orEmpty()
+        if (me.isBlank()) return@launch
+        val likes = if (item.likes.contains(me)) item.likes - me else item.likes + me
+        runCatching { board.updateFields(item.id, mapOf("likes" to likes)) }
+    }
+
+    /**
+     * 사진 회전: 원본은 그대로 두고 표시 각도(rotation)만 갱신 → 즉시 반영·화질 보존.
+     * delta 90=시계방향, 왼쪽(반시계)=270. 화면은 이 각도로 썸네일을 돌려 표시, 공유·다운로드 시 원본에 적용.
+     */
+    fun rotateAlbumPhoto(item: ListItem, delta: Int) = viewModelScope.launch {
+        val next = ((item.rotation + delta) % 360 + 360) % 360
+        runCatching { board.updateFields(item.id, mapOf("rotation" to next)) }
+    }
 
     // 재미진 곳(유튜브/웹/이미지 게시판). 페이지 방식(이전/다음 + 이어보기).
     // 한 페이지 FUN_PAGE개. 페이지 상태/로딩은 화면(FunListScreen)이 관리하고,
@@ -281,14 +400,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
             }
         } else {
-            // 유튜브/웹 링크 → 재미진 곳
-            pendingShare.value = SharedPlace(name.ifBlank { "불러오는 중…" }, url, loading = true, isFun = true)
+            // 유튜브/웹 링크 → 재미진 곳. 유튜브는 공유 텍스트에 실제 영상 제목이 담겨오지만,
+            // 서버가 가져오는 og:title 은 "- YouTube"/"YouTube" 처럼 쓸모없을 때가 많음 → 공유 텍스트 제목 우선.
+            val isYoutube = url.contains("youtube.com", ignoreCase = true) || url.contains("youtu.be", ignoreCase = true)
+            val sharedName = name.trim().trimEnd('-', '|', '·', '–', ' ').trim()
+            pendingShare.value = SharedPlace(sharedName.ifBlank { "불러오는 중…" }, url, loading = true, isFun = true)
             viewModelScope.launch {
                 val info = com.familyboard.app.notif.NotifyApi.parseLink(url)
                 val cur = pendingShare.value ?: return@launch
-                pendingShare.value = if (info != null && (info.title.isNotBlank() || info.image.isNotBlank()))
-                    cur.copy(name = info.title.ifBlank { name.ifBlank { "링크" } }, image = info.image, loading = false, isFun = true)
-                else cur.copy(name = name.ifBlank { "링크" }, loading = false, isFun = true)
+                val fetched = info?.title?.trim().orEmpty()
+                // og:title 이 비었거나 "youtube"/"- youtube" 류면 쓸모없는 것으로 간주
+                val fetchUseless = fetched.isBlank() || fetched.trimStart('-', ' ').equals("youtube", ignoreCase = true)
+                val finalName = when {
+                    isYoutube && sharedName.isNotBlank() -> sharedName   // 유튜브: 공유 텍스트 제목 우선
+                    !fetchUseless -> fetched
+                    sharedName.isNotBlank() -> sharedName
+                    else -> "링크"
+                }
+                pendingShare.value = cur.copy(name = finalName, image = info?.image.orEmpty(), loading = false, isFun = true)
             }
         }
         return true

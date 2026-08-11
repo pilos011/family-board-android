@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +92,7 @@ import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.notif.UpdateChecker
 import com.familyboard.app.ui.AppViewModel
 import com.familyboard.app.ui.rememberBoostFling
+import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -150,6 +152,7 @@ fun HomeScreen(
     onOpenDday: () -> Unit,
     onOpenNotice: () -> Unit,
     canManageNotice: Boolean,
+    onOpenAlbum: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
@@ -243,6 +246,16 @@ fun HomeScreen(
     val special = pinned.firstOrNull { it.first.text == "준호 수능" }
     val others = pinned.filter { it.first.text != "준호 수능" }.sortedBy { it.second }
 
+    // N년 전 오늘: 가족 사진첩에서 촬영일(dateIso)의 월·일이 오늘과 같고, 과거 연도인 사진.
+    val album by vm.albumItems.collectAsStateWithLifecycle()
+    val memories = remember(album, today) {
+        (album ?: emptyList()).mapNotNull { itm ->
+            val d = runCatching { LocalDate.parse(itm.dateIso) }.getOrNull() ?: return@mapNotNull null
+            if (d.monthValue == today.monthValue && d.dayOfMonth == today.dayOfMonth && d.year < today.year)
+                (today.year - d.year) to itm else null
+        }.sortedByDescending { it.first }
+    }
+
     Box(modifier.fillMaxSize()) {
         // 홈 배경(기본 코르크 / '우리집 알림판' 이미지 — 타이틀 왼쪽 롱클릭으로 전환)
         Image(
@@ -310,6 +323,15 @@ fun HomeScreen(
                             }
                         }
                     }
+                    Spacer(Modifier.height(26.dp))
+                }
+            }
+
+            if (memories.isNotEmpty()) {
+                item {
+                    SectionLabel("📸 오늘, 그날의 추억")
+                    Spacer(Modifier.height(8.dp))
+                    MemoriesRow(memories = memories, onOpenAlbum = onOpenAlbum)
                     Spacer(Modifier.height(26.dp))
                 }
             }
@@ -464,6 +486,32 @@ private fun UpdateBell(onClick: () -> Unit) {
             Icons.Filled.Upgrade, "업데이트 있음",
             tint = Color.White, modifier = Modifier.size(24.dp),
         )
+    }
+}
+
+/** N년 전 오늘의 사진 가로 스크롤. 각 타일 좌상단에 "N년 전" 배지, 탭하면 사진첩으로 이동. */
+@Composable
+private fun MemoriesRow(memories: List<Pair<Int, ListItem>>, onOpenAlbum: () -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(memories) { (yearsAgo, itm) ->
+            val url = itm.photoUrls.firstOrNull().orEmpty()
+            val thumb = if (url.contains("/photos/")) url.replace("/photos/", "/thumb/") else url
+            Box(
+                Modifier.size(120.dp).shadow(4.dp, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp)).background(Color(0xFFF1F3F5))
+                    .clickable { onOpenAlbum() },
+            ) {
+                AsyncImage(model = thumb, contentDescription = null,
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Text(
+                    "${yearsAgo}년 전", color = Color.White, fontFamily = NanumGothic,
+                    fontWeight = FontWeight.Bold, fontSize = 12.sp,
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                        .background(Color(0xCCE8590C), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
     }
 }
 
