@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -158,16 +159,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.AlbumBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    // 내 사진첩(본인 것만). board="myalbum" 중 createdBy==나만. null=로딩.
+    val myAlbumItems: StateFlow<List<ListItem>?> =
+        combine(board.items(com.familyboard.app.data.model.AlbumBoard.PRIVATE), currentMemberId) { list, me ->
+            list.filter { it.createdBy == me }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 월 태그: "yyyy-MM" → 태그 문자열. 사진첩 월 헤더 강조·검색용. 가족 사진첩=가족 모두 입력·수정. */
+    val albumTags: StateFlow<Map<String, String>> =
+        board.items(com.familyboard.app.data.model.AlbumBoard.TAG_BOARD)
+            .map { list -> list.filter { it.dateIso.isNotBlank() && it.text.isNotBlank() }.associate { it.dateIso to it.text } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    // 내 사진첩 월 태그(본인 것만).
+    val myAlbumTags: StateFlow<Map<String, String>> =
+        combine(board.items(com.familyboard.app.data.model.AlbumBoard.TAG_BOARD_PRIVATE), currentMemberId) { list, me ->
+            list.filter { it.createdBy == me && it.dateIso.isNotBlank() && it.text.isNotBlank() }.associate { it.dateIso to it.text }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** 월 태그 설정(빈 값이면 삭제). tagBoard=공용/개인. 개인은 id에 멤버 포함(사용자별 분리). */
+    fun setAlbumTag(monthKey: String, tag: String, tagBoard: String = com.familyboard.app.data.model.AlbumBoard.TAG_BOARD) = viewModelScope.launch {
+        if (monthKey.isBlank()) return@launch
+        val me = currentMemberId.value.orEmpty()
+        val id = if (tagBoard == com.familyboard.app.data.model.AlbumBoard.TAG_BOARD_PRIVATE) "${tagBoard}_${me}_$monthKey" else "${tagBoard}_$monthKey"
+        val t = tag.trim()
+        runCatching {
+            if (t.isBlank()) board.deleteItem(id)
+            else board.upsertItem(
+                ListItem(
+                    id = id, board = tagBoard, dateIso = monthKey, text = t,
+                    createdBy = me, createdAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
     /** 사진 메타: 촬영 시각 + GPS 좌표 + 지명. (방향은 서버 썸네일 Jimp가 EXIF 자동보정하므로 앱에서 회전 안 함) */
     private data class PhotoMeta(val takenAt: Long, val lat: Double, val lng: Double, val place: String)
 
     /** 사진첩에 사진 여러 장 업로드(원본 보존). 촬영 시각·장소를 EXIF에서 읽어 함께 저장.
      *  중복(같은 촬영시각이 이미 앨범에 있음)은 업로드하지 않고 건너뛴다. */
-    fun addAlbumPhotos(uris: List<android.net.Uri>) = viewModelScope.launch {
+    fun addAlbumPhotos(uris: List<android.net.Uri>, albumBoard: String = com.familyboard.app.data.model.AlbumBoard.BOARD) = viewModelScope.launch {
         val me = currentMemberId.value.orEmpty()
         val cr = getApplication<android.app.Application>().contentResolver
-        // 이미 있는 촬영시각(중복 판별용) + 이번 배치에서 올린 것도 누적
-        val seenTaken = (albumItems.value ?: emptyList()).mapNotNull { it.takenAt.takeIf { t -> t > 0 } }.toHashSet()
+        val isPrivate = albumBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE
+        // 이미 앨범에 있는 촬영시각(같은 사진 재선택 방지). 연사(같은 시각·다른 사진)를 살리려고
+        // 배치 내 중복은 촬영시각+파일크기 조합으로 판정.
+        val existingTaken = ((if (isPrivate) myAlbumItems.value else albumItems.value) ?: emptyList())
+            .mapNotNull { it.takenAt.takeIf { t -> t > 0 } }.toHashSet()
+        val batchSeen = HashSet<String>()
         var added = 0
         var skipped = 0
         for (uri in uris) {
@@ -181,21 +221,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     else -> "jpg"
                 }
                 val meta = withContext(Dispatchers.IO) { readPhotoMeta(bytes, uri) }
-                if (meta.takenAt > 0 && seenTaken.contains(meta.takenAt)) { skipped++; return@runCatching } // 중복 스킵
+                if (meta.takenAt > 0 && existingTaken.contains(meta.takenAt)) { skipped++; return@runCatching } // 이미 앨범에 있음
+                if (!batchSeen.add("${meta.takenAt}_${bytes.size}")) { skipped++; return@runCatching }         // 이 배치에서 완전 동일 사진
                 val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, ext) ?: return@runCatching
                 val dateIso = java.time.Instant.ofEpochMilli(meta.takenAt)
                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
                 board.upsertItem(
                     ListItem(
                         id = java.util.UUID.randomUUID().toString(),
-                        board = com.familyboard.app.data.model.AlbumBoard.BOARD,
+                        board = albumBoard,
                         photoUrls = listOf(url), dateIso = dateIso, takenAt = meta.takenAt,
                         lat = meta.lat, lng = meta.lng, address = meta.place,
                         createdBy = me, createdAt = System.currentTimeMillis(),
                     )
                 )
                 added++
-                if (meta.takenAt > 0) seenTaken.add(meta.takenAt)
             }
         }
         if (uris.isNotEmpty()) {
@@ -268,6 +308,68 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun rotateAlbumPhoto(item: ListItem, delta: Int) = viewModelScope.launch {
         val next = ((item.rotation + delta) % 360 + 360) % 360
         runCatching { board.updateFields(item.id, mapOf("rotation" to next)) }
+    }
+
+    /** 대상 목록에 이미 같은 사진이 있는지(같은 파일 URL 또는 같은 촬영시각 — 업로드 중복 기준과 동일). */
+    private fun albumListHasDup(target: List<ListItem>, item: ListItem): Boolean {
+        val url = item.photoUrls.firstOrNull()
+        return target.any { t ->
+            (!url.isNullOrBlank() && t.photoUrls.firstOrNull() == url) || (item.takenAt > 0 && t.takenAt == item.takenAt)
+        }
+    }
+
+    /** 대상 앨범의 현재 항목을 실제로 조회. 화면에서 구독 안 된 flow의 .value 는 stale/null 이라 직접 1회 수집.
+     *  내 사진첩(myalbum)은 본인 것만. 조회 실패 시 null(중복 판정 불가). */
+    private suspend fun targetAlbumItems(toBoard: String): List<ListItem>? = runCatching {
+        val list = board.items(toBoard).first()
+        if (toBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE)
+            list.filter { it.createdBy == currentMemberId.value.orEmpty() } else list
+    }.getOrNull()
+
+    private fun toast(msg: String) =
+        android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
+
+    /** 사진을 다른 앨범으로 이동(board 변경). 대상에 이미 있으면 옮기지 않고 원본을 삭제. 내 사진첩으로 옮기면 소유자도 나로. */
+    fun moveAlbumPhoto(item: ListItem, toBoard: String) = viewModelScope.launch {
+        val target = targetAlbumItems(toBoard) ?: run { toast("잠시 후 다시 시도해 주세요"); return@launch }
+        if (albumListHasDup(target, item)) {
+            runCatching { board.deleteItem(item.id) }
+            toast("이미 있는 사진이라 원본을 정리했어요")
+            return@launch
+        }
+        val fields = mutableMapOf<String, Any>("board" to toBoard)
+        if (toBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE) fields["createdBy"] = currentMemberId.value.orEmpty()
+        runCatching { board.updateFields(item.id, fields) }
+        toast("옮겼어요")
+    }
+
+    /** 사진을 다른 앨범으로 복사(새 항목·같은 사진 파일, 소유자=나, 좋아요·댓글 초기화). 대상에 이미 있으면 복사 안 함. */
+    fun copyAlbumPhoto(item: ListItem, toBoard: String) = viewModelScope.launch {
+        val target = targetAlbumItems(toBoard) ?: run { toast("잠시 후 다시 시도해 주세요"); return@launch }
+        if (albumListHasDup(target, item)) { toast("이미 있는 사진이에요"); return@launch }
+        runCatching {
+            board.upsertItem(
+                item.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    board = toBoard,
+                    createdBy = currentMemberId.value.orEmpty(),
+                    likes = emptyList(),
+                    progress = emptyList(),
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+            toast("복사했어요")
+        }
+    }
+
+    /** 일괄 다운로드(화면 이탈해도 완료되도록 viewModelScope). 저장 로직은 화면의 saveAlbumToDownloads 재사용. */
+    fun downloadAlbumOriginals(items: List<ListItem>) = viewModelScope.launch {
+        if (items.isEmpty()) return@launch
+        val ctx = getApplication<android.app.Application>()
+        toast("${items.size}장 저장 중…")
+        var ok = 0
+        for (it in items) if (com.familyboard.app.ui.lists.saveAlbumToDownloads(ctx, it)) ok++
+        toast("Download 폴더에 ${ok}/${items.size}장 저장했어요")
     }
 
     // 재미진 곳(유튜브/웹/이미지 게시판). 페이지 방식(이전/다음 + 이어보기).
@@ -775,20 +877,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setPlaceRating(item: ListItem, rating: Int) = viewModelScope.launch {
         runCatching { board.upsertItem(item.copy(rating = rating.toLong().coerceIn(0L, 5L))) }
     }
+    // 댓글(progress)은 필드 단위로만 갱신 — 전체 문서 set로 덮으면 동시에 눌린 좋아요/회전/별점이
+    // stale 스냅샷으로 사라짐(사진첩은 한 문서에 likes·rotation·progress 공존).
     fun addPlaceComment(item: ListItem, text: String) = viewModelScope.launch {
         if (text.isBlank()) return@launch
         val note = com.familyboard.app.data.model.ProgressNote(
             text = text.trim(), by = currentMemberId.value.orEmpty(), dateIso = LocalDate.now().toString())
-        runCatching { board.upsertItem(item.copy(progress = item.progress + note)) }
+        runCatching { board.updateFields(item.id, mapOf("progress" to (item.progress + note))) }
     }
     fun deletePlaceComment(item: ListItem, index: Int) = viewModelScope.launch {
         if (index < 0 || index >= item.progress.size) return@launch
-        runCatching { board.upsertItem(item.copy(progress = item.progress.filterIndexed { i, _ -> i != index })) }
+        runCatching { board.updateFields(item.id, mapOf("progress" to item.progress.filterIndexed { i, _ -> i != index })) }
     }
     fun updatePlaceComment(item: ListItem, index: Int, text: String) = viewModelScope.launch {
         if (index < 0 || index >= item.progress.size || text.isBlank()) return@launch
         val updated = item.progress.mapIndexed { i, n -> if (i == index) n.copy(text = text.trim()) else n }
-        runCatching { board.upsertItem(item.copy(progress = updated)) }
+        runCatching { board.updateFields(item.id, mapOf("progress" to updated)) }
     }
 
     val allowanceJunyoung: StateFlow<List<ListItem>> =

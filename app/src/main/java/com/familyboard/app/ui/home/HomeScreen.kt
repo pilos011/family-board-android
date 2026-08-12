@@ -691,13 +691,17 @@ private fun ScheduleBoard(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.size(8.dp))
-                weather?.let { (todayW, tomW) ->
-                    // 오늘·내일을 한 행에 나란히(오늘이 중앙을 넘어 왼쪽으로 와도 무방)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        WeatherLine("오늘", todayW)
-                        Spacer(Modifier.size(10.dp))
-                        WeatherLine("내일", tomW)
-                    }
+                // 날씨는 조금 늦게 로드되어도 처음부터 자리(높이·아이콘 크기)를 확보 → 로드 시 높이가 늘며
+                // 튀는 것 방지. null 이면 같은 구성을 투명(alpha 0)으로 그려 높이만 잡아둔다.
+                val ph = com.familyboard.app.notif.WeatherApi.DayWeather(0, 0, 0)
+                val (todayW, tomW) = weather ?: (ph to ph)
+                Row(
+                    modifier = Modifier.alpha(if (weather == null) 0f else 1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    WeatherLine("오늘", todayW)
+                    Spacer(Modifier.size(10.dp))
+                    WeatherLine("내일", tomW)
                 }
             }
             Spacer(Modifier.height(8.dp))

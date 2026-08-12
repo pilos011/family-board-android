@@ -190,6 +190,16 @@ fun ListDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item { Spacer(Modifier.size(4.dp)) }
+                if (knownBoard == BoardType.SHOPPING) {
+                    item {
+                        Text(
+                            "체크한 항목은 3일 후 자동으로 삭제돼요",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+                        )
+                    }
+                }
                 items(sorted, key = { it.id }) { itm ->
                     ItemRow(
                         item = itm,

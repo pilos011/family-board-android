@@ -84,7 +84,10 @@ class FirestoreBoardRepository(
     }
 
     override suspend fun setChecked(id: String, checked: Boolean) {
-        itemsCol.document(id).update("checked", checked).await()
+        // 체크 시각도 기록(장보기 체크 항목 3일 후 자동삭제 판정용). 해제 시 0.
+        itemsCol.document(id).update(
+            mapOf("checked" to checked, "checkedAt" to if (checked) System.currentTimeMillis() else 0L),
+        ).await()
     }
 
     override suspend fun updateFields(id: String, fields: Map<String, Any>) {

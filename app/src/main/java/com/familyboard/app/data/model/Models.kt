@@ -71,6 +71,7 @@ data class ListItem(
     val fileName: String = "",     // 문서함: 원본 파일명(확장자 포함). text=표시 제목(편집 가능)
     val fileMime: String = "",     // 문서함: MIME 타입(열기용)
     val fileSize: Long = 0,        // 문서함: 파일 크기(bytes)
+    val checkedAt: Long = 0,       // 체크된 시각(epoch millis). 장보기 체크 항목 3일 후 자동삭제 판정용(미체크=0)
     // 댓글은 progress(ProgressNote: text/by/dateIso)를 재사용
     // 파싱 요약(종목·별점·영업시간)은 description 을 재사용
     // 문서함 열람 대상은 memberIds 를 재사용(["all"]=모두, 지정 시 해당 멤버만)
@@ -128,9 +129,15 @@ object FunBoard {
  */
 /** 가족 사진첩 보드 키. 한 장=한 항목(photoUrls[0]), dateIso=촬영일, likes=❤️, progress=댓글. */
 object AlbumBoard {
-    const val BOARD = "album"
+    const val BOARD = "album"             // 가족 사진첩(공용)
+    const val PRIVATE = "myalbum"         // 내 사진첩(본인만 조회·편집)
     const val TITLE = "가족 사진첩"
-    const val ADMIN = "seonil" // 선일: 모든 사진 삭제 권한
+    const val TITLE_PRIVATE = "내 사진첩"
+    const val ADMIN = "seonil" // 선일: 가족 사진첩 모든 사진 삭제 권한(내 사진첩엔 무관)
+    // 월 태그(예: "2026-01" → "오사카 가족여행"). 한 달=한 항목(id="albumtag_<yyyy-MM>", dateIso=키, text=태그).
+    // 가족 사진첩 태그는 가족 모두 수정. 내 사진첩 태그는 본인만(id에 멤버 포함).
+    const val TAG_BOARD = "albumtag"
+    const val TAG_BOARD_PRIVATE = "myalbumtag"
 }
 
 object DocBoard {

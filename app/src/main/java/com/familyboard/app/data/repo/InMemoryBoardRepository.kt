@@ -55,7 +55,9 @@ class InMemoryBoardRepository : BoardRepository {
     }
 
     override suspend fun setChecked(id: String, checked: Boolean) {
-        itemsFlow.value = itemsFlow.value.map { if (it.id == id) it.copy(checked = checked) else it }
+        itemsFlow.value = itemsFlow.value.map {
+            if (it.id == id) it.copy(checked = checked, checkedAt = if (checked) System.currentTimeMillis() else 0L) else it
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -73,6 +75,13 @@ class InMemoryBoardRepository : BoardRepository {
                         "naverScore" -> x.copy(naverScore = (v as Number).toDouble())
                         "lat" -> x.copy(lat = (v as Number).toDouble())
                         "lng" -> x.copy(lng = (v as Number).toDouble())
+                        "progress" -> x.copy(progress = v as List<com.familyboard.app.data.model.ProgressNote>)
+                        "likes" -> x.copy(likes = v as List<String>)
+                        "rotation" -> x.copy(rotation = (v as Number).toInt())
+                        "board" -> x.copy(board = v as String)
+                        "createdBy" -> x.copy(createdBy = v as String)
+                        "checked" -> x.copy(checked = v as Boolean)
+                        "checkedAt" -> x.copy(checkedAt = (v as Number).toLong())
                         else -> x
                     }
                 }
