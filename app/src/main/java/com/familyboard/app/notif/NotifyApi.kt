@@ -36,7 +36,6 @@ data class Recommendation(
     val name: String, val naverName: String, val category: String, val address: String, val dist: Double?,
     val rating: Double?, val ratingCount: Int, val reason: String,
     val lat: Double?, val lng: Double?,
-    val image: String = "", // 구글 플레이스 사진 프록시 URL(서버 /placephoto). 없으면 빈 문자열.
 )
 
 object NotifyApi {
@@ -190,7 +189,6 @@ object NotifyApi {
                         reason = o.optString("reason"),
                         lat = if (o.isNull("lat")) null else o.optDouble("lat"),
                         lng = if (o.isNull("lng")) null else o.optDouble("lng"),
-                        image = o.optString("image"),
                     )
                 }
             }.onFailure { Log.w(TAG, "recommend 실패", it) }.getOrDefault(emptyList())
