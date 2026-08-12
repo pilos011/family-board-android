@@ -3,7 +3,7 @@
 가족 4명(선일·은선·준영·준호)이 일정·리스트·용돈·추억·문서를 함께 나누는 안드로이드 앱.
 Jetpack Compose + Material 3, Firebase(Firestore 실시간 공유 + FCM 알림), 자체호스팅 Hermes 릴레이 서버 기반.
 
-- 최초 실행 시 본인 선택으로 사용자 식별 · 현재 버전 **v1.0.120 (versionCode 262)**
+- 최초 실행 시 본인 선택으로 사용자 식별 · 현재 버전 **v1.0.121 (versionCode 263)**
 - 자세한 개발/빌드/배포는 [HANDOVER.md](HANDOVER.md), 전체 이력은 [CHANGELOG.md](CHANGELOG.md) 참고.
 
 ## 주요 기능
