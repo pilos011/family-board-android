@@ -22,6 +22,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +32,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -108,6 +114,14 @@ private fun MainScaffold(vm: AppViewModel) {
     val route = backStack?.destination?.route
     val showBar = route == Routes.HOME || route == Routes.CALENDAR || route == Routes.LISTS ||
         route == Routes.ALLOWANCE || route == Routes.MANAGE
+    // 하단바 선택 표시는 '클릭 즉시' 반영. route(currentBackStackEntry)는 전환 애니메이션 뒤에 갱신돼
+    // 선택 표시가 늦게 뜨므로, 탭 누르는 순간 selectedTab 을 바꾸고 route 로는 사후 동기화만(뒤로가기 등).
+    var selectedTab by remember { mutableStateOf(route ?: Routes.HOME) }
+    LaunchedEffect(route) {
+        if (route == Routes.HOME || route == Routes.CALENDAR || route == Routes.LISTS ||
+            route == Routes.ALLOWANCE || route == Routes.MANAGE
+        ) selectedTab = route!!
+    }
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val isParent = currentMemberId == "seonil" || currentMemberId == "eunseon"
     val pendingShare by vm.pendingShare.collectAsStateWithLifecycle()
@@ -143,33 +157,33 @@ private fun MainScaffold(vm: AppViewModel) {
             if (showBar) {
                 NavigationBar {
                     NavigationBarItem(
-                        selected = route == Routes.HOME,
-                        onClick = { nav.navigateTab(Routes.HOME) },
+                        selected = selectedTab == Routes.HOME,
+                        onClick = { selectedTab = Routes.HOME; nav.navigateTab(Routes.HOME) },
                         icon = { Icon(Icons.Default.Home, null) },
                         label = { Text("홈") },
                     )
                     NavigationBarItem(
-                        selected = route == Routes.CALENDAR,
-                        onClick = { nav.navigateTab(Routes.CALENDAR) },
+                        selected = selectedTab == Routes.CALENDAR,
+                        onClick = { selectedTab = Routes.CALENDAR; nav.navigateTab(Routes.CALENDAR) },
                         icon = { Icon(Icons.Default.CalendarMonth, null) },
                         label = { Text("가족 달력") },
                     )
                     NavigationBarItem(
-                        selected = route == Routes.LISTS,
-                        onClick = { nav.navigateTab(Routes.LISTS) },
+                        selected = selectedTab == Routes.LISTS,
+                        onClick = { selectedTab = Routes.LISTS; nav.navigateTab(Routes.LISTS) },
                         icon = { Icon(Icons.Default.Checklist, null) },
                         label = { Text("리스트") },
                     )
                     NavigationBarItem(
-                        selected = route == Routes.ALLOWANCE,
-                        onClick = { nav.navigateTab(Routes.ALLOWANCE) },
+                        selected = selectedTab == Routes.ALLOWANCE,
+                        onClick = { selectedTab = Routes.ALLOWANCE; nav.navigateTab(Routes.ALLOWANCE) },
                         icon = { Icon(Icons.Default.Savings, null) },
                         label = { Text("용돈 정산") },
                     )
                     if (isParent) {
                         NavigationBarItem(
-                            selected = route == Routes.MANAGE,
-                            onClick = { nav.navigateTab(Routes.MANAGE) },
+                            selected = selectedTab == Routes.MANAGE,
+                            onClick = { selectedTab = Routes.MANAGE; nav.navigateTab(Routes.MANAGE) },
                             icon = { Icon(Icons.Default.Tune, null) },
                             label = { Text("관리 기능") },
                         )
@@ -182,6 +196,11 @@ private fun MainScaffold(vm: AppViewModel) {
             navController = nav,
             startDestination = Routes.HOME,
             modifier = Modifier.padding(inner),
+            // 메뉴 간 전환 페이드를 기본 700ms → 350ms 로 절반 단축
+            enterTransition = { fadeIn(tween(350)) },
+            exitTransition = { fadeOut(tween(350)) },
+            popEnterTransition = { fadeIn(tween(350)) },
+            popExitTransition = { fadeOut(tween(350)) },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(

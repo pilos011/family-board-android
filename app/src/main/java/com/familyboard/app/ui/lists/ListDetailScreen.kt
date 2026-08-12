@@ -74,9 +74,9 @@ fun ListDetailScreen(
     val title = knownBoard?.title ?: customDef?.text ?: "목록"
     // 장보기·공지·커스텀(본인 전용): 담당 없이 등록자만 표시하는 단순 목록
     val simpleList = isCustom || knownBoard == BoardType.SHOPPING || knownBoard == BoardType.NOTICE
-    // 고정 보드는 이미 공유 StateFlow 재사용(이중 구독·빈상태 깜빡임 방지), 커스텀만 콜드 flow
+    // 고정 보드·커스텀 모두 공유 StateFlow 재사용(값 유지 → 재방문 시 스피너·재구독 없음)
     val items by if (isCustom) {
-        remember(boardKey) { vm.boardItems(boardKey) }.collectAsStateWithLifecycle(initialValue = emptyList())
+        vm.boardItemsState(boardKey).collectAsStateWithLifecycle()
     } else {
         vm.itemsFor(boardKey).collectAsStateWithLifecycle()
     }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -82,25 +83,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.Eagerly, UserState.Loading)
 
     val events: StateFlow<List<CalendarEvent>> =
-        board.events().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        board.events().stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     val shoppingItems: StateFlow<List<ListItem>> =
         board.items(BoardType.SHOPPING.key)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     val todoItems: StateFlow<List<ListItem>> =
         board.items(BoardType.TODO.key)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     // 가족 공지사항 (부모 전용)
     val noticeItems: StateFlow<List<ListItem>> =
         board.items(BoardType.NOTICE.key)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     // D-Day (카운트다운, 가족 모두)
     val ddayItems: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.DDayBoard.BOARD)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     /** D-Day 항목 → '표시 전용' 캘린더 이벤트. 전역 events 엔 넣지 않음(알림·홈 보드 부작용 방지). */
     private fun ddayToEvent(item: ListItem): CalendarEvent? {
@@ -114,7 +115,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     val ddayCalendarEvents: StateFlow<List<CalendarEvent>> =
         ddayItems.map { list -> list.mapNotNull(::ddayToEvent) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     /** 가족 생일(내장, 영구) → 매년 반복 표시 이벤트(각자 색 + 🎂). 삭제 불필요·항상 표시. */
     private val birthdayEvents: List<CalendarEvent> = FamilyBirthdays.list.map { (id, date) ->
@@ -128,23 +129,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 가족 달력·위젯이 그릴 이벤트 = 일반 일정 + D-Day + 가족 생일(표시용). add/edit/delete 자동 반영. */
     val calendarEvents: StateFlow<List<CalendarEvent>> =
         combine(events, ddayCalendarEvents) { e, d -> e + d + birthdayEvents }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     // 사용자 커스텀 체크리스트 정의(board="customlists"). 본인만 화면에 표시.
     val customLists: StateFlow<List<ListItem>> =
         board.items("customlists")
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     /** 임의 보드 키의 항목 스트림(커스텀 리스트 포함). */
     fun boardItems(boardKey: String): kotlinx.coroutines.flow.Flow<List<ListItem>> = board.items(boardKey)
 
+    // 커스텀 리스트도 보드키별 공유 StateFlow 로 캐시(재방문 시 값 유지·매번 콜드 재구독 방지).
+    private val boardItemsStates = mutableMapOf<String, StateFlow<List<ListItem>>>()
+    fun boardItemsState(boardKey: String): StateFlow<List<ListItem>> =
+        boardItemsStates.getOrPut(boardKey) {
+            board.items(boardKey).stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
+        }
+
     // 장소 북마크 보드(맛집/가볼 곳). 초기값 null=아직 로딩 전(스피너), 빈 리스트=진짜 없음.
     val restaurantItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.PlaceBoards.RESTAURANT)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
     val visitItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.PlaceBoards.VISIT)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
     fun placeItems(boardKey: String): StateFlow<List<ListItem>?> =
         if (boardKey == com.familyboard.app.data.model.PlaceBoards.RESTAURANT) restaurantItems else visitItems
 
@@ -152,30 +160,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // null=로딩 전(스피너), 빈 리스트=없음.
     val docItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.DocBoard.BOARD)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
 
     // 가족 사진첩(한 장=한 항목). 실시간 전체 조회 + 클라 정렬(촬영일)/월별 그룹. null=로딩.
     val albumItems: StateFlow<List<ListItem>?> =
         board.items(com.familyboard.app.data.model.AlbumBoard.BOARD)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
 
     // 내 사진첩(본인 것만). board="myalbum" 중 createdBy==나만. null=로딩.
     val myAlbumItems: StateFlow<List<ListItem>?> =
         combine(board.items(com.familyboard.app.data.model.AlbumBoard.PRIVATE), currentMemberId) { list, me ->
             list.filter { it.createdBy == me }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
 
     /** 월 태그: "yyyy-MM" → 태그 문자열. 사진첩 월 헤더 강조·검색용. 가족 사진첩=가족 모두 입력·수정. */
     val albumTags: StateFlow<Map<String, String>> =
         board.items(com.familyboard.app.data.model.AlbumBoard.TAG_BOARD)
             .map { list -> list.filter { it.dateIso.isNotBlank() && it.text.isNotBlank() }.associate { it.dateIso to it.text } }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyMap())
 
     // 내 사진첩 월 태그(본인 것만).
     val myAlbumTags: StateFlow<Map<String, String>> =
         combine(board.items(com.familyboard.app.data.model.AlbumBoard.TAG_BOARD_PRIVATE), currentMemberId) { list, me ->
             list.filter { it.createdBy == me && it.dateIso.isNotBlank() && it.text.isNotBlank() }.associate { it.dateIso to it.text }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyMap())
 
     /** 월 태그 설정(빈 값이면 삭제). tagBoard=공용/개인. 개인은 id에 멤버 포함(사용자별 분리). */
     fun setAlbumTag(monthKey: String, tag: String, tagBoard: String = com.familyboard.app.data.model.AlbumBoard.TAG_BOARD) = viewModelScope.launch {
@@ -389,7 +397,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             kotlinx.coroutines.flow.flow {
                 emit(runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.BOARD) }.getOrDefault(0))
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), 0)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val myFunCount: StateFlow<Int> =
@@ -399,7 +407,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     emit(if (me.isNullOrBlank()) 0
                     else runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.PRIVATE, me) }.getOrDefault(0))
                 }
-            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), 0)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val recipeCount: StateFlow<Int> =
@@ -407,7 +415,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             kotlinx.coroutines.flow.flow {
                 emit(runCatching { board.countByBoard(com.familyboard.app.data.model.FunBoard.RECIPE) }.getOrDefault(0))
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), 0)
 
     fun funCountFor(boardKey: String): StateFlow<Int> = when (boardKey) {
         com.familyboard.app.data.model.FunBoard.PRIVATE -> myFunCount
@@ -425,12 +433,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 길찾기 기본 앱("항상" 선택). 빈 값=매번 선택창. */
     val navDefaultApp: StateFlow<String> =
-        userStore.navDefaultApp.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+        userStore.navDefaultApp.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), "")
     fun setNavDefaultApp(key: String) = viewModelScope.launch { userStore.setNavDefaultApp(key) }
 
     /** 홈 배경 선택: "cork"(기본) / "family"(우리집 알림판 이미지). */
     val homeBackground: StateFlow<String> =
-        userStore.homeBackground.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "cork")
+        userStore.homeBackground.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), "cork")
     fun setHomeBackground(v: String) = viewModelScope.launch { userStore.setHomeBackground(v) }
 
     /** 마지막 본 페이지(1-based, 0=없음) 흐름/저장 — 방향별(최신순/등록순) 이어보기용. */
@@ -897,16 +905,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val allowanceJunyoung: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNYOUNG)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     val allowanceJunho: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.AllowanceBoards.JUNHO)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     // 인생 버킷 (부부 공용, 단일 보드)
     val bucketItems: StateFlow<List<ListItem>> =
         board.items(com.familyboard.app.data.model.BucketBoards.BOARD)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), emptyList())
 
     fun bucketById(id: String): ListItem? = bucketItems.value.firstOrNull { it.id == id }
 
@@ -918,6 +926,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val loadedMonths = mutableSetOf<String>()
 
     init {
+        // 하단탭·홈 핵심 데이터 예열: 앱 실행 직후 미리 구독해 값을 채워두면 첫 진입 때 스피너 없이 즉시 표시.
+        // (Firestore 오프라인 캐시가 캐시부터 내려주므로 대부분 로컬에서 빠르게 채워짐.)
+        listOf(
+            events, calendarEvents, noticeItems, ddayItems, shoppingItems, todoItems,
+            restaurantItems, visitItems, docItems, albumItems, allowanceJunyoung, allowanceJunho,
+        ).forEach { it.launchIn(viewModelScope) }
+
         // 일정/담당자 변경 시 미리 알림 예약 동기화
         viewModelScope.launch {
             combine(events, currentMemberId) { evs, mid -> evs to mid }.collect { (evs, mid) ->
