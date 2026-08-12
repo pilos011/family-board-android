@@ -962,6 +962,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // 가족 달력 위젯: 이번 달(±1) 공휴일 로드 후, 일정/공휴일 변경 시 위젯 데이터 재계산
         viewModelScope.launch {
             val ym = YearMonth.now()
+            loadHolidayDiskCache(ym) // 디스크 캐시 즉시 반영(콜드스타트에 공휴일 바로 표시), 지난 달은 재조회 생략
             ensureHolidays(ym.minusMonths(1)); ensureHolidays(ym); ensureHolidays(ym.plusMonths(1))
             combine(calendarEvents, holidays) { e, h -> e to h }.collect { (e, h) ->
                 com.familyboard.app.widget.CalendarWidgetData.update(getApplication(), e, h)
@@ -1019,6 +1020,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val fetched = holidayRepo.holidays(month.year, month.monthValue)
         if (fetched.isNotEmpty()) {
             holidays.value = holidays.value + fetched.associate { it.dateIso to it.name }
+            saveHolidayDiskCacheAsync() // 조회 성공분을 디스크에 반영(다음 콜드스타트에 즉시 표시)
+        }
+    }
+
+    /** 공휴일 디스크 캐시 로드: 저장분을 즉시 표시하고, '지난 달'은 확정이라 재조회를 생략한다.
+     *  (현재·미래 달은 대체공휴일 등 늦은 변경 가능 → loadedMonths에 안 넣어 재조회로 최신화.) */
+    private fun loadHolidayDiskCache(current: YearMonth) {
+        runCatching {
+            val f = java.io.File(getApplication<android.app.Application>().filesDir, "holidays_cache.json")
+            if (!f.exists()) return
+            val o = org.json.JSONObject(f.readText())
+            o.optJSONObject("days")?.let { days ->
+                val map = mutableMapOf<String, String>()
+                days.keys().forEach { map[it] = days.getString(it) }
+                if (map.isNotEmpty()) holidays.value = holidays.value + map
+            }
+            o.optJSONArray("months")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val m = arr.getString(i)
+                    val ym = runCatching { YearMonth.parse(m) }.getOrNull()
+                    if (ym != null && ym < current) loadedMonths.add(m) // 지난 달 = 확정 → 재조회 안 함
+                }
+            }
+        }.onFailure { android.util.Log.w("HolidayCache", "load 실패", it) }
+    }
+
+    /** 현재 holidays/loadedMonths 스냅샷을 IO 스레드에서 파일로 저장(작은 JSON). */
+    private fun saveHolidayDiskCacheAsync() {
+        val months = loadedMonths.toList() // main 스냅샷
+        val days = holidays.value          // 불변 맵 스냅샷
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val o = org.json.JSONObject()
+                o.put("months", org.json.JSONArray(months))
+                val d = org.json.JSONObject()
+                days.forEach { (k, v) -> d.put(k, v) }
+                o.put("days", d)
+                java.io.File(getApplication<android.app.Application>().filesDir, "holidays_cache.json").writeText(o.toString())
+            }.onFailure { android.util.Log.w("HolidayCache", "save 실패", it) }
         }
     }
 

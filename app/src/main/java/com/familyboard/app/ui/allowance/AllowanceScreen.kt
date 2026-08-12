@@ -38,6 +38,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,8 @@ import com.familyboard.app.data.Family
 import com.familyboard.app.data.model.AllowanceBoards
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
+import com.familyboard.app.ui.UpdatePrompt
+import com.familyboard.app.ui.versionGapAtLeast
 import kotlinx.coroutines.flow.StateFlow
 
 private val Ink = Color(0xFF2B2B2E)
@@ -66,6 +69,22 @@ private val Ink = Color(0xFF2B2B2E)
 @Composable
 fun AllowanceScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val me by vm.currentMemberId.collectAsStateWithLifecycle()
+
+    // 용돈 정산 진입 시: 설치 버전이 최신보다 '0.3'(마지막 자리 30) 이상 낮으면 업데이트 안내 창을 띄운다.
+    // (준영·준호처럼 많이 뒤처진 사용자를 겨냥. updateInfo 는 최신>설치일 때만 non-null.)
+    val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
+    var showUpdate by remember { mutableStateOf(false) }
+    var nudged by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { vm.refreshUpdate() }
+    LaunchedEffect(updateInfo) {
+        val info = updateInfo
+        if (!nudged && info != null &&
+            versionGapAtLeast(com.familyboard.app.BuildConfig.VERSION_NAME, info.versionName, 30)
+        ) {
+            showUpdate = true; nudged = true
+        }
+    }
+
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         AllowanceSection(
             vm = vm, name = "준영", memberId = "junyoung", currentMemberId = me,
@@ -79,6 +98,8 @@ fun AllowanceScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             modifier = Modifier.weight(1f),
         )
     }
+
+    if (showUpdate) UpdatePrompt(updateInfo) { showUpdate = false }
 }
 
 @Composable

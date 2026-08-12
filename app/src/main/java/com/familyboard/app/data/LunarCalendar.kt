@@ -17,6 +17,11 @@ object LunarCalendar {
     /** 음력 필드 */
     data class Lunar(val month: Int, val day: Int, val leap: Boolean)
 
+    // ICU ChineseCalendar 변환은 날짜당 고정값이라 프로세스 전역으로 캐시(스와이프마다 42칸 재계산 방지).
+    // 날짜→음력은 절대 안 바뀌므로 무효화 불필요. 접근이 메인/백그라운드 양쪽이라 ConcurrentHashMap.
+    private val fieldsCache = java.util.concurrent.ConcurrentHashMap<LocalDate, Lunar>()
+    private val labelCache = java.util.concurrent.ConcurrentHashMap<LocalDate, String>()
+
     private fun ccFor(date: LocalDate): ChineseCalendar {
         val millis = date.atTime(12, 0).atZone(seoulZone).toInstant().toEpochMilli()
         val cc = ChineseCalendar(icuSeoul, ULocale.KOREA)
@@ -24,9 +29,9 @@ object LunarCalendar {
         return cc
     }
 
-    fun fields(date: LocalDate): Lunar {
+    fun fields(date: LocalDate): Lunar = fieldsCache.getOrPut(date) {
         val cc = ccFor(date)
-        return Lunar(
+        Lunar(
             month = cc.get(ChineseCalendar.MONTH) + 1,   // 0-based → 1-based
             day = cc.get(ChineseCalendar.DAY_OF_MONTH),
             leap = cc.get(ChineseCalendar.IS_LEAP_MONTH) == 1,
@@ -34,10 +39,13 @@ object LunarCalendar {
     }
 
     /** "6.15", 윤달이면 "윤6.15" */
-    fun label(date: LocalDate): String {
+    fun label(date: LocalDate): String = labelCache.getOrPut(date) {
         val l = fields(date)
-        return (if (l.leap) "윤" else "") + "${l.month}.${l.day}"
+        (if (l.leap) "윤" else "") + "${l.month}.${l.day}"
     }
+
+    /** 백그라운드 예열: 주어진 날짜들의 음력을 미리 계산해 캐시에 채운다(좌우 스와이프 즉시 표시용). */
+    fun prewarm(dates: Iterable<LocalDate>) { dates.forEach { label(it) } }
 
     /**
      * 주어진 양력 연도(year)에서 음력 (month/day/leap)에 해당하는 양력 날짜.

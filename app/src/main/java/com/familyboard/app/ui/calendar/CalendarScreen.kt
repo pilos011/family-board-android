@@ -19,7 +19,15 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -114,7 +122,7 @@ private val Ink = Color(0xFF2B2B2E)
 
 private val WeekdayNames = listOf("일", "월", "화", "수", "목", "금", "토")
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
     vm: AppViewModel,
@@ -123,7 +131,15 @@ fun CalendarScreen(
     onViewEvent: (String, String) -> Unit,
     onSearch: () -> Unit,
 ) {
-    var month by remember { mutableStateOf(YearMonth.now()) }
+    val scope = rememberCoroutineScope()
+    // 월 전환 = HorizontalPager(손가락 따라 실시간 + 인접 월 미리 합성 → 부드러움). page ↔ YearMonth 매핑.
+    val baseMonth = remember { YearMonth.now() }
+    val startPage = 1200 // 기준(오늘) 페이지. 앞뒤 100년 커버
+    fun pageToMonth(page: Int): YearMonth = baseMonth.plusMonths((page - startPage).toLong())
+    fun monthToPage(m: YearMonth): Int =
+        startPage + java.time.temporal.ChronoUnit.MONTHS.between(baseMonth, m).toInt()
+    val pagerState = rememberPagerState(initialPage = startPage) { 2400 }
+    val month = pageToMonth(pagerState.currentPage)
     var selected by remember { mutableStateOf(LocalDate.now()) }
     var sheetOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
@@ -134,7 +150,17 @@ fun CalendarScreen(
     var showYearPicker by remember { mutableStateOf(false) }
     var showMonthPicker by remember { mutableStateOf(false) }
 
-    LaunchedEffect(month) { vm.ensureHolidays(month) }
+    LaunchedEffect(month) {
+        vm.ensureHolidays(month)
+        // 음력 캐시 예열: 이전/현재/다음 달 6주 그리드를 백그라운드로 미리 계산 → 좌우 스와이프가 즉시 반응.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            for (mm in listOf(month.minusMonths(1), month, month.plusMonths(1))) {
+                val first = mm.atDay(1)
+                val start = first.minusDays((first.dayOfWeek.value % 7).toLong())
+                LunarCalendar.prewarm((0 until 42).map { start.plusDays(it.toLong()) })
+            }
+        }
+    }
 
     // 6주 그리드 표시 구간 (일요일 시작)
     val gridStart = remember(month) {
@@ -149,25 +175,28 @@ fun CalendarScreen(
         Column(Modifier.fillMaxSize()) {
             MonthHeader(
                 month = month,
-                onPrev = { month = month.minusMonths(1) },
-                onNext = { month = month.plusMonths(1) },
-                onToday = { month = YearMonth.now(); selected = LocalDate.now() },
+                onPrev = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1, animationSpec = tween(140)) } },
+                onNext = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1, animationSpec = tween(140)) } },
+                onToday = { selected = LocalDate.now(); scope.launch { pagerState.animateScrollToPage(startPage, animationSpec = tween(180)) } },
                 onSearch = onSearch,
                 onYearClick = { showYearPicker = true },
                 onMonthClick = { showMonthPicker = true },
             )
             WeekdayHeader()
-            AnimatedContent(
-                targetState = month,
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier.weight(1f),
-                transitionSpec = {
-                    // 다음 달이면 왼쪽으로, 이전 달이면 오른쪽으로 슬라이드
-                    val dir = if (targetState > initialState) 1 else -1
-                    (slideInHorizontally(tween(320)) { w -> dir * w } + fadeIn(tween(320)))
-                        .togetherWith(slideOutHorizontally(tween(320)) { w -> -dir * w } + fadeOut(tween(320)))
-                },
-                label = "monthSlide",
-            ) { m ->
+                beyondBoundsPageCount = 1, // 인접 월을 미리 합성 → 스와이프 시작이 즉시 부드럽게
+                // 페이지 25%만 넘겨도 다음 달로 스냅 + 전환 애니메이션을 빠른 tween 으로(기본 스프링보다 짧게)
+                flingBehavior = PagerDefaults.flingBehavior(
+                    state = pagerState,
+                    snapPositionalThreshold = 0.25f,
+                    lowVelocityAnimationSpec = tween(90), // 기본 500ms → 천천히 밀어 놓아도 빠르게 스냅(핵심)
+                    snapAnimationSpec = tween(90),
+                ),
+                key = { it },
+            ) { page ->
+                val m = pageToMonth(page)
                 val gStart = remember(m) {
                     val f = m.atDay(1); f.minusDays((f.dayOfWeek.value % 7).toLong())
                 }
@@ -181,11 +210,10 @@ fun CalendarScreen(
                     gridStart = gStart,
                     eventsByDate = evByDate,
                     holidays = holidays,
-                    modifier = Modifier.fillMaxSize(),
+                    // 각 달 그리드를 렌더 레이어로 캐시 → 드래그 시 다시 그리지 않고 레이어만 이동(부드러운 슬라이드).
+                    modifier = Modifier.fillMaxSize().graphicsLayer { },
                     onSelect = { selected = it; sheetOpen = true },
                     onAddRange = { s, e -> onAddEvent(s, e) },
-                    onPrevMonth = { month = month.minusMonths(1) },
-                    onNextMonth = { month = month.plusMonths(1) },
                 )
             }
         }
@@ -218,14 +246,14 @@ fun CalendarScreen(
     if (showYearPicker) {
         YearPickerDialog(
             current = month.year,
-            onPick = { month = month.withYear(it); showYearPicker = false },
+            onPick = { scope.launch { pagerState.scrollToPage(monthToPage(month.withYear(it))) }; showYearPicker = false },
             onDismiss = { showYearPicker = false },
         )
     }
     if (showMonthPicker) {
         MonthPickerDialog(
             current = month.monthValue,
-            onPick = { month = month.withMonth(it); showMonthPicker = false },
+            onPick = { scope.launch { pagerState.scrollToPage(monthToPage(month.withMonth(it))) }; showMonthPicker = false },
             onDismiss = { showMonthPicker = false },
         )
     }
@@ -359,8 +387,6 @@ private fun MonthGrid(
     modifier: Modifier = Modifier,
     onSelect: (LocalDate) -> Unit,
     onAddRange: (LocalDate, LocalDate) -> Unit,
-    onPrevMonth: () -> Unit,
-    onNextMonth: () -> Unit,
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     var dragAnchor by remember { mutableStateOf<Int?>(null) }
@@ -391,74 +417,31 @@ private fun MonthGrid(
                 .fillMaxSize()
                 .onSizeChanged { size = it }
                 .pointerInput(gridStart, size) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val startIdx = cellAt(down.position)
-                        val slop = viewConfiguration.touchSlop
-
-                        // 1) 롱프레스 타임아웃 안에 이동/해제 여부로 동작 판정
-                        val phase = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull { it.id == down.id }
-                                if (ch == null || !ch.pressed) return@withTimeoutOrNull "tap"
-                                val dx = ch.position.x - down.position.x
-                                val dy = ch.position.y - down.position.y
-                                if (abs(dx) > slop || abs(dy) > slop) return@withTimeoutOrNull "swipe"
+                    detectTapGestures(onTap = { off ->
+                        pendingRange = null
+                        onSelect(gridStart.plusDays(cellAt(off).toLong()))
+                    })
+                }
+                .pointerInput(gridStart, size) {
+                    // 롱프레스 후 드래그 = 여러 날 선택. Pager 스와이프와 충돌 안 함
+                    // (즉시 수평 드래그는 Pager가 페이징, 롱프레스 뒤 드래그만 여기가 소비).
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { off ->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val i = cellAt(off); dragAnchor = i; dragCurrent = i
+                        },
+                        onDrag = { change, _ -> dragCurrent = cellAt(change.position); change.consume() },
+                        onDragEnd = {
+                            val a = dragAnchor; val b = dragCurrent
+                            dragAnchor = null; dragCurrent = null
+                            if (a != null && b != null) {
+                                val s = minOf(a, b); val e = maxOf(a, b)
+                                if (s == e) { pendingRange = null; onSelect(gridStart.plusDays(s.toLong())) }
+                                else pendingRange = s to e   // 바로 추가하지 않고 확인 버튼 표시
                             }
-                            @Suppress("UNREACHABLE_CODE") "swipe"
-                        }
-
-                        when (phase) {
-                            // 롱프레스(움직임 없이 유지) → 여러 날 선택 모드
-                            null -> {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                dragAnchor = startIdx
-                                dragCurrent = startIdx
-                                while (true) {
-                                    val ev = awaitPointerEvent()
-                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                    dragCurrent = cellAt(ch.position)
-                                    ch.consume()
-                                    if (!ch.pressed) break
-                                }
-                                val a = dragAnchor; val b = dragCurrent
-                                dragAnchor = null; dragCurrent = null
-                                if (a != null && b != null) {
-                                    val s = minOf(a, b); val e = maxOf(a, b)
-                                    if (s == e) { pendingRange = null; onSelect(gridStart.plusDays(s.toLong())) }
-                                    else pendingRange = s to e   // 바로 추가하지 않고 확인 버튼 표시
-                                }
-                            }
-                            // 빠른 탭 → 그날 선택
-                            "tap" -> {
-                                pendingRange = null
-                                onSelect(gridStart.plusDays(startIdx.toLong()))
-                            }
-                            // 스와이프 → 방향 판정으로 월 이동 (좌/위=이전은 아래 참고)
-                            else -> {
-                                var lastPos = down.position
-                                while (true) {
-                                    val ev = awaitPointerEvent()
-                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                    lastPos = ch.position
-                                    ch.consume()
-                                    if (!ch.pressed) break
-                                }
-                                val dx = lastPos.x - down.position.x
-                                val dy = lastPos.y - down.position.y
-                                val thX = (if (size.width > 0) size.width else 1000) * 0.12f
-                                val thY = (if (size.height > 0) size.height else 1000) * 0.10f
-                                if (abs(dx) >= abs(dy)) {
-                                    // 왼쪽으로 밀기=다음 달, 오른쪽=이전 달
-                                    if (dx <= -thX) onNextMonth() else if (dx >= thX) onPrevMonth()
-                                } else {
-                                    // 위로 밀기=이전 달, 아래로=다음 달
-                                    if (dy <= -thY) onPrevMonth() else if (dy >= thY) onNextMonth()
-                                }
-                            }
-                        }
-                    }
+                        },
+                        onDragCancel = { dragAnchor = null; dragCurrent = null },
+                    )
                 },
         ) {
             repeat(6) { w ->
