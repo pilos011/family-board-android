@@ -502,21 +502,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false)
             }
         } else {
-            // 유튜브/웹 링크 → 재미진 곳. 유튜브는 공유 텍스트에 실제 영상 제목이 담겨오지만,
-            // 서버가 가져오는 og:title 은 "- YouTube"/"YouTube" 처럼 쓸모없을 때가 많음 → 공유 텍스트 제목 우선.
+            // 유튜브/웹 링크 → 재미진 곳. 유튜브는 공유 텍스트에 실제 영상 제목이 담겨올 때가 많지만,
+            // ⚠️ 쇼츠 등은 공유 텍스트/제목(subject)이 "- YouTube"/"YouTube" 로 오기도 함 → 그건 무시하고
+            //    서버 oEmbed 결과(쇼츠도 처리됨)를 쓴다. 반대로 서버가 실패하면 공유 텍스트를 쓴다.
             val isYoutube = url.contains("youtube.com", ignoreCase = true) || url.contains("youtu.be", ignoreCase = true)
             val sharedName = name.trim().trimEnd('-', '|', '·', '–', ' ').trim()
+            fun useless(s: String) = s.isBlank() || s.trimStart('-', ' ').equals("youtube", ignoreCase = true)
             pendingShare.value = SharedPlace(sharedName.ifBlank { "불러오는 중…" }, url, loading = true, isFun = true)
             viewModelScope.launch {
                 val info = com.familyboard.app.notif.NotifyApi.parseLink(url)
                 val cur = pendingShare.value ?: return@launch
                 val fetched = info?.title?.trim().orEmpty()
-                // og:title 이 비었거나 "youtube"/"- youtube" 류면 쓸모없는 것으로 간주
-                val fetchUseless = fetched.isBlank() || fetched.trimStart('-', ' ').equals("youtube", ignoreCase = true)
                 val finalName = when {
-                    isYoutube && sharedName.isNotBlank() -> sharedName   // 유튜브: 공유 텍스트 제목 우선
-                    !fetchUseless -> fetched
-                    sharedName.isNotBlank() -> sharedName
+                    isYoutube && !useless(sharedName) -> sharedName   // 유튜브: 쓸만한 공유 텍스트 제목 우선
+                    !useless(fetched) -> fetched                      // 아니면 서버 oEmbed(쇼츠 포함)
+                    !useless(sharedName) -> sharedName
                     else -> "링크"
                 }
                 pendingShare.value = cur.copy(name = finalName, image = info?.image.orEmpty(), loading = false, isFun = true)
