@@ -1068,6 +1068,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { NotifyApi.notify(actor, targets, "✅ 새 할 일", body) }
     }
 
+    /** 공지 추가 + 가족(작성자 제외) 전원에게 등록 알림. 공지는 부모(선일/은선)만 올림. */
+    fun addNoticeWithNotify(item: ListItem) = viewModelScope.launch {
+        runCatching { board.upsertItem(item) }
+        val actor = item.createdBy
+        val targets = Family.members.map { it.id }.filter { it != actor }.distinct()
+        if (targets.isEmpty()) return@launch
+        val body = "\"${item.text}\"\n등록: ${Family.nameOf(actor)}"
+        runCatching { NotifyApi.notify(actor, targets, "📢 새 가족 공지", body) }
+    }
+
     fun toggleItem(id: String, checked: Boolean) = viewModelScope.launch { runCatching { board.setChecked(id, checked) } }
     fun deleteItem(id: String) = viewModelScope.launch { runCatching { board.deleteItem(id) }; bumpFunRefresh() }
 

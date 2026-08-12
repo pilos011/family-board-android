@@ -7,13 +7,13 @@
     android:orientation="vertical"
     android:gravity="center"
     android:background="@drawable/widget_bg"
-    android:padding="4dp">
+    android:padding="2dp">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="🍽"
-        android:textSize="24dp"
+        android:textSize="44dp"
         android:includeFontPadding="false" />
 
     <TextView
@@ -22,7 +22,7 @@
         android:text="맛집"
         android:textColor="#FFD9480F"
         android:textStyle="bold"
-        android:textSize="12dp"
+        android:textSize="18dp"
         android:includeFontPadding="false"
-        android:paddingTop="2dp" />
+        android:paddingTop="1dp" />
 </LinearLayout>
