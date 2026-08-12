@@ -96,12 +96,12 @@ class ParkingWidget : AppWidgetProvider() {
         private fun widgetIds(ctx: Context): IntArray =
             AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, ParkingWidget::class.java)) ?: IntArray(0)
 
-        /** 최근 조회값 있으면 층 두 줄, 없으면 "주차/확인" 한 줄. */
+        /** 마지막 조회 층을 계속 표시(주차 자리는 주차 중 바뀌지 않음). 한 번도 조회 안 됐으면 "주차/확인"(탭 유도).
+         *  30분 자동 갱신·탭으로 최신화되고, 조회 결과 층이 비면 "출차". 신선도(WINDOW_MS)로 "확인" 띄우지 않음
+         *  — inexact 알람(Doze)으로 자동 갱신이 늦어도 마지막 위치는 유효하기 때문. */
         fun render(ctx: Context) {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val ts = p.getLong(KEY_TS, 0L)
-            val fresh = ts > 0L && System.currentTimeMillis() - ts <= WINDOW_MS
-            if (!fresh) { applyClick(ctx); return }
+            if (p.getLong(KEY_TS, 0L) <= 0L) { applyClick(ctx); return } // 최초(조회 이력 없음)만 탭 유도
             fun v(floor: String?) = if (floor.isNullOrBlank()) "출차" else floor
             applyRows(ctx, v(p.getString(KEY_M, null)), v(p.getString(KEY_G, null)))
         }
