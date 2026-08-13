@@ -473,7 +473,7 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit
                             }
                         }
                     }
-                    FastScroller(albumGridState, flat.size) { i -> entryMonth(flat.getOrNull(i)) }
+                    FastScroller(albumGridState) { i -> entryMonth(flat.getOrNull(i)) }
                 }
             }
         }
@@ -814,7 +814,7 @@ private fun InAppPhotoPicker(
                                 }
                             }
                         }
-                        FastScroller(gridState, list.size) { i -> ymLabel(list.getOrNull(i)?.millis ?: 0L) }
+                        FastScroller(gridState) { i -> ymLabel(list.getOrNull(i)?.millis ?: 0L) }
                     }
                 }
             }
@@ -822,44 +822,75 @@ private fun InAppPhotoPicker(
     }
 }
 
-/** 우측 빠른 스크롤: 오른쪽 띠 어디를 드래그해도 그 위치로 점프하고, 그 지점의 "년월" 버블을 표시.
- *  labelAt(index)=해당 스크롤 위치(그리드 항목 index)의 년월 문자열. */
+private data class FsMetrics(
+    val scrollFrac: Float, // 0..1 스크롤 진행률(맨 아래에서 정확히 1)
+    val thumbFrac: Float,  // 트랙 대비 썸 크기(내용 많을수록 작게)
+    val maxIndex: Int,     // 스크롤 가능한 최대 '첫 보이는 항목' 인덱스(= 총항목 − 화면당 항목수)
+    val total: Int,
+    val firstVisible: Int,
+)
+
+/**
+ * 빠른 스크롤(사진첩·선택기 공용). ⚠️ v1.0.128: firstVisibleItemIndex/count 근사(점진 로드로 부정확)
+ * 대신 **그리드 layoutInfo** 로 계산 — 총항목수는 매 프레임 라이브(로드되며 늘어도 정확), 진행률은
+ * (첫보이는인덱스+항목내부오프셋)/(총항목−화면당항목수) 라 **콘텐츠 실제 맨 아래에서 정확히 1**,
+ * 썸 크기는 화면비율에 비례(스마트). 썸 잡고 상대 이동, 썸 밖 누르면 무시(뒤 사진 탭 유지).
+ */
 @Composable
 private fun BoxScope.FastScroller(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
-    count: Int,
     labelAt: (Int) -> String,
 ) {
-    if (count < 30) return
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     var dragging by remember { mutableStateOf(false) }
     var trackH by remember { mutableFloatStateOf(0f) }
     var dragThumbTop by remember { mutableFloatStateOf(0f) } // 드래그 중 썸 상단 위치(px)
-    val thumbH = 56.dp
-    val thumbHpx = with(density) { thumbH.toPx() }
-    val maxOffset = (trackH - thumbHpx).coerceAtLeast(0f)
-    val progress by remember { derivedStateOf { if (count <= 1) 0f else gridState.firstVisibleItemIndex.toFloat() / (count - 1) } }
+    val minThumbPx = with(density) { 48.dp.toPx() }
 
-    val thumbY = (if (dragging) dragThumbTop else progress * maxOffset).coerceIn(0f, maxOffset) // 트랙 밖으로 나가 안 보이는 일 방지
-    val labelIdx = if (dragging && maxOffset > 0f) ((dragThumbTop / maxOffset) * (count - 1)).roundToInt().coerceIn(0, count - 1)
-    else gridState.firstVisibleItemIndex
-    val label = labelAt(labelIdx.coerceIn(0, count - 1))
+    val metrics by remember(gridState) {
+        derivedStateOf {
+            val li = gridState.layoutInfo
+            val total = li.totalItemsCount
+            val vis = li.visibleItemsInfo
+            if (total <= 0 || vis.isEmpty()) FsMetrics(0f, 1f, 1, total, 0)
+            else {
+                val firstSize = vis.first().size.height.coerceAtLeast(1)
+                val intra = (gridState.firstVisibleItemScrollOffset.toFloat() / firstSize).coerceIn(0f, 1f)
+                val scrolled = gridState.firstVisibleItemIndex + intra
+                val maxIndex = (total - vis.size).coerceAtLeast(1)
+                FsMetrics(
+                    scrollFrac = (scrolled / maxIndex).coerceIn(0f, 1f),
+                    thumbFrac = (vis.size.toFloat() / total).coerceIn(0.06f, 1f),
+                    maxIndex = maxIndex, total = total, firstVisible = gridState.firstVisibleItemIndex,
+                )
+            }
+        }
+    }
+
+    if (metrics.total < 30) return // 짧으면 스크롤바 숨김
+
+    val thumbHpx = (trackH * metrics.thumbFrac).coerceIn(minThumbPx, trackH.coerceAtLeast(minThumbPx))
+    val maxOffset = (trackH - thumbHpx).coerceAtLeast(0f)
+    val thumbY = (if (dragging) dragThumbTop else metrics.scrollFrac * maxOffset).coerceIn(0f, maxOffset)
+    val thumbHdp = with(density) { thumbHpx.toDp() }
+    val labelIdx = (if (dragging && maxOffset > 0f) ((dragThumbTop / maxOffset) * metrics.maxIndex).roundToInt() else metrics.firstVisible)
+        .coerceIn(0, metrics.total - 1)
+    val label = labelAt(labelIdx)
 
     Box(
         Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(40.dp)
             .onSizeChanged { trackH = it.height.toFloat() }
-            .pointerInput(count) {
-                // 썸(현재 위치 막대)을 잡았을 때만, 잡은 지점을 유지하며 '상대 이동'으로 스크롤.
-                // 썸에서 먼 곳을 누르면 무시(점프 안 함) → 뒤 사진 탭이 살아남음.
+            .pointerInput(Unit) {
                 val slop = viewConfiguration.touchSlop
                 val grabTol = with(density) { 24.dp.toPx() } // 썸 위아래 여유(잡기 쉽게)
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val mo = (trackH - thumbHpx).coerceAtLeast(0f)
-                    val curTop = progress * mo // 눌린 순간의 썸 위치
-                    if (down.position.y < curTop - grabTol || down.position.y > curTop + thumbHpx + grabTol) return@awaitEachGesture
-                    val grabOffset = (down.position.y - curTop).coerceIn(0f, thumbHpx) // 썸 안에서 잡은 지점
+                    val th = (trackH * metrics.thumbFrac).coerceIn(minThumbPx, trackH.coerceAtLeast(minThumbPx))
+                    val mo = (trackH - th).coerceAtLeast(0f)
+                    val curTop = metrics.scrollFrac * mo // 눌린 순간의 썸 위치
+                    if (down.position.y < curTop - grabTol || down.position.y > curTop + th + grabTol) return@awaitEachGesture
+                    val grabOffset = (down.position.y - curTop).coerceIn(0f, th) // 썸 안에서 잡은 지점
                     var started = false
                     try {
                         while (true) {
@@ -870,13 +901,13 @@ private fun BoxScope.FastScroller(
                             if (started) {
                                 dragThumbTop = (ch.position.y - grabOffset).coerceIn(0f, mo) // 잡은 지점 유지=튐 없음
                                 val frac = if (mo > 0f) dragThumbTop / mo else 0f
-                                val target = (frac * (count - 1)).roundToInt().coerceIn(0, count - 1)
+                                val target = (frac * metrics.maxIndex).roundToInt().coerceIn(0, metrics.total - 1)
                                 scope.launch { gridState.scrollToItem(target) }
                                 ch.consume()
                             }
                         }
                     } finally {
-                        dragging = false // 취소·재구성으로 드래그가 멈춰도 상태가 고착되지 않게
+                        dragging = false // 취소·재구성으로 드래그가 멈춰도 상태 고착 방지
                     }
                 }
             },
@@ -888,10 +919,10 @@ private fun BoxScope.FastScroller(
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color(0x33000000)),
         )
-        // 현재 위치 막대(썸) — 불투명 파랑 + 흰 테두리로 밝은 사진 위에서도 선명하게.
+        // 현재 위치 막대(썸) — 내용량 비례 크기, 불투명 파랑 + 흰 테두리로 밝은 사진 위에서도 선명.
         Box(
             Modifier.align(Alignment.TopEnd).offset { IntOffset(0, thumbY.roundToInt()) }
-                .padding(end = 3.dp).size(width = 16.dp, height = thumbH)
+                .padding(end = 3.dp).size(width = 16.dp, height = thumbHdp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (dragging) Color(0xFF2563EB) else Color(0xFF3B82F6))
                 .border(2.dp, Color(0xE6FFFFFF), RoundedCornerShape(8.dp)),
