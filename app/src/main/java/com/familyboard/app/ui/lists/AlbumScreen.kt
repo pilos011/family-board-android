@@ -834,21 +834,14 @@ private fun BoxScope.FastScroller(
     val density = LocalDensity.current
     var dragging by remember { mutableStateOf(false) }
     var trackH by remember { mutableFloatStateOf(0f) }
-    var activeY by remember { mutableFloatStateOf(0f) }
+    var dragThumbTop by remember { mutableFloatStateOf(0f) } // 드래그 중 썸 상단 위치(px)
     val thumbH = 56.dp
     val thumbHpx = with(density) { thumbH.toPx() }
     val maxOffset = (trackH - thumbHpx).coerceAtLeast(0f)
     val progress by remember { derivedStateOf { if (count <= 1) 0f else gridState.firstVisibleItemIndex.toFloat() / (count - 1) } }
 
-    fun jumpTo(y: Float) {
-        activeY = y.coerceIn(0f, trackH)
-        val frac = if (trackH > 0f) activeY / trackH else 0f
-        val target = (frac * (count - 1)).roundToInt().coerceIn(0, count - 1)
-        scope.launch { gridState.scrollToItem(target) }
-    }
-
-    val thumbY = if (dragging) (activeY - thumbHpx / 2f).coerceIn(0f, maxOffset) else progress * maxOffset
-    val labelIdx = if (dragging && trackH > 0f) ((activeY / trackH) * (count - 1)).roundToInt().coerceIn(0, count - 1)
+    val thumbY = if (dragging) dragThumbTop else progress * maxOffset
+    val labelIdx = if (dragging && maxOffset > 0f) ((dragThumbTop / maxOffset) * (count - 1)).roundToInt().coerceIn(0, count - 1)
     else gridState.firstVisibleItemIndex
     val label = labelAt(labelIdx.coerceIn(0, count - 1))
 
@@ -856,31 +849,40 @@ private fun BoxScope.FastScroller(
         Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(40.dp)
             .onSizeChanged { trackH = it.height.toFloat() }
             .pointerInput(count) {
-                // 세로 드래그가 touchSlop을 넘으면 그때부터 소비(스크롤). 단순 탭은 소비 안 해
-                // 뒤 사진의 클릭이 살아남음(오른쪽 열 사진도 열기/선택 가능).
+                // 썸(현재 위치 막대)을 잡았을 때만, 잡은 지점을 유지하며 '상대 이동'으로 스크롤.
+                // 썸에서 먼 곳을 누르면 무시(점프 안 함) → 뒤 사진 탭이 살아남음.
                 val slop = viewConfiguration.touchSlop
+                val grabTol = with(density) { 24.dp.toPx() } // 썸 위아래 여유(잡기 쉽게)
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    val mo = (trackH - thumbHpx).coerceAtLeast(0f)
+                    val curTop = progress * mo // 눌린 순간의 썸 위치
+                    if (down.position.y < curTop - grabTol || down.position.y > curTop + thumbHpx + grabTol) return@awaitEachGesture
+                    val grabOffset = (down.position.y - curTop).coerceIn(0f, thumbHpx) // 썸 안에서 잡은 지점
                     var started = false
                     while (true) {
                         val ev = awaitPointerEvent()
                         val ch = ev.changes.firstOrNull() ?: break
                         if (!ch.pressed) break
-                        if (!started && kotlin.math.abs(ch.position.y - down.position.y) > slop) {
-                            started = true; dragging = true
+                        if (!started && kotlin.math.abs(ch.position.y - down.position.y) > slop) { started = true; dragging = true }
+                        if (started) {
+                            dragThumbTop = (ch.position.y - grabOffset).coerceIn(0f, mo) // 잡은 지점 유지=튐 없음
+                            val frac = if (mo > 0f) dragThumbTop / mo else 0f
+                            val target = (frac * (count - 1)).roundToInt().coerceIn(0, count - 1)
+                            scope.launch { gridState.scrollToItem(target) }
+                            ch.consume()
                         }
-                        if (started) { jumpTo(ch.position.y); ch.consume() }
                     }
                     if (started) dragging = false
                 }
             },
     ) {
-        // 핸들
+        // 핸들(현재 위치 막대) — 평소에도 잘 보이게 조금 넓고 진하게, 잡으면 파랑.
         Box(
             Modifier.align(Alignment.TopEnd).offset { IntOffset(0, thumbY.roundToInt()) }
-                .padding(end = 5.dp).size(width = 11.dp, height = thumbH)
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (dragging) Color(0xFF3B82F6) else Color(0x663B82F6)),
+                .padding(end = 5.dp).size(width = 14.dp, height = thumbH)
+                .clip(RoundedCornerShape(7.dp))
+                .background(if (dragging) Color(0xFF3B82F6) else Color(0x993B82F6)),
         )
     }
     // 년월 버블 — 부모 Box(전체 폭)에 그려 40dp 띠 폭에 잘리지 않게 함. 핸들 왼쪽에 표시.
