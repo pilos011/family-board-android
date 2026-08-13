@@ -270,8 +270,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, ext) ?: return@runCatching
                 val dateIso = java.time.Instant.ofEpochMilli(meta.takenAt)
                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                val displayName = withContext(Dispatchers.IO) {
+                    runCatching {
+                        cr.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                            if (c.moveToFirst()) c.getString(0) else null
+                        }
+                    }.getOrNull()
+                }.orEmpty()
                 com.familyboard.app.notif.NotifyApi.albumAdd(
-                    albumBoard, url, meta.takenAt, dateIso, me, meta.lat, meta.lng, meta.place,
+                    albumBoard, url, meta.takenAt, dateIso, me, meta.lat, meta.lng, meta.place, displayName,
                 ) ?: return@runCatching
                 added++
             }
@@ -438,7 +445,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (albumListHasDup(target, item)) { toast("이미 있는 사진이에요"); return@launch }
         val me = currentMemberId.value.orEmpty()
         val added = com.familyboard.app.notif.NotifyApi.albumAdd(
-            toBoard, item.photoUrls.firstOrNull().orEmpty(), item.takenAt, item.dateIso, me, item.lat, item.lng, item.address,
+            toBoard, item.photoUrls.firstOrNull().orEmpty(), item.takenAt, item.dateIso, me, item.lat, item.lng, item.address, item.fileName,
         )
         if (added != null) {
             if (albumFlow(toBoard).value != null) refreshAlbum(toBoard) // 대상이 이미 로드돼 있으면 갱신

@@ -289,6 +289,7 @@ object NotifyApi {
             lat = o.optDouble("lat", 0.0), lng = o.optDouble("lng", 0.0), address = o.optString("address"),
             createdBy = o.optString("createdBy"), createdAt = o.optLong("createdAt"),
             text = o.optString("caption").ifBlank { o.optString("text") },
+            fileName = o.optString("fileName"),
         )
     }
 
@@ -325,12 +326,13 @@ object NotifyApi {
 
     suspend fun albumAdd(
         board: String, url: String, takenAt: Long, dateIso: String, createdBy: String,
-        lat: Double, lng: Double, address: String,
+        lat: Double, lng: Double, address: String, fileName: String = "",
     ): com.familyboard.app.data.model.ListItem? = withContext(Dispatchers.IO) {
         if (!enabled()) return@withContext null
         runCatching {
             val body = JSONObject().put("board", board).put("url", url).put("takenAt", takenAt)
                 .put("dateIso", dateIso).put("createdBy", createdBy).put("lat", lat).put("lng", lng).put("address", address)
+                .put("fileName", fileName) // 원본 파일명(백업·EXIF 없을 때 시각 보조)
             albumHttp("POST", "/album", body)?.let { albumItemFrom(JSONObject(it)) }
         }.onFailure { Log.w(TAG, "albumAdd 실패", it) }.getOrNull()
     }
