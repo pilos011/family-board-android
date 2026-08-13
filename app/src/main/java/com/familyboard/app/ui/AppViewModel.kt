@@ -264,12 +264,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     mime.contains("gif") -> "gif"; mime.contains("heic") || mime.contains("heif") -> "heic"
                     else -> "jpg"
                 }
-                val meta = withContext(Dispatchers.IO) { readPhotoMeta(bytes, uri) }
-                if (meta.takenAt > 0 && existingTaken.contains(meta.takenAt)) { skipped++; return@runCatching } // 이미 앨범에 있음
-                if (!batchSeen.add("${meta.takenAt}_${bytes.size}")) { skipped++; return@runCatching }         // 이 배치에서 완전 동일 사진
-                val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, ext) ?: return@runCatching
-                val dateIso = java.time.Instant.ofEpochMilli(meta.takenAt)
-                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
                 val displayName = withContext(Dispatchers.IO) {
                     runCatching {
                         cr.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -277,6 +271,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }.getOrNull()
                 }.orEmpty()
+                // EXIF·DATE_TAKEN 없으면 파일명(displayName)에서 촬영시각 보조 추출(서버/웹과 동일 규칙).
+                val meta = withContext(Dispatchers.IO) { readPhotoMeta(bytes, uri, displayName) }
+                if (meta.takenAt > 0 && existingTaken.contains(meta.takenAt)) { skipped++; return@runCatching } // 이미 앨범에 있음
+                if (!batchSeen.add("${meta.takenAt}_${bytes.size}")) { skipped++; return@runCatching }         // 이 배치에서 완전 동일 사진
+                val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, ext) ?: return@runCatching
+                val dateIso = java.time.Instant.ofEpochMilli(meta.takenAt)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
                 com.familyboard.app.notif.NotifyApi.albumAdd(
                     albumBoard, url, meta.takenAt, dateIso, me, meta.lat, meta.lng, meta.place, displayName,
                 ) ?: return@runCatching
@@ -290,8 +291,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (added > 0) refreshAlbum(albumBoard) // 서버 반영분 다시 로드
     }
 
-    /** EXIF(촬영시각·GPS) 읽기. androidx ExifInterface(안정) → MediaStore DATE_TAKEN → 현재 시각 순. */
-    private fun readPhotoMeta(bytes: ByteArray, uri: android.net.Uri): PhotoMeta {
+    /** EXIF(촬영시각·GPS) 읽기. ExifInterface → MediaStore DATE_TAKEN → 파일명 → 현재 시각 순. */
+    private fun readPhotoMeta(bytes: ByteArray, uri: android.net.Uri, displayName: String = ""): PhotoMeta {
         var takenAt = 0L
         var lat = 0.0
         var lng = 0.0
@@ -324,9 +325,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } ?: 0L
             }.getOrDefault(0L)
         }
+        // 4) EXIF·DATE_TAKEN 다 없으면 원본 파일명에서(스캔·다운로드·메신저 저장 사진 등).
+        if (takenAt <= 0L) takenAt = filenameTakenMs(displayName)
         if (takenAt <= 0L) takenAt = System.currentTimeMillis()
         val place = if (lat != 0.0 || lng != 0.0) reverseGeocodeShort(lat, lng) else ""
         return PhotoMeta(takenAt, lat, lng, place)
+    }
+
+    /** 원본 파일명에서 촬영시각 추출(EXIF·DATE_TAKEN 없을 때). 20160904_123145 / IMG_..._... / 2016-09-04 12.31.45.
+     *  시각 없으면 그 날짜 정오. 못 찾거나 불가능한 날짜(2월31일 등)면 0. LocalDateTime.of가 무효날짜를 던져 검증됨. KST. */
+    private fun filenameTakenMs(name: String): Long {
+        if (name.isBlank()) return 0L
+        val zone = java.time.ZoneId.systemDefault()
+        Regex("(20\\d{2})[-_.]?(\\d{2})[-_.]?(\\d{2})[ _T-]?(\\d{2})[-_.:]?(\\d{2})[-_.:]?(\\d{2})").find(name)?.let { m ->
+            val (y, mo, da, h, mi, s) = m.destructured
+            runCatching {
+                return java.time.LocalDateTime.of(y.toInt(), mo.toInt(), da.toInt(), h.toInt(), mi.toInt(), s.toInt())
+                    .atZone(zone).toInstant().toEpochMilli()
+            }
+        }
+        Regex("(20\\d{2})[-_.]?(\\d{2})[-_.]?(\\d{2})").find(name)?.let { m ->
+            val (y, mo, da) = m.destructured
+            runCatching {
+                return java.time.LocalDate.of(y.toInt(), mo.toInt(), da.toInt()).atTime(12, 0)
+                    .atZone(zone).toInstant().toEpochMilli()
+            }
+        }
+        return 0L
     }
 
     /** GPS 좌표 → 짧은 지명(시/구·동). 실패 시 빈 문자열. */

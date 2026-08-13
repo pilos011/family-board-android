@@ -13,7 +13,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -855,9 +854,12 @@ private fun BoxScope.FastScroller(
             val vis = li.visibleItemsInfo
             if (total <= 0 || vis.isEmpty()) FsMetrics(0f, 1f, 1, total, 0)
             else {
-                val firstSize = vis.first().size.height.coerceAtLeast(1)
+                val first = vis.first()
+                val firstSize = first.size.height.coerceAtLeast(1)
                 val intra = (gridState.firstVisibleItemScrollOffset.toFloat() / firstSize).coerceIn(0f, 1f)
-                val scrolled = gridState.firstVisibleItemIndex + intra
+                // 같은 줄 항목수(사진줄=열수, 헤더=1)로 줄 내부 진행을 보정 → 줄마다 끊기지 않고 부드럽게.
+                val perRow = vis.count { it.row == first.row }.coerceAtLeast(1)
+                val scrolled = gridState.firstVisibleItemIndex + intra * perRow
                 val maxIndex = (total - vis.size).coerceAtLeast(1)
                 FsMetrics(
                     scrollFrac = (scrolled / maxIndex).coerceIn(0f, 1f),
@@ -912,20 +914,12 @@ private fun BoxScope.FastScroller(
                 }
             },
     ) {
-        // 항상 보이는 옅은 레일 — 어느 위치에서도 스크롤바가 있다는 게 보이게.
-        Box(
-            Modifier.align(Alignment.TopEnd).padding(end = 6.dp)
-                .width(4.dp).fillMaxHeight()
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color(0x33000000)),
-        )
-        // 현재 위치 막대(썸) — 내용량 비례 크기, 불투명 파랑 + 흰 테두리로 밝은 사진 위에서도 선명.
+        // 현재 위치 막대(썸) — 내용량 비례 크기, 원래의 반투명 파랑(잡으면 진하게).
         Box(
             Modifier.align(Alignment.TopEnd).offset { IntOffset(0, thumbY.roundToInt()) }
-                .padding(end = 3.dp).size(width = 16.dp, height = thumbHdp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (dragging) Color(0xFF2563EB) else Color(0xFF3B82F6))
-                .border(2.dp, Color(0xE6FFFFFF), RoundedCornerShape(8.dp)),
+                .padding(end = 5.dp).size(width = 14.dp, height = thumbHdp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(if (dragging) Color(0xFF3B82F6) else Color(0x993B82F6)),
         )
     }
     // 년월 버블 — 부모 Box(전체 폭)에 그려 40dp 띠 폭에 잘리지 않게 함. 핸들 왼쪽에 표시.
