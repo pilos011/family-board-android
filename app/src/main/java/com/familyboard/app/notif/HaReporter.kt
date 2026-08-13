@@ -75,6 +75,18 @@ object HaReporter {
             JSONObject().put("friendly_name", "$name 소리모드"),
         )
 
+        // 재실/외출: 집 WiFi(집 LAN) 접속 여부로 판정 — SSID 대신 집 서브넷 IP 로 판별해 위치 권한이 필요 없음.
+        // (아이들이 위치 공유를 거부해도 동작. HA 자동화용 device_tracker + 읽기용 sensor 둘 다 보고.)
+        val home = onHomeLan(context)
+        postState(
+            "device_tracker.${memberId}_wifi", if (home) "home" else "not_home",
+            JSONObject().put("source_type", "router").put("friendly_name", "$name 집WiFi"),
+        )
+        postState(
+            "sensor.${memberId}_presence", if (home) "재실" else "외출",
+            JSONObject().put("friendly_name", "$name 재실여부").put("icon", if (home) "mdi:home" else "mdi:home-export-outline"),
+        )
+
         // 위치 (권한 있을 때, 마지막 알려진 위치)
         val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
@@ -100,11 +112,28 @@ object HaReporter {
         }
     }
 
+    // 집 서브넷 접두어(헤르메스 192.168.10.23 와 같은 대역). 이 대역 IP 를 WiFi 로 받았으면 '집'.
+    private const val HOME_SUBNET_PREFIX = "192.168.10."
+
+    /** WiFi 로 집 LAN(HOME_SUBNET_PREFIX)에 연결돼 있으면 true = 재실. 위치 권한 불필요(SSID 안 읽음). */
+    private fun onHomeLan(context: Context): Boolean {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val net = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(net) ?: return false
+            if (!caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)) return false // WiFi 아니면 외출
+            val lp = cm.getLinkProperties(net) ?: return false
+            lp.linkAddresses.any { it.address.hostAddress?.startsWith(HOME_SUBNET_PREFIX) == true }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private fun postState(entity: String, state: String, attributes: JSONObject) {
         runCatching {
             val conn = (URL("$base/api/states/$entity").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 8000; readTimeout = 8000; doOutput = true
+                connectTimeout = 6000; readTimeout = 6000; doOutput = true
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "application/json")
             }

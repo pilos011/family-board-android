@@ -77,7 +77,7 @@ class ParkingWidget : AppWidgetProvider() {
         private const val REQ_REVERT = 7502
         private const val REQ_TICK = 7503
         private const val WINDOW_MS = 35 * 60 * 1000L   // 이 시간 내 조회값이면 층 표시(30분 자동갱신보다 약간 길게)
-        private const val TICK_MS = 30 * 60 * 1000L     // 자동 갱신 주기 30분
+        private const val TICK_MS = 30 * 60 * 1000L     // 자동 갱신 주기 30분(HA 15분 inexact에 배칭돼 추가 부담 미미)
         private const val HOUR_START = 6                 // 자동 갱신 시간대 06~23시
         private const val HOUR_END = 23
 

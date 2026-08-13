@@ -318,6 +318,9 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit
     val otherAlbumName = if (isPrivate) AlbumBoard.TITLE else AlbumBoard.TITLE_PRIVATE
     val items by (if (isPrivate) vm.myAlbumItems else vm.albumItems).collectAsStateWithLifecycle()
     val me by vm.currentMemberId.collectAsStateWithLifecycle()
+    // 진입 시 사진첩 로드(Firestore 리스너 대신 REST 페이지 누적). 화면 열 때/private 전환 시 새로고침.
+    // me 도 키로 둬서, 멤버 ID가 늦게 로드돼도 내 사진첩이 빈 채로 남지 않고 다시 조회된다.
+    LaunchedEffect(isPrivate, me) { vm.refreshAlbum(if (isPrivate) AlbumBoard.PRIVATE else AlbumBoard.BOARD) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf<ListItem?>(null) }
     val context = LocalContext.current
@@ -545,7 +548,7 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit
             title = { Text("사진 삭제") },
             text = { Text("이 사진을 삭제할까요? 되돌릴 수 없어요.") },
             confirmButton = {
-                TextButton(onClick = { vm.deleteItem(target.id); confirmDelete = null }) {
+                TextButton(onClick = { vm.deleteAlbumPhoto(target); confirmDelete = null }) {
                     Text("삭제", color = Color(0xFFE03131))
                 }
             },
@@ -571,7 +574,7 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit
                 TextButton(onClick = {
                     confirmDeleteSelected = false
                     val skipped = selItems.size - deletable.size
-                    deletable.forEach { vm.deleteItem(it.id) }
+                    deletable.forEach { vm.deleteAlbumPhoto(it) }
                     Toast.makeText(
                         context,
                         if (skipped > 0) "${deletable.size}장 삭제 · 권한 없는 ${skipped}장은 제외했어요"
@@ -1116,7 +1119,7 @@ private fun AlbumViewerPage(
                 label = { Text("댓글 달기") }, singleLine = true, shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.weight(1f), colors = whiteFieldColors)
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = { if (comment.isNotBlank()) { vm.addPlaceComment(item, comment); comment = "" } }) {
+            TextButton(onClick = { if (comment.isNotBlank()) { vm.addAlbumComment(item, comment); comment = "" } }) {
                 Text("등록", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
@@ -1138,7 +1141,7 @@ private fun AlbumViewerPage(
             title = { Text("사진 삭제") },
             text = { Text("이 사진을 삭제할까요? 되돌릴 수 없어요.") },
             confirmButton = {
-                TextButton(onClick = { confirmDeletePhoto = false; vm.deleteItem(item.id) }) {
+                TextButton(onClick = { confirmDeletePhoto = false; vm.deleteAlbumPhoto(item) }) {
                     Text("삭제", color = Color(0xFFE03131))
                 }
             },
@@ -1152,7 +1155,7 @@ private fun AlbumViewerPage(
             title = { Text("댓글 삭제") },
             text = { Text("이 댓글을 삭제할까요?") },
             confirmButton = {
-                TextButton(onClick = { confirmDeleteComment = -1; vm.deletePlaceComment(item, idx) }) {
+                TextButton(onClick = { confirmDeleteComment = -1; vm.deleteAlbumComment(item, idx) }) {
                     Text("삭제", color = Color(0xFFE03131))
                 }
             },

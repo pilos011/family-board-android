@@ -282,6 +282,13 @@ fun PlaceListScreen(
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                         .clickable(enabled = !recommending) {
                             val loc = myLoc ?: lastKnownLocation(context).also { myLoc = it }
+                            // 위치 권한이 없으면 현재 위치 기반 정확 추천이 안 되므로 안내(추천은 지역 기준으로 계속 진행).
+                            val hasLocPerm =
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            if (!hasLocPerm) {
+                                Toast.makeText(context, "위치 권한을 켜면 현재 위치로 더 정확하게 추천해드려요", Toast.LENGTH_LONG).show()
+                            }
                             // 입력창("카테고리, 지역") 우선. 비어 있으면 필터값 사용.
                             val q = recQuery.trim()
                             var cat: String

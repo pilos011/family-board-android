@@ -6,24 +6,18 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 
-/** 5분 주기로 HA 리포트를 예약(AlarmManager). 발화 시 HaReportReceiver 가 전송 후 다음 회차를 재예약. */
+/** 15분 주기로 HA 리포트를 예약(AlarmManager). 발화 시 HaReportReceiver 가 전송 후 다음 회차를 재예약.
+ *  배터리 절약: 재실·배터리 텔레메트리라 정확한 시각이 불필요 → inexact(Doze 배칭) 알람 사용. */
 object HaReportScheduler {
     private const val ACTION = "com.familyboard.app.HA_REPORT"
-    const val INTERVAL_MS = 5 * 60 * 1000L
+    const val INTERVAL_MS = 15 * 60 * 1000L // 배터리 절약: 5분→15분(웨이크업·HTTPS 호출 1/3로)
 
     fun schedule(context: Context, delayMs: Long = INTERVAL_MS) {
         if (!HaReporter.enabled()) return
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val at = System.currentTimeMillis() + delayMs
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi(context))
-            } else {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi(context))
-            }
-        } catch (se: SecurityException) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi(context))
-        }
+        // 정확 알람(setExact…) 대신 inexact(setAndAllowWhileIdle) — OS가 다른 알람과 배칭해 Doze 깨움 최소화.
+        runCatching { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi(context)) }
     }
 
     private fun pi(context: Context): PendingIntent {

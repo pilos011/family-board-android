@@ -246,13 +246,13 @@ fun HomeScreen(
     val special = pinned.firstOrNull { it.first.text == "준호 수능" }
     val others = pinned.filter { it.first.text != "준호 수능" }.sortedBy { it.second }
 
-    // N년 전 오늘: 가족 사진첩에서 촬영일(dateIso)의 월·일이 오늘과 같고, 과거 연도인 사진.
-    val album by vm.albumItems.collectAsStateWithLifecycle()
-    val memories = remember(album, today) {
-        (album ?: emptyList()).mapNotNull { itm ->
+    // N년 전 오늘: 사진첩(Postgres)에서 오늘 MM-DD 사진만 서버로 조회(전체 안 읽음). 과거 연도만.
+    val memoryPhotos by vm.todayMemories.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.loadTodayMemories() }
+    val memories = remember(memoryPhotos, today) {
+        memoryPhotos.mapNotNull { itm ->
             val d = runCatching { LocalDate.parse(itm.dateIso) }.getOrNull() ?: return@mapNotNull null
-            if (d.monthValue == today.monthValue && d.dayOfMonth == today.dayOfMonth && d.year < today.year)
-                (today.year - d.year) to itm else null
+            if (d.year < today.year) (today.year - d.year) to itm else null
         }.sortedByDescending { it.first }
     }
 

@@ -60,8 +60,10 @@ import com.familyboard.app.data.Family
 import com.familyboard.app.data.model.AllowanceBoards
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
-import com.familyboard.app.ui.UpdatePrompt
 import com.familyboard.app.ui.versionGapAtLeast
+import android.view.Gravity
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.StateFlow
 
 private val Ink = Color(0xFF2B2B2E)
@@ -69,11 +71,11 @@ private val Ink = Color(0xFF2B2B2E)
 @Composable
 fun AllowanceScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val me by vm.currentMemberId.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
-    // 용돈 정산 진입 시: 설치 버전이 최신보다 '0.3'(마지막 자리 30) 이상 낮으면 업데이트 안내 창을 띄운다.
-    // (준영·준호처럼 많이 뒤처진 사용자를 겨냥. updateInfo 는 최신>설치일 때만 non-null.)
+    // 용돈 정산 진입 시: 설치 버전이 최신보다 '0.3'(마지막 자리 30) 이상 낮으면 상단 토스트로 업데이트 안내(최소 3초).
+    // (다이얼로그는 과해서 v1.0.123에서 토스트로 변경. 준영·준호처럼 많이 뒤처진 사용자 겨냥. updateInfo 는 최신>설치일 때만 non-null.)
     val updateInfo by vm.updateInfo.collectAsStateWithLifecycle()
-    var showUpdate by remember { mutableStateOf(false) }
     var nudged by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.refreshUpdate() }
     LaunchedEffect(updateInfo) {
@@ -81,7 +83,11 @@ fun AllowanceScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         if (!nudged && info != null &&
             versionGapAtLeast(com.familyboard.app.BuildConfig.VERSION_NAME, info.versionName, 30)
         ) {
-            showUpdate = true; nudged = true
+            nudged = true
+            val msg = "새 버전(${info.versionName})이 나왔어요. 홈 화면 위쪽의 붉은 원(↑, 통통 튀는) 아이콘을 눌러 업데이트해 주세요."
+            val toast = Toast.makeText(context, msg, Toast.LENGTH_LONG) // LENGTH_LONG ≈ 3.5초(최소 3초 충족)
+            runCatching { toast.setGravity(Gravity.TOP or Gravity.CENTER_HORIZONTAL, 0, 140) } // 상단(안드11 이하만 위치 반영)
+            toast.show()
         }
     }
 
@@ -98,8 +104,6 @@ fun AllowanceScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             modifier = Modifier.weight(1f),
         )
     }
-
-    if (showUpdate) UpdatePrompt(updateInfo) { showUpdate = false }
 }
 
 @Composable

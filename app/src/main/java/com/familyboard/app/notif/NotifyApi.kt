@@ -269,6 +269,110 @@ object NotifyApi {
         }
     }
 
+    // ─────────── 가족 사진첩(album/myalbum) — Postgres(notify) REST 클라이언트 ───────────
+    data class AlbumPage(val items: List<com.familyboard.app.data.model.ListItem>, val nextTakenAt: Long?, val nextId: String?)
+
+    private fun albumItemFrom(o: JSONObject): com.familyboard.app.data.model.ListItem {
+        val url = o.optString("url").ifBlank { o.optJSONArray("photoUrls")?.optString(0).orEmpty() }
+        val likesArr = o.optJSONArray("likes")
+        val likes = if (likesArr != null) (0 until likesArr.length()).map { likesArr.optString(it) } else emptyList()
+        val cArr = o.optJSONArray("comments") ?: o.optJSONArray("progress")
+        val comments = if (cArr != null) (0 until cArr.length()).map {
+            val c = cArr.optJSONObject(it) ?: JSONObject()
+            com.familyboard.app.data.model.ProgressNote(c.optString("text"), c.optString("by"), c.optString("dateIso"))
+        } else emptyList()
+        return com.familyboard.app.data.model.ListItem(
+            id = o.optString("id"), board = o.optString("board"),
+            photoUrls = if (url.isNotBlank()) listOf(url) else emptyList(),
+            takenAt = o.optLong("takenAt"), dateIso = o.optString("dateIso"),
+            likes = likes, progress = comments, rotation = o.optInt("rotation"),
+            lat = o.optDouble("lat", 0.0), lng = o.optDouble("lng", 0.0), address = o.optString("address"),
+            createdBy = o.optString("createdBy"), createdAt = o.optLong("createdAt"),
+            text = o.optString("caption").ifBlank { o.optString("text") },
+        )
+    }
+
+    // HttpURLConnection: GET/POST/DELETE 만(PATCH 미지원 → 부분수정은 POST /album/:id/update).
+    private fun albumHttp(method: String, path: String, body: JSONObject?): String? {
+        val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = method; connectTimeout = 10000; readTimeout = 20000
+            if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+            if (body != null) { doOutput = true; setRequestProperty("Content-Type", "application/json") }
+        }
+        if (body != null) conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+        val code = conn.responseCode
+        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }
+        conn.disconnect()
+        return if (code in 200..299) text else null
+    }
+
+    suspend fun albumList(board: String, limit: Int, beforeTakenAt: Long?, beforeId: String?, createdBy: String?): AlbumPage? =
+        withContext(Dispatchers.IO) {
+            if (!enabled()) return@withContext null
+            runCatching {
+                val sb = StringBuilder("/album?board=$board&limit=$limit")
+                if (beforeTakenAt != null) sb.append("&beforeTakenAt=$beforeTakenAt&beforeId=")
+                    .append(java.net.URLEncoder.encode(beforeId.orEmpty(), "UTF-8"))
+                if (!createdBy.isNullOrBlank()) sb.append("&createdBy=").append(java.net.URLEncoder.encode(createdBy, "UTF-8"))
+                val text = albumHttp("GET", sb.toString(), null) ?: return@runCatching null
+                val o = JSONObject(text)
+                val arr = o.optJSONArray("items") ?: org.json.JSONArray()
+                val items = (0 until arr.length()).map { albumItemFrom(arr.getJSONObject(it)) }
+                val next = o.optJSONObject("next")
+                AlbumPage(items, if (next != null) next.optLong("beforeTakenAt") else null, next?.optString("beforeId"))
+            }.onFailure { Log.w(TAG, "albumList 실패", it) }.getOrNull()
+        }
+
+    suspend fun albumAdd(
+        board: String, url: String, takenAt: Long, dateIso: String, createdBy: String,
+        lat: Double, lng: Double, address: String,
+    ): com.familyboard.app.data.model.ListItem? = withContext(Dispatchers.IO) {
+        if (!enabled()) return@withContext null
+        runCatching {
+            val body = JSONObject().put("board", board).put("url", url).put("takenAt", takenAt)
+                .put("dateIso", dateIso).put("createdBy", createdBy).put("lat", lat).put("lng", lng).put("address", address)
+            albumHttp("POST", "/album", body)?.let { albumItemFrom(JSONObject(it)) }
+        }.onFailure { Log.w(TAG, "albumAdd 실패", it) }.getOrNull()
+    }
+
+    suspend fun albumLike(id: String, memberId: String) = albumMutate("/album/$id/like", JSONObject().put("memberId", memberId))
+    suspend fun albumComment(id: String, text: String, by: String) = albumMutate("/album/$id/comment", JSONObject().put("text", text).put("by", by))
+    // 댓글 삭제/수정은 인덱스 기준(서버가 현재 상태에서 직접 조작 → 타인 댓글 유실 방지).
+    suspend fun albumCommentDelete(id: String, index: Int) = albumMutate("/album/$id/comment/delete", JSONObject().put("index", index))
+    suspend fun albumCommentEdit(id: String, index: Int, text: String) = albumMutate("/album/$id/comment/edit", JSONObject().put("index", index).put("text", text))
+    suspend fun albumUpdate(id: String, fields: JSONObject) = albumMutate("/album/$id/update", fields)
+
+    private suspend fun albumMutate(path: String, body: JSONObject): com.familyboard.app.data.model.ListItem? =
+        withContext(Dispatchers.IO) {
+            if (!enabled()) return@withContext null
+            runCatching { albumHttp("POST", path, body)?.let { albumItemFrom(JSONObject(it)) } }
+                .onFailure { Log.w(TAG, "albumMutate 실패 $path", it) }.getOrNull()
+        }
+
+    suspend fun albumDelete(id: String): Boolean = withContext(Dispatchers.IO) {
+        if (!enabled()) return@withContext false
+        runCatching { albumHttp("DELETE", "/album/$id", null) != null }.getOrDefault(false)
+    }
+
+    suspend fun albumMemories(board: String, month: Int, day: Int): List<com.familyboard.app.data.model.ListItem> =
+        withContext(Dispatchers.IO) {
+            if (!enabled()) return@withContext emptyList()
+            runCatching {
+                val text = albumHttp("GET", "/album/memories?board=$board&month=$month&day=$day", null) ?: return@runCatching emptyList()
+                val arr = JSONObject(text).optJSONArray("items") ?: org.json.JSONArray()
+                (0 until arr.length()).map { albumItemFrom(arr.getJSONObject(it)) }
+            }.onFailure { Log.w(TAG, "albumMemories 실패", it) }.getOrDefault(emptyList())
+        }
+
+    suspend fun albumCount(board: String, createdBy: String?): Int = withContext(Dispatchers.IO) {
+        if (!enabled()) return@withContext 0
+        runCatching {
+            val q = "/album/count?board=$board" +
+                (if (!createdBy.isNullOrBlank()) "&createdBy=" + java.net.URLEncoder.encode(createdBy, "UTF-8") else "")
+            albumHttp("GET", q, null)?.let { JSONObject(it).optInt("count") } ?: 0
+        }.getOrDefault(0)
+    }
+
     private suspend fun post(path: String, json: JSONObject) = withContext(Dispatchers.IO) {
         runCatching {
             val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {

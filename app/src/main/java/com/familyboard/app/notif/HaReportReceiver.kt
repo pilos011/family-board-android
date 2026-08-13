@@ -10,7 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** 5분마다 발화 → 현재 사용자 기기 정보를 HA로 전송하고 다음 회차를 재예약. */
+/** 15분마다 발화 → 현재 사용자 기기 정보를 HA로 전송하고 다음 회차를 재예약. */
 class HaReportReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()

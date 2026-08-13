@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,10 +101,10 @@ fun ListsScreen(
     val currentMemberId by vm.currentMemberId.collectAsStateWithLifecycle()
     val docs by vm.docItems.collectAsStateWithLifecycle()
     val docCount = docs?.count { com.familyboard.app.data.model.DocBoard.visibleTo(it, currentMemberId) } ?: 0
-    val album by vm.albumItems.collectAsStateWithLifecycle()
-    val albumCount = album?.size ?: 0
-    val myAlbum by vm.myAlbumItems.collectAsStateWithLifecycle()
-    val myAlbumCount = myAlbum?.size ?: 0
+    // 사진첩 개수는 count 쿼리로만(전체 로드 없이 — Postgres 이관). 화면 진입 시 갱신.
+    val albumCount by vm.albumCountFlow.collectAsStateWithLifecycle()
+    val myAlbumCount by vm.myAlbumCountFlow.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { vm.loadAlbumCounts() }
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
     val customLists by vm.customLists.collectAsStateWithLifecycle()

@@ -162,16 +162,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.DocBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
 
-    // 가족 사진첩(한 장=한 항목). 실시간 전체 조회 + 클라 정렬(촬영일)/월별 그룹. null=로딩.
-    val albumItems: StateFlow<List<ListItem>?> =
-        board.items(com.familyboard.app.data.model.AlbumBoard.BOARD)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
+    // 가족/내 사진첩 — Firestore 대신 Postgres(notify REST). 페이지 누적 로드(전량 리스너 아님 → 읽기 급증 방지).
+    // null=로딩 전(스피너), 빈 리스트=없음. 화면 진입 시 refreshAlbum() 으로 채운다.
+    private val _albumItems = kotlinx.coroutines.flow.MutableStateFlow<List<ListItem>?>(null)
+    val albumItems: StateFlow<List<ListItem>?> = _albumItems
+    private val _myAlbumItems = kotlinx.coroutines.flow.MutableStateFlow<List<ListItem>?>(null)
+    val myAlbumItems: StateFlow<List<ListItem>?> = _myAlbumItems
 
-    // 내 사진첩(본인 것만). board="myalbum" 중 createdBy==나만. null=로딩.
-    val myAlbumItems: StateFlow<List<ListItem>?> =
-        combine(board.items(com.familyboard.app.data.model.AlbumBoard.PRIVATE), currentMemberId) { list, me ->
-            list.filter { it.createdBy == me }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
+    private fun albumFlow(albumBoard: String) =
+        if (albumBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE) _myAlbumItems else _albumItems
+
+    /** 사진첩을 처음부터 다시 로드(페이지 누적, 최신 촬영순). 화면 진입/새로고침 시 호출. */
+    fun refreshAlbum(albumBoard: String = com.familyboard.app.data.model.AlbumBoard.BOARD) = viewModelScope.launch {
+        val flow = albumFlow(albumBoard)
+        val isPrivate = albumBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE
+        val owner = if (isPrivate) currentMemberId.value.orEmpty() else null
+        if (isPrivate && owner.isNullOrBlank()) { flow.value = emptyList(); return@launch } // 소유자 미상 → 전체 조회 금지(유출 방지)
+        val hadData = flow.value?.isNotEmpty() == true
+        val acc = mutableListOf<ListItem>()
+        var bt: Long? = null; var bid: String? = null
+        var completed = false // 마지막 페이지까지 정상 도달?
+        while (true) {
+            val page = com.familyboard.app.notif.NotifyApi.albumList(albumBoard, 200, bt, bid, owner) ?: break // null=조회 실패
+            acc += page.items
+            if (!hadData) flow.value = acc.toList() // 첫 로드만 페이지 도착마다 점진 표시(최근분 먼저)
+            if (page.nextTakenAt == null) { completed = true; break }
+            bt = page.nextTakenAt; bid = page.nextId
+        }
+        // 정상 완료 → 전체 반영. 중간 실패면 기존 데이터를 부분결과로 덮어쓰지 않음(첫 로드로 데이터가 아예 없을 때만 표시).
+        if (completed) flow.value = acc.toList()
+        else if (flow.value == null) flow.value = acc.toList()
+    }
+
+    /** 좋아요/회전/댓글 등으로 바뀐 항목을 로컬 리스트에 반영(리스너 없으니 직접 갱신). */
+    private fun patchAlbumLocal(item: ListItem) {
+        for (flow in listOf(_albumItems, _myAlbumItems)) {
+            val cur = flow.value ?: continue
+            val idx = cur.indexOfFirst { it.id == item.id }
+            if (idx >= 0) flow.value = cur.toMutableList().also { it[idx] = item }
+        }
+    }
+    private fun removeAlbumLocal(id: String) {
+        for (flow in listOf(_albumItems, _myAlbumItems)) {
+            val cur = flow.value ?: continue
+            if (cur.any { it.id == id }) flow.value = cur.filter { it.id != id }
+        }
+    }
 
     /** 월 태그: "yyyy-MM" → 태그 문자열. 사진첩 월 헤더 강조·검색용. 가족 사진첩=가족 모두 입력·수정. */
     val albumTags: StateFlow<Map<String, String>> =
@@ -234,15 +270,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val url = com.familyboard.app.notif.NotifyApi.uploadFile(bytes, ext) ?: return@runCatching
                 val dateIso = java.time.Instant.ofEpochMilli(meta.takenAt)
                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
-                board.upsertItem(
-                    ListItem(
-                        id = java.util.UUID.randomUUID().toString(),
-                        board = albumBoard,
-                        photoUrls = listOf(url), dateIso = dateIso, takenAt = meta.takenAt,
-                        lat = meta.lat, lng = meta.lng, address = meta.place,
-                        createdBy = me, createdAt = System.currentTimeMillis(),
-                    )
-                )
+                com.familyboard.app.notif.NotifyApi.albumAdd(
+                    albumBoard, url, meta.takenAt, dateIso, me, meta.lat, meta.lng, meta.place,
+                ) ?: return@runCatching
                 added++
             }
         }
@@ -250,6 +280,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val msg = if (skipped > 0) "${added}장 추가 · 중복 ${skipped}장 제외" else "${added}장 추가했어요"
             android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
         }
+        if (added > 0) refreshAlbum(albumBoard) // 서버 반영분 다시 로드
     }
 
     /** EXIF(촬영시각·GPS) 읽기. androidx ExifInterface(안정) → MediaStore DATE_TAKEN → 현재 시각 순. */
@@ -301,12 +332,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .distinct().joinToString(" ").trim()
     }.getOrDefault("")
 
-    /** 사진첩 좋아요 토글(likes 배열). */
+    /** 사진첩 좋아요 토글(서버가 토글 → 갱신된 항목 반영). */
     fun toggleAlbumLike(item: ListItem) = viewModelScope.launch {
         val me = currentMemberId.value.orEmpty()
         if (me.isBlank()) return@launch
-        val likes = if (item.likes.contains(me)) item.likes - me else item.likes + me
-        runCatching { board.updateFields(item.id, mapOf("likes" to likes)) }
+        com.familyboard.app.notif.NotifyApi.albumLike(item.id, me)?.let { patchAlbumLocal(it) }
     }
 
     /**
@@ -315,24 +345,73 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun rotateAlbumPhoto(item: ListItem, delta: Int) = viewModelScope.launch {
         val next = ((item.rotation + delta) % 360 + 360) % 360
-        runCatching { board.updateFields(item.id, mapOf("rotation" to next)) }
+        com.familyboard.app.notif.NotifyApi.albumUpdate(item.id, org.json.JSONObject().put("rotation", next))
+            ?.let { patchAlbumLocal(it) }
     }
 
-    /** 대상 목록에 이미 같은 사진이 있는지(같은 파일 URL 또는 같은 촬영시각 — 업로드 중복 기준과 동일). */
+    /** 사진첩 댓글 추가/삭제/수정 — progress(ProgressNote)를 서버에서 갱신(장소 댓글과 별개, Postgres). */
+    fun addAlbumComment(item: ListItem, text: String) = viewModelScope.launch {
+        if (text.isBlank()) return@launch
+        com.familyboard.app.notif.NotifyApi.albumComment(item.id, text.trim(), currentMemberId.value.orEmpty())
+            ?.let { patchAlbumLocal(it) }
+    }
+    // 삭제·수정은 인덱스 기준 서버 조작(전체교체 아님) → 그 사이 추가된 타인 댓글이 유실되지 않음.
+    fun deleteAlbumComment(item: ListItem, index: Int) = viewModelScope.launch {
+        if (index !in item.progress.indices) return@launch
+        com.familyboard.app.notif.NotifyApi.albumCommentDelete(item.id, index)?.let { patchAlbumLocal(it) }
+    }
+    fun updateAlbumComment(item: ListItem, index: Int, text: String) = viewModelScope.launch {
+        if (index !in item.progress.indices || text.isBlank()) return@launch
+        com.familyboard.app.notif.NotifyApi.albumCommentEdit(item.id, index, text.trim())?.let { patchAlbumLocal(it) }
+    }
+
+    /** 사진 삭제(메타데이터). */
+    fun deleteAlbumPhoto(item: ListItem) = viewModelScope.launch {
+        if (com.familyboard.app.notif.NotifyApi.albumDelete(item.id)) removeAlbumLocal(item.id)
+    }
+
+    // 홈 "오늘, 그날의 추억" — 앨범 전체를 안 읽고 오늘 MM-DD 사진만 서버에서 조회.
+    private val _todayMemories = kotlinx.coroutines.flow.MutableStateFlow<List<ListItem>>(emptyList())
+    val todayMemories: StateFlow<List<ListItem>> = _todayMemories
+    fun loadTodayMemories() = viewModelScope.launch {
+        val now = java.time.LocalDate.now()
+        _todayMemories.value = com.familyboard.app.notif.NotifyApi.albumMemories(
+            com.familyboard.app.data.model.AlbumBoard.BOARD, now.monthValue, now.dayOfMonth,
+        )
+    }
+
+    // 리스트 화면 사진첩 카드 개수 — count 쿼리(전체 로드 없이).
+    private val _albumCount = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val albumCountFlow: StateFlow<Int> = _albumCount
+    private val _myAlbumCount = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val myAlbumCountFlow: StateFlow<Int> = _myAlbumCount
+    fun loadAlbumCounts() = viewModelScope.launch {
+        _albumCount.value = com.familyboard.app.notif.NotifyApi.albumCount(com.familyboard.app.data.model.AlbumBoard.BOARD, null)
+        val me = currentMemberId.value.orEmpty()
+        _myAlbumCount.value = if (me.isBlank()) 0 // 소유자 미상 → 전체 카운트 조회 금지
+        else com.familyboard.app.notif.NotifyApi.albumCount(com.familyboard.app.data.model.AlbumBoard.PRIVATE, me)
+    }
+
+    /** 대상 목록에 같은 사진(=같은 파일 URL)이 이미 있는지. 촬영시각만 같은 별개 사진(연사·다른 카메라)을
+     *  중복으로 오판해 원본을 삭제하지 않도록 URL 일치만 본다. */
     private fun albumListHasDup(target: List<ListItem>, item: ListItem): Boolean {
         val url = item.photoUrls.firstOrNull()
-        return target.any { t ->
-            (!url.isNullOrBlank() && t.photoUrls.firstOrNull() == url) || (item.takenAt > 0 && t.takenAt == item.takenAt)
-        }
+        if (url.isNullOrBlank()) return false
+        return target.any { it.photoUrls.firstOrNull() == url }
     }
 
-    /** 대상 앨범의 현재 항목을 실제로 조회. 화면에서 구독 안 된 flow의 .value 는 stale/null 이라 직접 1회 수집.
-     *  내 사진첩(myalbum)은 본인 것만. 조회 실패 시 null(중복 판정 불가). */
-    private suspend fun targetAlbumItems(toBoard: String): List<ListItem>? = runCatching {
-        val list = board.items(toBoard).first()
-        if (toBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE)
-            list.filter { it.createdBy == currentMemberId.value.orEmpty() } else list
-    }.getOrNull()
+    /** 대상 앨범의 현재 항목 전부를 REST로 조회(중복 판정용). 내 사진첩은 본인 것만. 조회 실패 시 null. */
+    private suspend fun targetAlbumItems(toBoard: String): List<ListItem>? {
+        val owner = if (toBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE) currentMemberId.value.orEmpty() else null
+        val first = com.familyboard.app.notif.NotifyApi.albumList(toBoard, 200, null, null, owner) ?: return null
+        val acc = first.items.toMutableList()
+        var bt = first.nextTakenAt; var bid = first.nextId
+        while (bt != null) {
+            val page = com.familyboard.app.notif.NotifyApi.albumList(toBoard, 200, bt, bid, owner) ?: break
+            acc += page.items; bt = page.nextTakenAt; bid = page.nextId
+        }
+        return acc
+    }
 
     private fun toast(msg: String) =
         android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
@@ -341,33 +420,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun moveAlbumPhoto(item: ListItem, toBoard: String) = viewModelScope.launch {
         val target = targetAlbumItems(toBoard) ?: run { toast("잠시 후 다시 시도해 주세요"); return@launch }
         if (albumListHasDup(target, item)) {
-            runCatching { board.deleteItem(item.id) }
+            if (com.familyboard.app.notif.NotifyApi.albumDelete(item.id)) removeAlbumLocal(item.id)
             toast("이미 있는 사진이라 원본을 정리했어요")
             return@launch
         }
-        val fields = mutableMapOf<String, Any>("board" to toBoard)
-        if (toBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE) fields["createdBy"] = currentMemberId.value.orEmpty()
-        runCatching { board.updateFields(item.id, fields) }
-        toast("옮겼어요")
+        val fields = org.json.JSONObject().put("board", toBoard)
+        if (toBoard == com.familyboard.app.data.model.AlbumBoard.PRIVATE) fields.put("createdBy", currentMemberId.value.orEmpty())
+        if (com.familyboard.app.notif.NotifyApi.albumUpdate(item.id, fields) != null) {
+            removeAlbumLocal(item.id) // 현재 목록에서 빠짐(대상은 열 때 로드)
+            toast("옮겼어요")
+        } else toast("옮기기 실패")
     }
 
     /** 사진을 다른 앨범으로 복사(새 항목·같은 사진 파일, 소유자=나, 좋아요·댓글 초기화). 대상에 이미 있으면 복사 안 함. */
     fun copyAlbumPhoto(item: ListItem, toBoard: String) = viewModelScope.launch {
         val target = targetAlbumItems(toBoard) ?: run { toast("잠시 후 다시 시도해 주세요"); return@launch }
         if (albumListHasDup(target, item)) { toast("이미 있는 사진이에요"); return@launch }
-        runCatching {
-            board.upsertItem(
-                item.copy(
-                    id = java.util.UUID.randomUUID().toString(),
-                    board = toBoard,
-                    createdBy = currentMemberId.value.orEmpty(),
-                    likes = emptyList(),
-                    progress = emptyList(),
-                    createdAt = System.currentTimeMillis(),
-                ),
-            )
+        val me = currentMemberId.value.orEmpty()
+        val added = com.familyboard.app.notif.NotifyApi.albumAdd(
+            toBoard, item.photoUrls.firstOrNull().orEmpty(), item.takenAt, item.dateIso, me, item.lat, item.lng, item.address,
+        )
+        if (added != null) {
+            if (albumFlow(toBoard).value != null) refreshAlbum(toBoard) // 대상이 이미 로드돼 있으면 갱신
             toast("복사했어요")
-        }
+        } else toast("복사 실패")
     }
 
     /** 일괄 다운로드(화면 이탈해도 완료되도록 viewModelScope). 저장 로직은 화면의 saveAlbumToDownloads 재사용. */
@@ -926,11 +1002,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val loadedMonths = mutableSetOf<String>()
 
     init {
-        // 하단탭·홈 핵심 데이터 예열: 앱 실행 직후 미리 구독해 값을 채워두면 첫 진입 때 스피너 없이 즉시 표시.
-        // (Firestore 오프라인 캐시가 캐시부터 내려주므로 대부분 로컬에서 빠르게 채워짐.)
+        // 하단탭·홈 핵심(작은) 데이터만 예열 → 첫 진입 스피너 제거. ⚠️ 사진첩(album)·문서함(docs)처럼
+        // 커질 수 있는 컬렉션은 예열에서 제외(앱 켤 때마다 전체를 읽으면 Firestore 읽기 쿼타 폭증) → 화면 열 때 로드.
         listOf(
             events, calendarEvents, noticeItems, ddayItems, shoppingItems, todoItems,
-            restaurantItems, visitItems, docItems, albumItems, allowanceJunyoung, allowanceJunho,
+            restaurantItems, visitItems, allowanceJunyoung, allowanceJunho,
         ).forEach { it.launchIn(viewModelScope) }
 
         // 일정/담당자 변경 시 미리 알림 예약 동기화
