@@ -214,14 +214,20 @@ fun FunListScreen(
             .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
 
-    // 공유받은 항목 열기(알림 탭): 재미진 곳 보드에서 id로 조회해 영상/이미지/링크로 자동 오픈.
+    // 공유받은 항목 열기(알림 탭): id로 조회해 영상/이미지/링크로 자동 오픈.
+    // ⚠️ 롤백 금지: 받은 알림은 보통 앱이 꺼진 상태(콜드스타트)에서 누른다. 그때는 익명 인증·네트워크가
+    //    아직이라 getItemById 가 잠깐 null → 즉시 포기하면 "그냥 재미진 곳으로만 감"(사용자 신고 증상).
+    //    준비될 때까지 재시도하고, 성공/최종실패 전까진 pendingSharedFun 을 clear 하지 말 것.
     val pendingShared by vm.pendingSharedFun.collectAsStateWithLifecycle()
     LaunchedEffect(pendingShared, boardKey) {
         val id = pendingShared ?: return@LaunchedEffect
         if (boardKey != FunBoard.BOARD) return@LaunchedEffect
-        val item = vm.fetchItemById(id)
+        var item = vm.fetchItemById(id)
+        var tries = 0
+        while (item == null && tries < 8) { kotlinx.coroutines.delay(400); item = vm.fetchItemById(id); tries++ } // 콜드스타트 인증·네트워크 대기
         vm.clearSharedFun()
-        if (item != null) when {
+        when {
+            item == null -> Toast.makeText(context, "공유한 항목을 찾을 수 없어요", Toast.LENGTH_SHORT).show()
             isVideo(item.link) -> playUrl = item.link
             item.link.isBlank() && item.photoUrls.isNotEmpty() -> viewerImages = item.photoUrls
             else -> open(item.link)
