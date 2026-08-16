@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -69,6 +72,7 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     val context = LocalContext.current
     var viewer by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
+    var editing by remember { mutableStateOf<ListItem?>(null) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
@@ -96,6 +100,8 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
                     items(sorted, key = { it.id }) { item ->
                         CouponCard(
                             item = item, me = me, isAdmin = isAdmin,
+                            canEdit = (item.createdBy == me || isAdmin), // 설명은 공유한 사람·관리자가 수정
+                            onEdit = { editing = item },
                             onOpen = {
                                 val url = item.photoUrls.firstOrNull().orEmpty()
                                 when {
@@ -135,29 +141,55 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
         )
     }
+
+    editing?.let { it0 ->
+        var txt by remember(it0.id) { mutableStateOf(it0.text) }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            title = { Text("쿠폰 설명") },
+            text = {
+                OutlinedTextField(
+                    value = txt, onValueChange = { txt = it.take(60) }, // 짧은 제목 수준
+                    placeholder = { Text("간단한 설명 (예: 스타벅스 아메리카노 쿠폰)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = { TextButton(onClick = { vm.setCouponCaption(it0.id, txt); editing = null }) { Text("저장") } },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("취소") } },
+        )
+    }
 }
 
 @Composable
 private fun CouponCard(
-    item: ListItem, me: String, isAdmin: Boolean,
-    onOpen: () -> Unit, onToggleUsed: () -> Unit, onDelete: () -> Unit,
+    item: ListItem, me: String, isAdmin: Boolean, canEdit: Boolean,
+    onOpen: () -> Unit, onToggleUsed: () -> Unit, onDelete: () -> Unit, onEdit: () -> Unit,
 ) {
     val used = item.checked
     val canCancel = used && item.usedBy == me // 사용완료 누른 본인만 취소 가능
     val url = item.photoUrls.firstOrNull().orEmpty()
     Card(
-        modifier = Modifier.fillMaxWidth().height(200.dp),
+        modifier = Modifier.fillMaxWidth().height(210.dp),
         shape = RoundedCornerShape(14.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Box(Modifier.fillMaxSize()) {
-            // 내용 — 사용완료면 탭 불가(열리지 않음)
-            Box(Modifier.fillMaxSize().let { if (!used) it.clickable { onOpen() } else it }) {
+        Column(Modifier.fillMaxSize()) {
+            // 내용 영역(가변) — 사용완료면 탭 불가(열리지 않음)
+            Box(Modifier.fillMaxWidth().weight(1f).let { if (!used) it.clickable { onOpen() } else it }) {
                 if (url.isNotBlank()) {
                     AsyncImage(
                         model = funThumbUrl(url), contentDescription = null,
                         modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                     )
+                    // 이미지 쿠폰 설명(캡션) — 하단 반투명 밴드
+                    if (item.text.isNotBlank()) {
+                        Text(
+                            item.text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                                .background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 5.dp),
+                        )
+                    }
                 } else {
                     Column(Modifier.fillMaxSize().padding(14.dp)) {
                         Text(
@@ -171,35 +203,45 @@ private fun CouponCard(
                         )
                     }
                 }
-            }
-            // 이미지+링크 쿠폰: 탭하면 링크가 열린다는 표시(좌상단 🔗 배지).
-            if (url.isNotBlank() && item.link.isNotBlank() && !used) {
-                Text(
-                    "🔗", fontSize = 13.sp,
-                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
-                        .background(Color(0x66000000), CircleShape).padding(horizontal = 6.dp, vertical = 3.dp),
-                )
-            }
-            // 사용완료: 회색 흐림 (버튼·삭제 아이콘보다 먼저 그려 그 위로 버튼이 오게)
-            if (used) {
-                Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)), Alignment.Center) {
-                    Text("사용완료", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                // 사용완료: 회색 흐림(아이콘보다 먼저 그려 아이콘이 위로)
+                if (used) {
+                    Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)), Alignment.Center) {
+                        Text("사용완료", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    }
                 }
-            }
-            // 관리자 삭제(우상단) — 밝은 카드에서도 보이게 어두운 원 배경.
-            if (isAdmin) {
-                IconButton(onClick = onDelete, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-                    Icon(
-                        Icons.Default.Delete, "삭제", tint = Color.White,
-                        modifier = Modifier.background(Color(0x66000000), CircleShape).padding(4.dp),
+                // 이미지+링크 & 설명 없음: 좌상단 🔗 배지(탭하면 링크 열림 표시).
+                if (url.isNotBlank() && item.link.isNotBlank() && item.text.isBlank() && !used) {
+                    Text(
+                        "🔗", fontSize = 13.sp,
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                            .background(Color(0x66000000), CircleShape).padding(horizontal = 6.dp, vertical = 3.dp),
                     )
                 }
+                // 우상단: 설명 편집(작성자·관리자, 미사용) + 삭제(관리자). 어두운 원 배경으로 가시성.
+                Row(Modifier.align(Alignment.TopEnd)) {
+                    if (canEdit && !used) {
+                        IconButton(onClick = onEdit) {
+                            Icon(
+                                Icons.Default.Edit, "설명 편집", tint = Color.White,
+                                modifier = Modifier.background(Color(0x66000000), CircleShape).padding(4.dp),
+                            )
+                        }
+                    }
+                    if (isAdmin) {
+                        IconButton(onClick = onDelete) {
+                            Icon(
+                                Icons.Default.Delete, "삭제", tint = Color.White,
+                                modifier = Modifier.background(Color(0x66000000), CircleShape).padding(4.dp),
+                            )
+                        }
+                    }
+                }
             }
-            // 하단 버튼: 안 썼으면 "사용"(누르면 사용완료), 썼으면 "사용완료"(누른 본인만 다시 눌러 취소).
+            // 하단 버튼: 안 썼으면 "사용", 썼으면 "사용완료"(누른 본인만 다시 눌러 취소).
             val label = if (used) "사용완료" else "사용"
             val btnColor = if (used) Color(0xFF868E96) else Color(0xFF0CA678)
             Box(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(btnColor)
+                Modifier.fillMaxWidth().background(btnColor)
                     .let { if (!used || canCancel) it.clickable { onToggleUsed() } else it }
                     .padding(vertical = 9.dp),
                 Alignment.Center,
