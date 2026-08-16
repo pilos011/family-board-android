@@ -431,11 +431,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** 홈 '그날의 추억' 사진 탭 → 가족 앨범 화면에서 그 사진 뷰어 자동 열기. AlbumScreen(가족) 이 관찰 후 clear. */
-    val pendingOpenAlbumPhoto = MutableStateFlow<String?>(null)
-    fun requestOpenAlbumPhoto(id: String) { pendingOpenAlbumPhoto.value = id }
-    fun clearOpenAlbumPhoto() { pendingOpenAlbumPhoto.value = null }
-
     // 리스트 화면 사진첩 카드 개수 — count 쿼리(전체 로드 없이).
     private val _albumCount = kotlinx.coroutines.flow.MutableStateFlow(0)
     val albumCountFlow: StateFlow<Int> = _albumCount

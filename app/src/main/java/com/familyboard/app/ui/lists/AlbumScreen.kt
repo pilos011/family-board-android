@@ -309,7 +309,7 @@ private fun dateTimeLabelOf(it: ListItem): String = runCatching {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit) {
+fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, openPhotoId: String? = null, onBack: () -> Unit) {
     val albumBoard = if (isPrivate) AlbumBoard.PRIVATE else AlbumBoard.BOARD
     val tagBoard = if (isPrivate) AlbumBoard.TAG_BOARD_PRIVATE else AlbumBoard.TAG_BOARD
     val screenTitle = if (isPrivate) AlbumBoard.TITLE_PRIVATE else AlbumBoard.TITLE
@@ -323,14 +323,15 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit
     LaunchedEffect(isPrivate, me) { vm.refreshAlbum(if (isPrivate) AlbumBoard.PRIVATE else AlbumBoard.BOARD) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf<ListItem?>(null) }
-    // 홈 '그날의 추억' 사진 탭 → 가족 앨범에서 그 사진 뷰어 자동 열기(로드되면 열고 대기 해제).
-    if (!isPrivate) {
-        val pendingPhoto by vm.pendingOpenAlbumPhoto.collectAsStateWithLifecycle()
-        LaunchedEffect(pendingPhoto, items) {
-            val id = pendingPhoto ?: return@LaunchedEffect
-            if (items?.any { it.id == id } == true) { selectedId = id; vm.clearOpenAlbumPhoto() }
-            // 아직 로드 안 됐으면 items 갱신(페이지 누적)마다 재실행되어 열린다.
+    // 홈 '그날의 추억' 사진 탭 → 그 사진 id 를 내비 인자(openPhotoId)로 받아 뷰어 자동 열기.
+    // 화면 인스턴스당 딱 1번만 연다(닫은 뒤 items 갱신으로 재오픈되지 않게). 이동 때마다 새 화면이라 매번 열림.
+    var openedFromArg by remember { mutableStateOf(false) }
+    LaunchedEffect(openPhotoId, items) {
+        val id = openPhotoId ?: return@LaunchedEffect
+        if (!isPrivate && !openedFromArg && items?.any { it.id == id } == true) {
+            selectedId = id; openedFromArg = true
         }
+        // 아직 로드 안 됐으면 items 갱신(페이지 누적)마다 재실행되어 열린다.
     }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

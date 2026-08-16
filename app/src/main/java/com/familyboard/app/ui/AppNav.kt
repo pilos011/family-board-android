@@ -77,7 +77,9 @@ private object Routes {
     const val MYFUN = "myfun"
     const val RECIPE = "recipe"
     const val DOCS = "docs"
-    const val ALBUM = "album"
+    const val ALBUM = "album"                     // 사진첩(인자 없이 이동)
+    const val ALBUM_ROUTE = "album?photo={photo}" // 컴포저블 등록용(사진 인자 선택). "album" 도 이 라우트에 매칭
+    fun album(photoId: String) = "album?photo=$photoId" // 특정 사진 뷰어를 바로 여는 이동(홈 '그날의 추억')
     const val MYALBUM = "myalbum"
     const val COUPON = "coupon"
     const val DDAY = "dday"
@@ -220,7 +222,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenDday = { nav.navigate(Routes.DDAY) },
                     onOpenNotice = { nav.navigate(Routes.listDetail("notice")) },
                     canManageNotice = isParent,
-                    onOpenMemory = { id -> vm.requestOpenAlbumPhoto(id); nav.navigate(Routes.ALBUM) },
+                    onOpenMemory = { id -> nav.navigate(Routes.album(id)) },
                 )
             }
             composable(Routes.CALENDAR) {
@@ -265,8 +267,17 @@ private fun MainScaffold(vm: AppViewModel) {
             composable(Routes.DOCS) {
                 DocListScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
-            composable(Routes.ALBUM) {
-                com.familyboard.app.ui.lists.AlbumScreen(vm = vm, isPrivate = false, onBack = { nav.popBackStack() })
+            composable(
+                Routes.ALBUM_ROUTE,
+                arguments = listOf(androidx.navigation.navArgument("photo") {
+                    type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null
+                }),
+            ) { entry ->
+                com.familyboard.app.ui.lists.AlbumScreen(
+                    vm = vm, isPrivate = false,
+                    openPhotoId = entry.arguments?.getString("photo"), // 홈 추억에서 온 경우 그 사진 뷰어 자동 열기
+                    onBack = { nav.popBackStack() },
+                )
             }
             composable(Routes.MYALBUM) {
                 com.familyboard.app.ui.lists.AlbumScreen(vm = vm, isPrivate = true, onBack = { nav.popBackStack() })
