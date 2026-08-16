@@ -82,6 +82,7 @@ class InMemoryBoardRepository : BoardRepository {
                         "createdBy" -> x.copy(createdBy = v as String)
                         "checked" -> x.copy(checked = v as Boolean)
                         "checkedAt" -> x.copy(checkedAt = (v as Number).toLong())
+                        "usedBy" -> x.copy(usedBy = v as String)
                         else -> x
                     }
                 }

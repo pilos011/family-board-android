@@ -79,6 +79,7 @@ private object Routes {
     const val DOCS = "docs"
     const val ALBUM = "album"
     const val MYALBUM = "myalbum"
+    const val COUPON = "coupon"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -246,6 +247,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenDocs = { nav.navigate(Routes.DOCS) },
                     onOpenAlbum = { nav.navigate(Routes.ALBUM) },
                     onOpenMyAlbum = { nav.navigate(Routes.MYALBUM) },
+                    onOpenCoupon = { nav.navigate(Routes.COUPON) },
                 )
             }
             composable(Routes.FUN) {
@@ -268,6 +270,9 @@ private fun MainScaffold(vm: AppViewModel) {
             }
             composable(Routes.MYALBUM) {
                 com.familyboard.app.ui.lists.AlbumScreen(vm = vm, isPrivate = true, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.COUPON) {
+                com.familyboard.app.ui.lists.CouponScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.PLACE) { entry ->
                 PlaceListScreen(

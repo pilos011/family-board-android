@@ -419,6 +419,15 @@ fun FunListScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("요리 레시피로 이동") }
+                        // 가족 쿠폰함으로 '이동'(원본 여기서 빠짐, 요리 레시피와 동일 방식)
+                        TextButton(
+                            onClick = {
+                                vm.moveFunTo(it0, com.familyboard.app.data.model.CouponBoard.BOARD)
+                                loaded = loaded.filterNot { it.id == it0.id } // 낙관적 제거
+                                Toast.makeText(context, "가족 쿠폰함으로 옮겼어요", Toast.LENGTH_SHORT).show(); actionItem = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("🎟️ 가족 쿠폰함으로 이동") }
                     }
                     // 가족에게 공유: 선택한 가족에게 알림 → 받는 사람이 탭하면 이 항목이 열림
                     TextButton(

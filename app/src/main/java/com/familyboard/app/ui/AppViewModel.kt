@@ -162,6 +162,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.DocBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
 
+    // 가족 쿠폰함(문자·링크·이미지 쿠폰). 항목 적어 실시간 전체 조회. null=로딩 전, 빈=없음.
+    val couponItems: StateFlow<List<ListItem>?> =
+        board.items(com.familyboard.app.data.model.CouponBoard.BOARD)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
+
+    /** 쿠폰 사용완료 토글: 미사용→사용완료(본인 기록). 이미 사용완료면 '누른 본인만' 취소 가능(남 것은 무동작). */
+    fun toggleCouponUsed(item: ListItem) = viewModelScope.launch {
+        val me = currentMemberId.value.orEmpty()
+        if (me.isBlank()) return@launch
+        runCatching {
+            // checkedAt 는 쓰지 않음 — 장보기 3일 자동삭제 스윕(board=shopping)과 무관하게 유지.
+            if (!item.checked) {
+                board.updateFields(item.id, mapOf("checked" to true, "usedBy" to me))
+            } else if (item.usedBy == me) {
+                board.updateFields(item.id, mapOf("checked" to false, "usedBy" to ""))
+            }
+        }
+    }
+
     // 가족/내 사진첩 — Firestore 대신 Postgres(notify REST). 페이지 누적 로드(전량 리스너 아님 → 읽기 급증 방지).
     // null=로딩 전(스피너), 빈 리스트=없음. 화면 진입 시 refreshAlbum() 으로 채운다.
     private val _albumItems = kotlinx.coroutines.flow.MutableStateFlow<List<ListItem>?>(null)
@@ -816,7 +835,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 재미진 곳/내 재미진 곳 항목을 다른 보드로 '이동'(복사 아님 — 같은 항목의 board 만 변경). 요리법 이동에 사용. */
     fun moveFunTo(item: ListItem, targetBoard: String) = viewModelScope.launch {
         // 같은 id 유지 → board 변경 = 이동. createdAt 을 now 로 갱신해 대상 목록 최상단에.
-        runCatching { board.upsertItem(item.copy(board = targetBoard, createdAt = System.currentTimeMillis())) }
+        // 사용상태(checked/usedBy/checkedAt) 초기화 — 쿠폰함으로 옮길 때 '사용완료'가 딸려오지 않게.
+        runCatching {
+            board.upsertItem(item.copy(
+                board = targetBoard, createdAt = System.currentTimeMillis(),
+                checked = false, usedBy = "", checkedAt = 0,
+            ))
+        }
         bumpFunRefresh()
     }
 

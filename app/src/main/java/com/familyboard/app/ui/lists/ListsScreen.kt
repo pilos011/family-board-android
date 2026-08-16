@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FolderShared
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Place
@@ -90,6 +91,7 @@ fun ListsScreen(
     onOpenDocs: () -> Unit,
     onOpenAlbum: () -> Unit,
     onOpenMyAlbum: () -> Unit,
+    onOpenCoupon: () -> Unit = {},
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
@@ -105,6 +107,8 @@ fun ListsScreen(
     val albumCount by vm.albumCountFlow.collectAsStateWithLifecycle()
     val myAlbumCount by vm.myAlbumCountFlow.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.loadAlbumCounts() }
+    val coupons by vm.couponItems.collectAsStateWithLifecycle()
+    val couponCount = coupons?.count { !it.checked } ?: 0 // 아직 안 쓴 쿠폰 수
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
     val customLists by vm.customLists.collectAsStateWithLifecycle()
@@ -148,7 +152,17 @@ fun ListsScreen(
                 )
             }
             Spacer(Modifier.height(16.dp))
-            DDayWideCard(onClick = onOpenDday)
+            // D-Day를 가족 사진 카드 크기(반쪽)로 축소하고 오른쪽에 가족 쿠폰함 카드.
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AlbumHalfCard(
+                    "D-Day", "기념일·생일 카운트다운",
+                    Color(0xFF5C7CFA), Icons.Default.HourglassBottom, Modifier.weight(1f), onOpenDday,
+                )
+                AlbumHalfCard(
+                    "가족 쿠폰함", if (couponCount > 0) "쿠폰 ${couponCount}장" else "쿠폰 모으기",
+                    Color(0xFF0CA678), Icons.Default.ConfirmationNumber, Modifier.weight(1f), onOpenCoupon,
+                )
+            }
 
             // 내가 만든 나만의 체크리스트
             myLists.forEach { list ->
@@ -280,33 +294,6 @@ private fun AlbumHalfCard(
             }
             Spacer(Modifier.weight(1f))
             Text(subtitle, color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp, maxLines = 1)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DDayWideCard(onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(96.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF5C7CFA)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-    ) {
-        Row(
-            Modifier.fillMaxSize().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("D-Day", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "기념일·생일 카운트다운",
-                    color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.Medium,
-                )
-            }
-            Icon(Icons.Default.HourglassBottom, null, tint = Color.White, modifier = Modifier.height(44.dp))
         }
     }
 }

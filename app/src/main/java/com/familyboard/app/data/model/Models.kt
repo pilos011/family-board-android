@@ -72,6 +72,7 @@ data class ListItem(
     val fileMime: String = "",     // 문서함: MIME 타입(열기용)
     val fileSize: Long = 0,        // 문서함: 파일 크기(bytes)
     val checkedAt: Long = 0,       // 체크된 시각(epoch millis). 장보기 체크 항목 3일 후 자동삭제 판정용(미체크=0)
+    val usedBy: String = "",       // 가족 쿠폰함: '사용완료' 누른 멤버 id(빈값=미사용). checked=true 와 함께 세팅, 이 사람만 취소 가능
     // 댓글은 progress(ProgressNote: text/by/dateIso)를 재사용
     // 파싱 요약(종목·별점·영업시간)은 description 을 재사용
     // 문서함 열람 대상은 memberIds 를 재사용(["all"]=모두, 지정 시 해당 멤버만)
@@ -120,6 +121,16 @@ object FunBoard {
         RECIPE -> TITLE_RECIPE
         else -> TITLE
     }
+}
+
+/** 가족 쿠폰함: 문자·링크·이미지로 공유된 쿠폰을 모아 가족이 사용. 재미진 곳/내 재미진 곳에서
+ *  롱클릭 '가족 쿠폰함으로 이동'으로 들어옴(요리 레시피 방식). photoUrls[0]=이미지, link=링크, text=제목/코드.
+ *  checked=사용완료(회색 흐림·탭 불가), usedBy=사용완료 누른 멤버(그 사람만 취소 가능). */
+object CouponBoard {
+    const val BOARD = "coupon"
+    const val TITLE = "가족 쿠폰함"
+    val admins = setOf("seonil", "eunseon") // 선일·은선: 쿠폰 삭제 권한
+    fun canDelete(memberId: String?): Boolean = memberId != null && memberId in admins
 }
 
 /**
