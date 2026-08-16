@@ -195,8 +195,8 @@ private fun CouponCard(
                     )
                 }
             }
-            // 하단 사용완료/취소 버튼 (흐림 위에 그려 항상 조작 가능)
-            val label = when { !used -> "사용완료"; canCancel -> "사용 취소"; else -> "사용됨" }
+            // 하단 버튼: 안 썼으면 "사용"(누르면 사용완료), 썼으면 "사용완료"(누른 본인만 다시 눌러 취소).
+            val label = if (used) "사용완료" else "사용"
             val btnColor = if (used) Color(0xFF868E96) else Color(0xFF0CA678)
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(btnColor)
