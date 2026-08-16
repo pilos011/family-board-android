@@ -152,6 +152,16 @@ private fun MainScaffold(vm: AppViewModel) {
     val pendingOpenUpdate by vm.pendingOpenUpdate.collectAsStateWithLifecycle()
     LaunchedEffect(pendingOpenUpdate) { if (pendingOpenUpdate) nav.navigateShare(Routes.HOME) }
 
+    // 용돈 미션(업데이트 챌린지) 성공: 용돈 화면으로 이동 + 성공 토스트.
+    val challengeSuccess by vm.pendingChallengeSuccess.collectAsStateWithLifecycle()
+    LaunchedEffect(challengeSuccess) {
+        if (challengeSuccess) {
+            nav.navigateShare(Routes.ALLOWANCE)
+            Toast.makeText(context, "업데이트 챌린지 성공! 🎉", Toast.LENGTH_LONG).show()
+            vm.clearChallengeSuccess()
+        }
+    }
+
     Scaffold(
         bottomBar = {
             if (showBar) {

@@ -31,6 +31,10 @@ object Family {
 
     fun byId(id: String?): Member? = members.firstOrNull { it.id == id }
 
+    /** 자녀(용돈 대상) = 준영·준호. 부모(선일·은선)와 구분. */
+    fun isChild(id: String?): Boolean = id == "junyoung" || id == "junho"
+    val children: List<Member> = members.filter { isChild(it.id) }
+
     fun colorOf(id: String?): Color = when (id) {
         DDAY_ID -> ddayColor
         ALL_ID, null -> allColor

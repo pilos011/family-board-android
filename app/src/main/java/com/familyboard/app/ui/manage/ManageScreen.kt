@@ -80,6 +80,7 @@ fun ManageScreen(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var confirmUpdate by remember { mutableStateOf<Member?>(null) }
+    var confirmChallenge by remember { mutableStateOf<Member?>(null) }
     Column(
         modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
     ) {
@@ -120,6 +121,33 @@ fun ManageScreen(
                 }
             },
         )
+        Spacer(Modifier.height(20.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text("🎮 용돈 미션 챌린지", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "아이가 앱을 최신으로 업데이트하면 용돈 2,000원을 지급해요. 이름 옆 '진행'을 누르면 알림이 갑니다.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+                Spacer(Modifier.height(8.dp))
+                Family.children.forEach { m ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(m.name, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { confirmChallenge = m }) {
+                            Text("진행 ›", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     confirmUpdate?.let { m ->
@@ -135,6 +163,22 @@ fun ManageScreen(
                 }) { Text("보내기") }
             },
             dismissButton = { TextButton(onClick = { confirmUpdate = null }) { Text("취소") } },
+        )
+    }
+
+    confirmChallenge?.let { m ->
+        AlertDialog(
+            onDismissRequest = { confirmChallenge = null },
+            title = { Text("용돈 미션 챌린지") },
+            text = { Text("${m.name}님에게 '앱 업데이트 하면 즉시 용돈 2,000원' 미션 알림을 보낼까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.sendUpdateChallenge(m.id)
+                    Toast.makeText(ctx, "${m.name}님에게 용돈 미션 알림을 보냈어요", Toast.LENGTH_SHORT).show()
+                    confirmChallenge = null
+                }) { Text("보내기") }
+            },
+            dismissButton = { TextButton(onClick = { confirmChallenge = null }) { Text("취소") } },
         )
     }
 }

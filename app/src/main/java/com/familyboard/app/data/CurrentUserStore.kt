@@ -1,12 +1,19 @@
 package com.familyboard.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+
+/** 진행 중인 '앱 업데이트 챌린지'(아이가 수락 후 업데이트하면 용돈 지급).
+ *  fromVersion=수락 시점 버전(이보다 오르면 완료), acceptedAt=수락 시각(오래되면 만료). */
+data class UpdateChallenge(val fromVersion: Int, val reward: Int, val acceptedAt: Long)
 
 private val Context.dataStore by preferencesDataStore(name = "family_board_prefs")
 
@@ -47,4 +54,31 @@ class CurrentUserStore(private val context: Context) {
     suspend fun setHomeBackground(v: String) {
         context.dataStore.edit { it[keyHomeBg] = v }
     }
+
+    // 앱 업데이트 챌린지: 아이가 알림 수락 시 저장 → 앱 업데이트(재설치) 후에도 남아, 새 버전이
+    // fromVersion 보다 높으면 '수행완료'로 판정해 용돈 지급. DataStore 는 앱 업데이트를 넘어 보존됨.
+    private val keyChPending = booleanPreferencesKey("upd_challenge_pending")
+    private val keyChFromVer = intPreferencesKey("upd_challenge_from_ver")
+    private val keyChReward = intPreferencesKey("upd_challenge_reward")
+    private val keyChAcceptedAt = longPreferencesKey("upd_challenge_accepted_at")
+
+    suspend fun setUpdateChallenge(fromVersion: Int, reward: Int, acceptedAt: Long) {
+        context.dataStore.edit {
+            it[keyChPending] = true; it[keyChFromVer] = fromVersion
+            it[keyChReward] = reward; it[keyChAcceptedAt] = acceptedAt
+        }
+    }
+    suspend fun clearUpdateChallenge() {
+        context.dataStore.edit {
+            it.remove(keyChPending); it.remove(keyChFromVer); it.remove(keyChReward); it.remove(keyChAcceptedAt)
+        }
+    }
+    /** 현재 저장된 챌린지(없으면 null). 1회 조회. */
+    suspend fun updateChallengeOnce(): UpdateChallenge? {
+        val p = context.dataStore.data.first()
+        return if (p[keyChPending] == true)
+            UpdateChallenge(p[keyChFromVer] ?: 0, p[keyChReward] ?: 0, p[keyChAcceptedAt] ?: 0L) else null
+    }
+    /** 본인 멤버 id 1회 조회(init 시 StateFlow 가 아직 비어도 확실히 읽기 위함). */
+    suspend fun currentMemberOnce(): String? = context.dataStore.data.first()[keyMemberId]
 }

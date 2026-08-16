@@ -1041,6 +1041,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             restaurantItems, visitItems, allowanceJunyoung, allowanceJunho,
         ).forEach { it.launchIn(viewModelScope) }
 
+        checkUpdateChallenge() // 앱 업데이트 챌린지: 업데이트 후 재시작 시 보상 지급 판정
+
         // 일정/담당자 변경 시 미리 알림 예약 동기화
         viewModelScope.launch {
             combine(events, currentMemberId) { evs, mid -> evs to mid }.collect { (evs, mid) ->
@@ -1126,6 +1128,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val pendingOpenUpdate = MutableStateFlow(false)
     fun requestOpenUpdate() { pendingOpenUpdate.value = true }
     fun clearOpenUpdate() { pendingOpenUpdate.value = false }
+
+    // ─────────── 앱 업데이트 챌린지(용돈 미션) ───────────
+    /** 관리자 → 아이에게 "업데이트 하면 용돈" 미션 알림(FCM). 탭 → 업데이트 → 완료 시 용돈 자동 지급. */
+    fun sendUpdateChallenge(memberId: String, reward: Int = 2000) = viewModelScope.launch {
+        val actor = currentMemberId.value.orEmpty()
+        val body = "앱 업데이트 하면 즉시 용돈 ${"%,d".format(reward)}원! 🎉\n이 알림을 누르면 바로 시작돼요."
+        runCatching {
+            NotifyApi.notifyData(
+                actor, listOf(memberId), "🎮 용돈 미션 챌린지!", body,
+                mapOf("type" to "updatechallenge", "reward" to reward.toString()),
+            )
+        }
+    }
+
+    /** 아이가 챌린지 알림을 탭했을 때: 수락 상태(현재 버전·보상)를 저장하고 업데이트 창을 띄운다.
+     *  DataStore 에 저장하므로 앱 업데이트(재설치) 후 새 버전이 checkUpdateChallenge 로 보상 지급. */
+    fun acceptUpdateChallenge(reward: Int) = viewModelScope.launch {
+        userStore.setUpdateChallenge(com.familyboard.app.BuildConfig.VERSION_CODE, reward, System.currentTimeMillis())
+        requestOpenUpdate()
+    }
+
+    /** 챌린지 성공 → 용돈 화면으로 이동 + 토스트 대기. AppNav 가 관찰 후 clear. */
+    val pendingChallengeSuccess = MutableStateFlow(false)
+    fun clearChallengeSuccess() { pendingChallengeSuccess.value = false }
+
+    /** 앱 시작 시(=업데이트 후 재시작 포함) 챌린지 완료 판정. 버전이 수락 시점보다 올랐으면
+     *  본인 용돈에 '수행완료' 항목+보상 추가 후 용돈 화면 이동/토스트. 중복 지급 방지로 먼저 clear. */
+    private fun checkUpdateChallenge() = viewModelScope.launch {
+        val ch = userStore.updateChallengeOnce() ?: return@launch
+        // 만료: 수락 후 14일 지나도록 완료 안 됐으면 폐기(무관한 미래 업데이트에 지급되는 것 방지).
+        if (ch.acceptedAt > 0L && System.currentTimeMillis() - ch.acceptedAt > 14L * 24 * 3600 * 1000) {
+            userStore.clearUpdateChallenge(); return@launch
+        }
+        if (com.familyboard.app.BuildConfig.VERSION_CODE <= ch.fromVersion) return@launch // 아직 업데이트 전 → 대기 유지
+        val meId = userStore.currentMemberOnce().orEmpty()
+        if (meId.isBlank()) return@launch // 본인 미선택 → 다음 실행에 처리(대기 유지)
+        if (!Family.isChild(meId)) { userStore.clearUpdateChallenge(); return@launch }
+        val allowBoard = "allowance_$meId"
+        val today = java.time.LocalDate.now()
+        // ⚠️ 지급을 먼저(성공 확인) 하고 나서 정리·성공표시. 실패 시 플래그 유지 → 다음 실행에 재시도.
+        //    id 를 결정적으로 줘서 set 재시도해도 같은 문서 덮어쓰기(중복 지급 없음).
+        val ok = runCatching {
+            board.upsertItem(
+                ListItem(
+                    id = "updchallenge_${meId}_${ch.fromVersion}",
+                    text = "${today.monthValue}월 ${today.dayOfMonth}일 - 앱 업데이트 챌린지 수행완료!",
+                    board = allowBoard, createdBy = meId, amount = ch.reward.toLong(), checked = false,
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+        }.isSuccess
+        if (ok) {
+            userStore.clearUpdateChallenge()
+            pendingChallengeSuccess.value = true // 용돈 화면 이동 + 성공 토스트
+        }
+    }
 
     fun itemsFor(boardKey: String): StateFlow<List<ListItem>> = when (boardKey) {
         BoardType.TODO.key -> todoItems

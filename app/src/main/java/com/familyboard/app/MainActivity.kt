@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_FUN = "open_fun_item"
         /** 업데이트 요청 알림 탭 시 업데이트 창 자동 표시. */
         const val EXTRA_OPEN_UPDATE = "open_update"
+        /** 용돈 미션(업데이트 챌린지) 알림 탭 시 보상 금액(원). >0 이면 챌린지 수락. */
+        const val EXTRA_UPDATE_CHALLENGE = "update_challenge_reward"
     }
 
     // 시스템 글자 크기(폰트 스케일)와 무관하게 앱 내부는 항상 '기본(1.0)'으로 강제.
@@ -93,6 +95,10 @@ class MainActivity : ComponentActivity() {
         intent?.getStringExtra(EXTRA_WIDGET_NAV)?.takeIf { it.isNotBlank() }?.let { vm.requestWidgetNav(it) }
         intent?.getStringExtra(EXTRA_OPEN_FUN)?.takeIf { it.isNotBlank() }?.let { vm.requestOpenSharedFun(it) }
         if (intent?.getBooleanExtra(EXTRA_OPEN_UPDATE, false) == true) vm.requestOpenUpdate()
+        intent?.getIntExtra(EXTRA_UPDATE_CHALLENGE, -1)?.takeIf { it > 0 }?.let {
+            vm.acceptUpdateChallenge(it)
+            intent?.removeExtra(EXTRA_UPDATE_CHALLENGE) // 재생성 시 재실행 방지
+        }
     }
 
     /** '공유 → 가족 알림판'으로 들어온 텍스트/이미지/영상/파일 처리. */

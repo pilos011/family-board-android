@@ -66,6 +66,11 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 title = data["title"] ?: "앱 업데이트 안내",
                 body = data["body"] ?: "",
             )
+            "updatechallenge" -> showUpdateChallenge(
+                title = data["title"] ?: "🎮 용돈 미션 챌린지!",
+                body = data["body"] ?: "앱 업데이트 하면 즉시 용돈을 받아요!",
+                reward = ((data["reward"] ?: "").toIntOrNull() ?: 0).let { if (it > 0) it else 2000 }, // 누락·오류 시 기본 2000
+            )
             else -> {
                 val n = message.notification
                 val title = n?.title ?: data["title"] ?: "가족보드"
@@ -172,6 +177,28 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setContentIntent(pi)
             .build()
         if (canNotify()) NotificationManagerCompat.from(this).notify("updatereq".hashCode(), notif)
+    }
+
+    // ─────────── 용돈 미션(업데이트 챌린지): 탭하면 업데이트 시작 + 완료 시 용돈 지급 ───────────
+    private fun showUpdateChallenge(title: String, body: String, reward: Int) {
+        ReminderScheduler.ensureChannel(this)
+        val open = Intent(this, com.familyboard.app.MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(com.familyboard.app.MainActivity.EXTRA_UPDATE_CHALLENGE, reward)
+        }
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(this, "updatechallenge".hashCode(), open, flags)
+        val notif = NotificationCompat.Builder(this, ReminderScheduler.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        if (canNotify()) NotificationManagerCompat.from(this).notify("updatechallenge".hashCode(), notif)
     }
 
     // ─────────── 일반 알림 ───────────
