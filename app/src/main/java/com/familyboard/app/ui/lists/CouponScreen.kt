@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.familyboard.app.data.Family
 import com.familyboard.app.data.model.CouponBoard
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
@@ -203,10 +204,13 @@ private fun CouponCard(
                         )
                     }
                 }
-                // 사용완료: 회색 흐림(아이콘보다 먼저 그려 아이콘이 위로)
+                // 사용완료: 회색 흐림 + 사용한 사람(아이콘보다 먼저 그려 아이콘이 위로)
                 if (used) {
-                    Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)), Alignment.Center) {
-                        Text("사용완료", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)).padding(8.dp), Alignment.Center) {
+                        Text(
+                            if (item.usedBy.isNotBlank()) "사용완료 - ${Family.nameOf(item.usedBy)}" else "사용완료",
+                            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1,
+                        )
                     }
                 }
                 // 이미지+링크 & 설명 없음: 좌상단 🔗 배지(탭하면 링크 열림 표시).
