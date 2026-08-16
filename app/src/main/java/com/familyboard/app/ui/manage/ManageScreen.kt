@@ -1,6 +1,8 @@
 package com.familyboard.app.ui.manage
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,7 +84,8 @@ fun ManageScreen(
     var confirmUpdate by remember { mutableStateOf<Member?>(null) }
     var confirmChallenge by remember { mutableStateOf<Member?>(null) }
     Column(
-        modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
+        modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState()).padding(20.dp),
     ) {
         Text("관리 기능", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(6.dp))
