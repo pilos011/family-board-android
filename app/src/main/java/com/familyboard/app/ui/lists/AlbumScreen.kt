@@ -323,16 +323,9 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, openPhotoId: Strin
     LaunchedEffect(isPrivate, me) { vm.refreshAlbum(if (isPrivate) AlbumBoard.PRIVATE else AlbumBoard.BOARD) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf<ListItem?>(null) }
-    // 홈 '그날의 추억' 사진 탭 → 그 사진 id 를 내비 인자(openPhotoId)로 받아 뷰어 자동 열기.
-    // 화면 인스턴스당 딱 1번만 연다(닫은 뒤 items 갱신으로 재오픈되지 않게). 이동 때마다 새 화면이라 매번 열림.
+    // 홈 '그날의 추억' 사진 탭 → openPhotoId 로 그 사진 뷰어 자동 열기 + 그 사진의 월 헤더로 그리드 스크롤
+    // (닫고 돌아오면 그 년/월이 상단에 보이게). 화면 인스턴스당 1회만. 실제 처리는 flat/gridState 선언 뒤 이펙트.
     var openedFromArg by remember { mutableStateOf(false) }
-    LaunchedEffect(openPhotoId, items) {
-        val id = openPhotoId ?: return@LaunchedEffect
-        if (!isPrivate && !openedFromArg && items?.any { it.id == id } == true) {
-            selectedId = id; openedFromArg = true
-        }
-        // 아직 로드 안 됐으면 items 갱신(페이지 누적)마다 재실행되어 열린다.
-    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -343,6 +336,19 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, openPhotoId: Strin
     val sortedAll = remember(items) { (items ?: emptyList()).sortedByDescending { capMillis(it) } }
     val flat = remember(sortedAll) { buildAlbumFlat(sortedAll) }
     val albumGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    // 추억(openPhotoId): 사진이 로드되면 그 사진의 '월 헤더'로 그리드를 스크롤한 뒤 뷰어를 연다(1회).
+    // 뷰어 뒤에서 미리 스크롤 → 닫고 돌아오면 그 년/월이 상단에 와 있음. 로드 전엔 flat 갱신 때 재시도.
+    LaunchedEffect(openPhotoId, flat) {
+        val id = openPhotoId ?: return@LaunchedEffect
+        if (isPrivate || openedFromArg) return@LaunchedEffect
+        val photoIdx = flat.indexOfFirst { it is AlbumEntry.Photo && it.item.id == id }
+        if (photoIdx >= 0) {
+            val headerIdx = (photoIdx downTo 0).firstOrNull { flat[it] is AlbumEntry.Header } ?: photoIdx
+            albumGridState.scrollToItem(headerIdx)
+            selectedId = id
+            openedFromArg = true
+        }
+    }
 
     // 앱 자체 사진 그리드(최근순·스크롤 위치 기억·다중선택). 외부 갤러리/문서앱은 열 때마다 위치가
     // 초기화되고 앨범을 다시 골라야 해서, 앱 안에서 직접 그리드로 고르게 한다.
