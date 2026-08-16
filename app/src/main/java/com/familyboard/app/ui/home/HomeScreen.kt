@@ -152,7 +152,7 @@ fun HomeScreen(
     onOpenDday: () -> Unit,
     onOpenNotice: () -> Unit,
     canManageNotice: Boolean,
-    onOpenAlbum: () -> Unit = {},
+    onOpenMemory: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val notices by vm.noticeItems.collectAsStateWithLifecycle()
@@ -331,7 +331,7 @@ fun HomeScreen(
                 item {
                     SectionLabel("📸 오늘, 그날의 추억")
                     Spacer(Modifier.height(8.dp))
-                    MemoriesRow(memories = memories, onOpenAlbum = onOpenAlbum)
+                    MemoriesRow(memories = memories, onOpenMemory = onOpenMemory)
                     Spacer(Modifier.height(26.dp))
                 }
             }
@@ -491,7 +491,7 @@ private fun UpdateBell(onClick: () -> Unit) {
 
 /** N년 전 오늘의 사진 가로 스크롤. 각 타일 좌상단에 "N년 전" 배지, 탭하면 사진첩으로 이동. */
 @Composable
-private fun MemoriesRow(memories: List<Pair<Int, ListItem>>, onOpenAlbum: () -> Unit) {
+private fun MemoriesRow(memories: List<Pair<Int, ListItem>>, onOpenMemory: (String) -> Unit) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(memories) { (yearsAgo, itm) ->
             val url = itm.photoUrls.firstOrNull().orEmpty()
@@ -499,7 +499,7 @@ private fun MemoriesRow(memories: List<Pair<Int, ListItem>>, onOpenAlbum: () -> 
             Box(
                 Modifier.size(120.dp).shadow(4.dp, RoundedCornerShape(12.dp))
                     .clip(RoundedCornerShape(12.dp)).background(Color(0xFFF1F3F5))
-                    .clickable { onOpenAlbum() },
+                    .clickable { onOpenMemory(itm.id) },
             ) {
                 AsyncImage(model = thumb, contentDescription = null,
                     modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)

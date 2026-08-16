@@ -323,6 +323,15 @@ fun AlbumScreen(vm: AppViewModel, isPrivate: Boolean = false, onBack: () -> Unit
     LaunchedEffect(isPrivate, me) { vm.refreshAlbum(if (isPrivate) AlbumBoard.PRIVATE else AlbumBoard.BOARD) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf<ListItem?>(null) }
+    // 홈 '그날의 추억' 사진 탭 → 가족 앨범에서 그 사진 뷰어 자동 열기(로드되면 열고 대기 해제).
+    if (!isPrivate) {
+        val pendingPhoto by vm.pendingOpenAlbumPhoto.collectAsStateWithLifecycle()
+        LaunchedEffect(pendingPhoto, items) {
+            val id = pendingPhoto ?: return@LaunchedEffect
+            if (items?.any { it.id == id } == true) { selectedId = id; vm.clearOpenAlbumPhoto() }
+            // 아직 로드 안 됐으면 items 갱신(페이지 누적)마다 재실행되어 열린다.
+        }
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 

@@ -219,7 +219,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenDday = { nav.navigate(Routes.DDAY) },
                     onOpenNotice = { nav.navigate(Routes.listDetail("notice")) },
                     canManageNotice = isParent,
-                    onOpenAlbum = { nav.navigate(Routes.ALBUM) },
+                    onOpenMemory = { id -> vm.requestOpenAlbumPhoto(id); nav.navigate(Routes.ALBUM) },
                 )
             }
             composable(Routes.CALENDAR) {
