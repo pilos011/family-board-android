@@ -127,6 +127,34 @@ object NotifyApi {
         }
     }
 
+    data class GPlace(val name: String, val lat: Double, val lng: Double, val link: String)
+
+    /** 구글 지도 공유 링크에서 장소명·좌표 파싱(서버 위임, 리다이렉트 추적). 실패 시 null. 여행 위시리스트용. */
+    suspend fun parseGooglePlace(url: String): GPlace? {
+        if (!enabled() || url.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val conn = (URL("$base/gplace/parse").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; connectTimeout = 10000; readTimeout = 15000; doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    if (secret.isNotBlank()) setRequestProperty("X-FB-Key", secret)
+                }
+                conn.outputStream.use { it.write(JSONObject().put("url", url).toString().toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code !in 200..299) return@runCatching null
+                val o = JSONObject(text)
+                GPlace(
+                    name = o.optString("name"),
+                    lat = if (o.isNull("lat")) 0.0 else o.optDouble("lat"),
+                    lng = if (o.isNull("lng")) 0.0 else o.optDouble("lng"),
+                    link = o.optString("link", url),
+                )
+            }.onFailure { Log.w(TAG, "parseGooglePlace 실패", it) }.getOrNull()
+        }
+    }
+
     /** 유튜브/웹 링크에서 제목·썸네일(og) 파싱(서버 위임). 실패 시 null. */
     suspend fun parseLink(url: String): LinkInfo? {
         if (!enabled() || url.isBlank()) return null

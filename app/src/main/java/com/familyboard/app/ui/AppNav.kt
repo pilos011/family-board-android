@@ -82,6 +82,7 @@ private object Routes {
     fun album(photoId: String) = "album?photo=$photoId" // 특정 사진 뷰어를 바로 여는 이동(홈 '그날의 추억')
     const val MYALBUM = "myalbum"
     const val COUPON = "coupon"
+    const val TRAVEL = "travel"
     const val DDAY = "dday"
     const val BUCKET_HOME = "bucketHome"
     const val BUCKET_LIST = "bucketList"
@@ -250,6 +251,7 @@ private fun MainScaffold(vm: AppViewModel) {
                     onOpenAlbum = { nav.navigate(Routes.ALBUM) },
                     onOpenMyAlbum = { nav.navigate(Routes.MYALBUM) },
                     onOpenCoupon = { nav.navigate(Routes.COUPON) },
+                    onOpenTravel = { nav.navigate(Routes.TRAVEL) },
                 )
             }
             composable(Routes.FUN) {
@@ -284,6 +286,9 @@ private fun MainScaffold(vm: AppViewModel) {
             }
             composable(Routes.COUPON) {
                 com.familyboard.app.ui.lists.CouponScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
+            }
+            composable(Routes.TRAVEL) {
+                com.familyboard.app.ui.lists.TravelScreen(vm = vm, currentMemberId = currentMemberId, onBack = { nav.popBackStack() })
             }
             composable(Routes.PLACE) { entry ->
                 PlaceListScreen(
@@ -383,7 +388,19 @@ private fun MainScaffold(vm: AppViewModel) {
 
     // 네이버 플레이스 등에서 공유받았을 때: 맛집/가볼 곳 중 저장 위치 선택
     pendingShare?.let { sp ->
-        if (sp.isFun) {
+        if (sp.isTravel) {
+            val body = if (sp.loading) "구글 지도에서 정보 가져오는 중…"
+            else listOf(sp.name, if (sp.address.isNotBlank()) "📍 ${sp.address}" else "").filter { it.isNotBlank() }.joinToString("\n")
+            AlertDialog(
+                onDismissRequest = { vm.clearPendingShare() },
+                title = { Text("여행 위시리스트에 저장") },
+                text = { Text(body) },
+                confirmButton = {
+                    TextButton(enabled = !sp.loading, onClick = { vm.saveTravel(); nav.navigateShare(Routes.TRAVEL) }) { Text("저장") }
+                },
+                dismissButton = { TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") } },
+            )
+        } else if (sp.isFun) {
             val body = if (sp.loading) "정보 가져오는 중…" else sp.name
             AlertDialog(
                 onDismissRequest = { vm.clearPendingShare() },

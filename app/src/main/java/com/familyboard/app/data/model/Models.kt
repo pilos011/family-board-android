@@ -95,6 +95,17 @@ object DDayBoard {
     const val BOARD = "dday"
 }
 
+/** 여행 위시리스트: 구글 지도 공유로 담는 국내·해외 가볼 곳(네이버 가볼곳과 별도).
+ *  text=장소명, link=구글 지도 링크(열기용), address=주소, lat/lng=좌표, description=메모, checked=다녀옴. */
+object TravelBoard {
+    const val BOARD = "travel"
+    const val TITLE = "여행 위시리스트"
+    private val admins = setOf("seonil", "eunseon")
+    /** 편집·삭제: 담은 사람 본인 또는 부모(선일·은선). */
+    fun canManage(memberId: String?, item: ListItem): Boolean =
+        memberId != null && (memberId == item.createdBy || memberId in admins)
+}
+
 /** 장소 북마크 보드(맛집/가볼 곳). 링크·별점(0~5)·댓글 지원, 가족 공용. */
 object PlaceBoards {
     const val RESTAURANT = "restaurant"

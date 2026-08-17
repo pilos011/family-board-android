@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.HourglassBottom
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -92,6 +93,7 @@ fun ListsScreen(
     onOpenAlbum: () -> Unit,
     onOpenMyAlbum: () -> Unit,
     onOpenCoupon: () -> Unit = {},
+    onOpenTravel: () -> Unit = {},
 ) {
     val shopping by vm.shoppingItems.collectAsStateWithLifecycle()
     val todo by vm.todoItems.collectAsStateWithLifecycle()
@@ -109,6 +111,8 @@ fun ListsScreen(
     LaunchedEffect(Unit) { vm.loadAlbumCounts() }
     val coupons by vm.couponItems.collectAsStateWithLifecycle()
     val couponCount = coupons?.count { !it.checked } ?: 0 // 아직 안 쓴 쿠폰 수
+    val travels by vm.travelItems.collectAsStateWithLifecycle()
+    val travelCount = travels?.count { !it.checked } ?: 0 // 아직 안 가본 곳 수
     val showBucket = BucketLife.supports(currentMemberId)
     val spouse = BucketLife.spouseName(currentMemberId)
     val customLists by vm.customLists.collectAsStateWithLifecycle()
@@ -163,6 +167,11 @@ fun ListsScreen(
                     Color(0xFF0CA678), Icons.Default.ConfirmationNumber, Modifier.weight(1f), onOpenCoupon,
                 )
             }
+            Spacer(Modifier.height(16.dp))
+            AlbumHalfCard(
+                "여행 위시리스트", if (travelCount > 0) "가고 싶은 곳 ${travelCount}곳" else "구글 지도로 여행지 모으기",
+                Color(0xFF1098AD), Icons.Default.TravelExplore, Modifier.fillMaxWidth(), onOpenTravel,
+            )
 
             // 내가 만든 나만의 체크리스트
             myLists.forEach { list ->

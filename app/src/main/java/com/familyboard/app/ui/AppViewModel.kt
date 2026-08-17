@@ -54,7 +54,8 @@ data class SharedPlace(
     val lat: Double = 0.0,
     val lng: Double = 0.0,
     val loading: Boolean = false,
-    val isFun: Boolean = false, // true=재미진 곳(유튜브/웹/이미지/영상), false=장소(맛집/가볼곳)
+    val isFun: Boolean = false,    // true=재미진 곳(유튜브/웹/이미지/영상)
+    val isTravel: Boolean = false, // true=여행 위시리스트(구글 지도 공유)
 )
 
 /** 다른 앱에서 '공유'로 받은 파일(문서함 저장 대기용). */
@@ -187,6 +188,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 board.updateFields(item.id, mapOf("checked" to false, "usedBy" to ""))
             }
         }
+    }
+
+    // 여행 위시리스트(구글 지도 공유). 실시간 전체 조회. null=로딩 전, 빈=없음.
+    val travelItems: StateFlow<List<ListItem>?> =
+        board.items(com.familyboard.app.data.model.TravelBoard.BOARD)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
+
+    /** 공유(구글 지도) → 여행 위시리스트 저장. pendingShare(isTravel) 에서 호출. */
+    fun saveTravel() = viewModelScope.launch {
+        val s = pendingShare.value ?: return@launch
+        if (s.loading) return@launch
+        val nm = s.name.trim().let { if (it.isBlank() || it.endsWith("중…")) "새 장소" else it }
+        runCatching {
+            board.upsertItem(
+                ListItem(
+                    board = com.familyboard.app.data.model.TravelBoard.BOARD,
+                    text = nm, link = s.link, address = s.address, lat = s.lat, lng = s.lng,
+                    createdBy = currentMemberId.value.orEmpty(), createdAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+        pendingShare.value = null
+    }
+
+    /** 여행 위시리스트 '다녀옴'(checked) 토글. */
+    fun toggleTravelVisited(item: ListItem) = viewModelScope.launch {
+        runCatching { board.updateFields(item.id, mapOf("checked" to !item.checked)) }
+    }
+
+    /** 여행 위시리스트 편집: 장소명(text)·메모(description). */
+    fun updateTravel(id: String, name: String, memo: String) = viewModelScope.launch {
+        runCatching { board.updateFields(id, mapOf("text" to name.trim(), "description" to memo.trim())) }
     }
 
     // 가족/내 사진첩 — Firestore 대신 Postgres(notify REST). 페이지 누적 로드(전량 리스너 아님 → 읽기 급증 방지).
@@ -389,6 +422,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val a = list?.firstOrNull() ?: return ""
         listOfNotNull(a.locality ?: a.adminArea, a.subLocality ?: a.thoroughfare)
             .distinct().joinToString(" ").trim()
+    }.getOrDefault("")
+
+    /** 좌표 → 전체 주소 한 줄(여행 위시리스트용, 해외 포함). 실패 시 빈 문자열. */
+    private fun reverseGeocodeFull(lat: Double, lng: Double): String = runCatching {
+        val gc = android.location.Geocoder(getApplication(), java.util.Locale.KOREA)
+        @Suppress("DEPRECATION")
+        val a = gc.getFromLocation(lat, lng, 1)?.firstOrNull() ?: return ""
+        (a.getAddressLine(0)
+            ?: listOfNotNull(a.countryName, a.adminArea, a.locality, a.thoroughfare).joinToString(" ")).trim()
     }.getOrDefault("")
 
     /** 사진첩 좋아요 토글(서버가 토글 → 갱신된 항목 반영). */
@@ -629,6 +671,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val coupangLinks = allLinks.filter { it.contains("coupang", ignoreCase = true) || it.contains("coupa.ng", ignoreCase = true) }
         if (coupangLinks.isNotEmpty()) {
             if (coupangLinks.size == 1) addShoppingLink(coupangLinks[0], coupangNameFromText(text)) else addShoppingLinks(text, coupangLinks)
+            return true
+        }
+
+        // 구글 지도 공유 → 여행 위시리스트(별도 카드). 서버가 좌표·장소명 파싱, 주소는 앱 역지오코딩.
+        val isGoogleMap = url.contains("maps.app.goo.gl") || url.contains("google.com/maps") ||
+            url.contains("goo.gl/maps") || url.contains("maps.google")
+        if (isGoogleMap) {
+            pendingShare.value = SharedPlace(name.ifBlank { "장소 불러오는 중…" }, url, loading = true, isTravel = true)
+            viewModelScope.launch {
+                val g = com.familyboard.app.notif.NotifyApi.parseGooglePlace(url)
+                val cur = pendingShare.value ?: return@launch
+                if (g != null && (g.name.isNotBlank() || g.lat != 0.0 || g.lng != 0.0)) {
+                    val addr = withContext(Dispatchers.IO) {
+                        if (g.lat != 0.0 || g.lng != 0.0) reverseGeocodeFull(g.lat, g.lng) else ""
+                    }
+                    pendingShare.value = cur.copy(
+                        name = g.name.ifBlank { name.ifBlank { "새 장소" } }, address = addr,
+                        lat = g.lat, lng = g.lng, loading = false, isTravel = true,
+                    )
+                } else pendingShare.value = cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false, isTravel = true)
+            }
             return true
         }
 
