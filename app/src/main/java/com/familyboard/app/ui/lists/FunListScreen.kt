@@ -621,6 +621,7 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
  */
 @Composable
 internal fun ZoomOverlay(url: String, onClose: () -> Unit) {
+    androidx.activity.compose.BackHandler { onClose() } // 폰 이전 버튼 = 확대뷰 닫기(뒤 화면으로 안 넘어가게)
     val context = LocalContext.current
     // 파일로 받아 SubsamplingScaleImageView(부분 디코딩)로 표시 → 세로 2만px 같은 초대형도
     // 원본 해상도 유지하며 가로 꽉차게 세로 스크롤 + 핀치 확대(글자 읽기 가능).
