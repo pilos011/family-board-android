@@ -5,7 +5,9 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,13 +18,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -82,8 +82,8 @@ private fun expiryLabel(dateIso: String): String? {
 }
 
 /**
- * 가족 쿠폰함(v1.0.140): 3열 그리드, 만료일 가까운 순 정렬, 카드 탭=상세(이미지 확대·링크 열기·메모 복사),
- * 유효기간(달력)·메모 편집(작성자·관리자). 만료 다음날 자동삭제는 서버(notify)에서. 사용완료=회색+사용자.
+ * 가족 쿠폰함(v1.0.141): 3열 그리드. 사용완료는 맨 뒤, 그 앞은 만료일 가까운 순.
+ * 카드 **탭=쿠폰 이미지/링크/텍스트 바로 열기**, **롱클릭=메뉴(유효기간·메모·편집·삭제)**. 사용완료=회색+사용자.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,16 +92,31 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     val me = currentMemberId.orEmpty()
     val isAdmin = CouponBoard.canDelete(currentMemberId)
     val context = LocalContext.current
-    var viewer by remember { mutableStateOf<String?>(null) }  // 이미지 확대
-    var detailId by remember { mutableStateOf<String?>(null) }
+    var viewer by remember { mutableStateOf<String?>(null) }   // 이미지 확대
+    var actionId by remember { mutableStateOf<String?>(null) } // 롱클릭 메뉴 대상
     var editId by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
-    // 만료일 가까운 순(없으면 뒤로), 그 안에서 최신순.
+    // 사용완료는 맨 뒤(1), 미사용(0) 먼저. 그 안에서 만료일 가까운 순(없으면 뒤), 그 다음 최신순.
     val sorted = remember(items) {
         (items ?: emptyList()).sortedWith(
-            compareBy<ListItem> { it.dateIso.ifBlank { "9999-99-99" } }.thenByDescending { it.createdAt },
+            compareBy<ListItem> { if (it.checked) 1 else 0 }
+                .thenBy { it.dateIso.ifBlank { "9999-99-99" } }
+                .thenByDescending { it.createdAt },
         )
+    }
+
+    fun openCoupon(item: ListItem) {
+        val url = item.photoUrls.firstOrNull().orEmpty()
+        when {
+            url.isNotBlank() -> viewer = url // 이미지 쿠폰: 이미지 자체를 크게
+            item.link.isNotBlank() -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link))) }
+                .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+            item.text.isNotBlank() -> {
+                context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("coupon", item.text))
+                Toast.makeText(context, "쿠폰 내용을 복사했어요", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -125,7 +140,12 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
                 contentPadding = PaddingValues(vertical = 10.dp),
             ) {
                 items(sorted, key = { it.id }) { item ->
-                    CouponCard(item = item, me = me, onOpenDetail = { detailId = item.id }, onToggleUsed = { vm.toggleCouponUsed(item) })
+                    CouponCard(
+                        item = item, me = me,
+                        onOpen = { openCoupon(item) },       // 탭 = 이미지/링크/텍스트 바로
+                        onLongPress = { actionId = item.id }, // 롱클릭 = 메뉴
+                        onToggleUsed = { vm.toggleCouponUsed(item) },
+                    )
                 }
             }
         }
@@ -133,25 +153,24 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
 
     viewer?.let { ZoomOverlay(it) { viewer = null } }
 
-    // 상세: 이미지 확대·링크 열기·유효기간·메모(복사)·사용/편집/삭제
-    detailId?.let { id ->
+    // 롱클릭 메뉴: 유효기간·메모 + 링크 열기 + 편집(작성자·관리자)·삭제(관리자)
+    actionId?.let { id ->
         val item = sorted.firstOrNull { it.id == id }
-        if (item == null) detailId = null
-        else CouponDetailDialog(
+        if (item == null) actionId = null
+        else CouponActionDialog(
             item = item, me = me, isAdmin = isAdmin,
-            onZoom = { viewer = it },
             onOpenLink = {
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link))) }
                     .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+                actionId = null
             },
-            onCopyText = { txt ->
-                context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("coupon", txt))
-                Toast.makeText(context, "복사했어요", Toast.LENGTH_SHORT).show()
+            onCopyMemo = {
+                context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("memo", item.description))
+                Toast.makeText(context, "메모를 복사했어요", Toast.LENGTH_SHORT).show()
             },
-            onToggleUsed = { vm.toggleCouponUsed(item) },
-            onEdit = { editId = id; detailId = null },
-            onDelete = { pendingDelete = id; detailId = null },
-            onClose = { detailId = null },
+            onEdit = { editId = id; actionId = null },
+            onDelete = { pendingDelete = id; actionId = null },
+            onClose = { actionId = null },
         )
     }
 
@@ -177,8 +196,9 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CouponCard(item: ListItem, me: String, onOpenDetail: () -> Unit, onToggleUsed: () -> Unit) {
+private fun CouponCard(item: ListItem, me: String, onOpen: () -> Unit, onLongPress: () -> Unit, onToggleUsed: () -> Unit) {
     val used = item.checked
     val canCancel = used && item.usedBy == me
     val url = item.photoUrls.firstOrNull().orEmpty()
@@ -189,7 +209,7 @@ private fun CouponCard(item: ListItem, me: String, onOpenDetail: () -> Unit, onT
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().weight(1f).clickable { onOpenDetail() }) {
+            Box(Modifier.fillMaxWidth().weight(1f).combinedClickable(onClick = onOpen, onLongClick = onLongPress)) {
                 if (url.isNotBlank()) {
                     AsyncImage(model = funThumbUrl(url), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
@@ -199,7 +219,6 @@ private fun CouponCard(item: ListItem, me: String, onOpenDetail: () -> Unit, onT
                         Text(item.text.ifBlank { item.link }, fontSize = 11.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                // 유효기간 배지(좌상단)
                 if (exp != null) {
                     Text(
                         exp, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
@@ -208,14 +227,12 @@ private fun CouponCard(item: ListItem, me: String, onOpenDetail: () -> Unit, onT
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                     )
                 }
-                // 제목 캡션(하단 밴드, 이미지 쿠폰에만)
                 if (url.isNotBlank() && item.text.isNotBlank()) {
                     Text(
                         item.text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 3.dp),
                     )
                 }
-                // 사용완료 흐림 + 사용자
                 if (used) {
                     Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)).padding(4.dp), Alignment.Center) {
                         Text(if (item.usedBy.isNotBlank()) "사용완료\n${Family.nameOf(item.usedBy)}" else "사용완료", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
@@ -233,64 +250,40 @@ private fun CouponCard(item: ListItem, me: String, onOpenDetail: () -> Unit, onT
 }
 
 @Composable
-private fun CouponDetailDialog(
+private fun CouponActionDialog(
     item: ListItem, me: String, isAdmin: Boolean,
-    onZoom: (String) -> Unit, onOpenLink: () -> Unit, onCopyText: (String) -> Unit,
-    onToggleUsed: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onClose: () -> Unit,
+    onOpenLink: () -> Unit, onCopyMemo: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onClose: () -> Unit,
 ) {
-    val used = item.checked
-    val canCancel = used && item.usedBy == me
     val canEdit = item.createdBy == me || isAdmin
-    val url = item.photoUrls.firstOrNull().orEmpty()
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(item.text.ifBlank { "쿠폰" }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (url.isNotBlank()) {
-                    AsyncImage(
-                        model = funThumbUrl(url), contentDescription = null, contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).clickable { onZoom(url) },
-                    )
-                    Text("사진을 누르면 크게 보여요", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                    Spacer(Modifier.height(8.dp))
-                }
-                // 유효기간
                 val expFull = if (item.dateIso.isBlank()) "없음" else "${item.dateIso} (${expiryLabel(item.dateIso)})"
                 Text("유효기간: $expFull", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                // 링크(미사용일 때만 열기)
                 if (item.link.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    if (!used) TextButton(onClick = onOpenLink, contentPadding = PaddingValues(0.dp)) { Text("🔗 링크 열기") }
-                    else Text("🔗 링크 쿠폰(사용완료)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = onOpenLink, contentPadding = PaddingValues(0.dp)) { Text("🔗 링크 열기") }
                 }
-                // 텍스트 전용 쿠폰: 내용 복사
-                if (url.isBlank() && item.link.isBlank() && item.text.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    SelectionContainer { Text(item.text, fontSize = 13.sp) }
-                    TextButton(onClick = { onCopyText(item.text) }, contentPadding = PaddingValues(0.dp)) { Text("복사") }
-                }
-                // 메모
                 Spacer(Modifier.height(8.dp))
                 Text("메모", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 if (item.description.isNotBlank()) {
                     SelectionContainer { Text(item.description, fontSize = 13.sp) } // 길게 눌러 복사 가능
+                    TextButton(onClick = onCopyMemo, contentPadding = PaddingValues(0.dp)) { Text("메모 복사") }
                 } else {
                     Text("없음", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
-                if (used) {
-                    Spacer(Modifier.height(8.dp))
+                if (item.checked) {
+                    Spacer(Modifier.height(6.dp))
                     Text("사용완료 - ${Family.nameOf(item.usedBy)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF868E96))
                 }
             }
         },
         confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                Row {
-                    if (!used || canCancel) TextButton(onClick = { onToggleUsed(); onClose() }) { Text(if (used) "사용 취소" else "사용완료") }
-                    if (canEdit) TextButton(onClick = onEdit) { Text("편집") }
-                    if (isAdmin) TextButton(onClick = onDelete) { Text("삭제", color = Color(0xFFE03131)) }
-                }
+            Row {
+                if (canEdit) TextButton(onClick = onEdit) { Text("편집") }
+                if (isAdmin) TextButton(onClick = onDelete) { Text("삭제", color = Color(0xFFE03131)) }
                 TextButton(onClick = onClose) { Text("닫기") }
             }
         },
