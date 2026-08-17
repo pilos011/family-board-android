@@ -127,7 +127,7 @@ object NotifyApi {
         }
     }
 
-    data class GPlace(val name: String, val lat: Double, val lng: Double, val link: String)
+    data class GPlace(val name: String, val address: String, val lat: Double, val lng: Double, val link: String)
 
     /** 구글 지도 공유 링크에서 장소명·좌표 파싱(서버 위임, 리다이렉트 추적). 실패 시 null. 여행 위시리스트용. */
     suspend fun parseGooglePlace(url: String): GPlace? {
@@ -147,6 +147,7 @@ object NotifyApi {
                 val o = JSONObject(text)
                 GPlace(
                     name = o.optString("name"),
+                    address = o.optString("address"),
                     lat = if (o.isNull("lat")) 0.0 else o.optDouble("lat"),
                     lng = if (o.isNull("lng")) 0.0 else o.optDouble("lng"),
                     link = o.optString("link", url),

@@ -683,8 +683,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val g = com.familyboard.app.notif.NotifyApi.parseGooglePlace(url)
                 val cur = pendingShare.value ?: return@launch
                 if (g != null && (g.name.isNotBlank() || g.lat != 0.0 || g.lng != 0.0)) {
-                    val addr = withContext(Dispatchers.IO) {
-                        if (g.lat != 0.0 || g.lng != 0.0) reverseGeocodeFull(g.lat, g.lng) else ""
+                    // 주소는 서버 파싱 우선(구글 공유는 대개 좌표 없이 이름+주소만 옴). 없을 때만 좌표 역지오코딩.
+                    val addr = g.address.ifBlank {
+                        withContext(Dispatchers.IO) {
+                            if (g.lat != 0.0 || g.lng != 0.0) reverseGeocodeFull(g.lat, g.lng) else ""
+                        }
                     }
                     pendingShare.value = cur.copy(
                         name = g.name.ifBlank { name.ifBlank { "새 장소" } }, address = addr,
