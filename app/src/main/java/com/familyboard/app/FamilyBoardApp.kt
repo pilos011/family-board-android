@@ -31,6 +31,9 @@ class FamilyBoardApp : Application(), ImageLoaderFactory {
                     .maxSizeBytes(512L * 1024 * 1024) // 512MB
                     .build()
             }
+            // 우리 썸네일 URL 은 불변(내용 바뀌면 URL 도 바뀜) → 캐시가 있으면 네트워크 재검증도 생략하고
+            // 디스크에서 즉시 표시(재미진 곳·내 재미진 곳·사진첩·쿠폰·여행 썸네일 콜드스타트 속도↑).
+            .respectCacheHeaders(false)
             .crossfade(true)
             .build()
 
