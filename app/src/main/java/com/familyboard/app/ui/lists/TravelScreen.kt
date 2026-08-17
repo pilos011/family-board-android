@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,7 +31,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,11 +41,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,10 +85,14 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var catFilter by remember { mutableStateOf<String?>(null) }
     var regionFilter by remember { mutableStateOf<String?>(null) }
+    var showFilter by remember { mutableStateOf(false) }
 
     val all = items ?: emptyList()
     val catCounts = remember(all) { all.groupingBy { it.category }.eachCount().filterKeys { it.isNotBlank() } }
     val regionCounts = remember(all) { all.groupingBy { it.region }.eachCount().filterKeys { it.isNotBlank() } }
+    // 선택된 필터 값이 목록에서 사라지면(편집·삭제로) 빈 화면에 갇히지 않게 해제
+    LaunchedEffect(catCounts) { if (catFilter != null && !catCounts.containsKey(catFilter)) catFilter = null }
+    LaunchedEffect(regionCounts) { if (regionFilter != null && !regionCounts.containsKey(regionFilter)) regionFilter = null }
 
     // 필터 적용 → 안 가본 곳 먼저, 다녀온 곳 뒤. 그 안에서 최신순.
     val sorted = remember(all, catFilter, regionFilter) {
@@ -115,42 +124,50 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), textAlign = TextAlign.Center,
                 )
             }
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 12.dp),
-            ) {
+            else -> Column(Modifier.fillMaxSize()) {
+                // 필터 바: [필터] 버튼 + 선택 요약 (가볼 곳과 동일 구조). 칩은 바텀시트에.
                 if (catCounts.isNotEmpty() || regionCounts.isNotEmpty()) {
-                    item {
-                        Column {
-                            if (catCounts.isNotEmpty()) FilterFlow {
-                                FilterChip("전체", all.size, catFilter == null) { catFilter = null }
-                                catCounts.entries.sortedByDescending { it.value }.forEach { (c, n) ->
-                                    FilterChip(c, n, catFilter == c) { catFilter = if (catFilter == c) null else c }
-                                }
-                            }
-                            if (regionCounts.isNotEmpty()) {
-                                Spacer(Modifier.height(6.dp))
-                                FilterFlow {
-                                    FilterChip("전체", all.size, regionFilter == null) { regionFilter = null }
-                                    regionCounts.entries.sortedByDescending { it.value }.forEach { (r, n) ->
-                                        FilterChip(r, n, regionFilter == r) { regionFilter = if (regionFilter == r) null else r }
-                                    }
-                                }
-                            }
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val active = catFilter != null || regionFilter != null
+                        Row(
+                            Modifier.clip(RoundedCornerShape(20.dp))
+                                .background(if (active) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+                                .clickable { showFilter = true }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Tune, "필터", tint = if (active) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("필터", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (active) Color.White else MaterialTheme.colorScheme.onSurface)
                         }
+                        Spacer(Modifier.width(10.dp))
+                        val summary = listOfNotNull(catFilter, regionFilter).joinToString(" · ").ifBlank { "전체" }
+                        Text("$summary · ${sorted.size}곳", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     }
                 }
-                items(sorted, key = { it.id }) { item ->
-                    TravelCard(item = item, onOpen = { openMap(item) }, onLongPress = { actionId = item.id })
+                if (sorted.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text("조건에 맞는 곳이 없어요. (필터 확인)", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                } else LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                ) {
+                    items(sorted, key = { it.id }) { item ->
+                        TravelCard(item = item, onOpen = { openMap(item) }, onLongPress = { actionId = item.id })
+                    }
                 }
             }
         }
     }
 
     actionId?.let { id ->
-        val item = sorted.firstOrNull { it.id == id } ?: all.firstOrNull { it.id == id }
-        if (item == null) actionId = null
+        val item = all.firstOrNull { it.id == id }
+        if (item == null) LaunchedEffect(id) { actionId = null }
         else {
             val canManage = TravelBoard.canManage(me, item)
             AlertDialog(
@@ -181,7 +198,7 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
 
     editId?.let { id ->
         val item = all.firstOrNull { it.id == id }
-        if (item == null) editId = null
+        if (item == null) LaunchedEffect(id) { editId = null }
         else TravelEditDialog(
             item = item,
             onSave = { name, cat, memo -> vm.updateTravel(id, name, cat, memo); editId = null },
@@ -197,6 +214,43 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
             confirmButton = { TextButton(onClick = { vm.deleteItem(id); pendingDelete = null }) { Text("삭제", color = Color(0xFFE03131)) } },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
         )
+    }
+
+    // 필터 바텀시트: 카테고리·지역 칩(개수 포함)을 한눈에 (가볼 곳과 동일 구조)
+    if (showFilter) {
+        ModalBottomSheet(onDismissRequest = { showFilter = false }) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            ) {
+                if (catCounts.isNotEmpty()) {
+                    Text("카테고리", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    FilterFlow {
+                        FilterChip("전체", all.size, catFilter == null) { catFilter = null }
+                        catCounts.entries.sortedByDescending { it.value }.forEach { (c, n) ->
+                            FilterChip(c, n, catFilter == c) { catFilter = if (catFilter == c) null else c }
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
+                if (regionCounts.isNotEmpty()) {
+                    Text("지역 (나라·도시)", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    FilterFlow {
+                        FilterChip("전체", all.size, regionFilter == null) { regionFilter = null }
+                        regionCounts.entries.sortedByDescending { it.value }.forEach { (r, n) ->
+                            FilterChip(r, n, regionFilter == r) { regionFilter = if (regionFilter == r) null else r }
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { catFilter = null; regionFilter = null }, modifier = Modifier.weight(1f)) { Text("초기화") }
+                    Button(onClick = { showFilter = false }, modifier = Modifier.weight(2f)) { Text("${sorted.size}곳 보기") }
+                }
+            }
+        }
     }
 }
 
@@ -217,7 +271,7 @@ private fun TravelCard(item: ListItem, onOpen: () -> Unit, onLongPress: () -> Un
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            val photo = item.photoUrls.firstOrNull()
+            val photo = com.familyboard.app.notif.NotifyApi.placePhotoUrl(item.photoUrls.firstOrNull())
             if (!photo.isNullOrBlank()) {
                 AsyncImage(
                     model = photo, contentDescription = null, contentScale = ContentScale.Crop,

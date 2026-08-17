@@ -692,6 +692,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch {
                 val g = com.familyboard.app.notif.NotifyApi.parseGooglePlace(url)
                 val cur = pendingShare.value ?: return@launch
+                if (cur.link != url) return@launch // 그 사이 다른 링크가 공유됨 → 이 결과는 버림(오염 방지)
                 if (g != null && (g.name.isNotBlank() || g.lat != 0.0 || g.lng != 0.0)) {
                     // 주소는 서버 파싱 우선(구글 공유는 대개 좌표 없이 이름+주소만 옴). 없을 때만 좌표 역지오코딩.
                     val addr = g.address.ifBlank {

@@ -129,9 +129,17 @@ object NotifyApi {
 
     data class GPlace(
         val name: String, val address: String, val category: String, val region: String,
-        val rating: Double, val ratingCount: Int, val photo: String, // photo=완성 썸네일 URL(빈값=없음)
+        val rating: Double, val ratingCount: Int, val photo: String, // photo=사진 ref(places/.../photos/...). URL은 렌더 시 조립
         val lat: Double, val lng: Double, val link: String,
     )
+
+    /** 구글 사진 ref(places/.../photos/...) → 현재 서버 base 기준 썸네일 URL. ref 가 이미 http면 그대로(구버전 호환). */
+    fun placePhotoUrl(ref: String?, w: Int = 400): String? {
+        if (ref.isNullOrBlank()) return null
+        if (ref.startsWith("http")) return ref
+        if (base.isBlank()) return null
+        return "$base/placephoto?ref=${java.net.URLEncoder.encode(ref, "UTF-8")}&w=$w"
+    }
 
     /** 구글 지도 공유 링크 → 장소명·주소·카테고리·지역·별점·사진·좌표(서버가 Places API 로 보강). 실패 시 null. 여행 위시리스트용. */
     suspend fun parseGooglePlace(url: String): GPlace? {
@@ -149,9 +157,6 @@ object NotifyApi {
                 conn.disconnect()
                 if (code !in 200..299) return@runCatching null
                 val o = JSONObject(text)
-                val photoRef = o.optString("photo")
-                val photoUrl = if (photoRef.isNotBlank())
-                    "$base/placephoto?ref=${java.net.URLEncoder.encode(photoRef, "UTF-8")}&w=400" else ""
                 GPlace(
                     name = o.optString("name"),
                     address = o.optString("address"),
@@ -159,7 +164,7 @@ object NotifyApi {
                     region = o.optString("region"),
                     rating = if (o.isNull("rating")) 0.0 else o.optDouble("rating"),
                     ratingCount = if (o.isNull("ratingCount")) 0 else o.optInt("ratingCount"),
-                    photo = photoUrl,
+                    photo = o.optString("photo"), // 사진 ref만 저장(base 변경돼도 링크 안 깨지게)
                     lat = if (o.isNull("lat")) 0.0 else o.optDouble("lat"),
                     lng = if (o.isNull("lng")) 0.0 else o.optDouble("lng"),
                     link = o.optString("link", url),
