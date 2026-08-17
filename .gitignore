@@ -21,3 +21,4 @@ app/google-services.json
 
 # Firebase Admin SDK 키 (서버 전용, 절대 커밋 금지)
 app/*firebase-adminsdk*.json
+family-board-*.apk
