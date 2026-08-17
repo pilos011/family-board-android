@@ -47,10 +47,12 @@ data class SharedPlace(
     val link: String,
     val description: String = "",
     val address: String = "",
-    val category: String = "",  // 네이버 종목(맛집/가볼곳 필터용)
+    val category: String = "",  // 네이버 종목(맛집/가볼곳 필터용). 여행: 구글 카테고리
+    val region: String = "",    // 여행: 나라+도시(예: "베트남 하노이")
+    val ratingCount: Int = 0,   // 여행: 구글 리뷰 수
     val image: String = "",
     val images: List<String> = emptyList(), // 여러 장 묶음(재미진 곳)
-    val naverScore: Double = 0.0,
+    val naverScore: Double = 0.0, // 여행: 구글 별점(4.9 등)
     val lat: Double = 0.0,
     val lng: Double = 0.0,
     val loading: Boolean = false,
@@ -204,7 +206,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             board.upsertItem(
                 ListItem(
                     board = com.familyboard.app.data.model.TravelBoard.BOARD,
-                    text = nm, link = s.link, address = s.address, lat = s.lat, lng = s.lng,
+                    text = nm, link = s.link, address = s.address,
+                    category = s.category, region = s.region,
+                    naverScore = s.naverScore, amount = s.ratingCount.toLong(), // amount=리뷰수 재사용
+                    photoUrls = if (s.image.isNotBlank()) listOf(s.image) else emptyList(),
+                    lat = s.lat, lng = s.lng,
                     createdBy = currentMemberId.value.orEmpty(), createdAt = System.currentTimeMillis(),
                 ),
             )
@@ -217,9 +223,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { board.updateFields(item.id, mapOf("checked" to !item.checked)) }
     }
 
-    /** 여행 위시리스트 편집: 장소명(text)·메모(description). */
-    fun updateTravel(id: String, name: String, memo: String) = viewModelScope.launch {
-        runCatching { board.updateFields(id, mapOf("text" to name.trim(), "description" to memo.trim())) }
+    /** 여행 위시리스트 편집: 장소명(text)·카테고리(category)·메모(description). */
+    fun updateTravel(id: String, name: String, category: String, memo: String) = viewModelScope.launch {
+        runCatching {
+            board.updateFields(id, mapOf(
+                "text" to name.trim(), "category" to category.trim(), "description" to memo.trim(),
+            ))
+        }
     }
 
     // 가족/내 사진첩 — Firestore 대신 Postgres(notify REST). 페이지 누적 로드(전량 리스너 아님 → 읽기 급증 방지).
@@ -691,6 +701,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     pendingShare.value = cur.copy(
                         name = g.name.ifBlank { name.ifBlank { "새 장소" } }, address = addr,
+                        category = g.category, region = g.region, naverScore = g.rating,
+                        ratingCount = g.ratingCount, image = g.photo,
                         lat = g.lat, lng = g.lng, loading = false, isTravel = true,
                     )
                 } else pendingShare.value = cur.copy(name = if (name.isBlank()) "새 장소" else name, loading = false, isTravel = true)

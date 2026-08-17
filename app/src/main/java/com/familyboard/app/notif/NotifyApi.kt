@@ -127,9 +127,13 @@ object NotifyApi {
         }
     }
 
-    data class GPlace(val name: String, val address: String, val lat: Double, val lng: Double, val link: String)
+    data class GPlace(
+        val name: String, val address: String, val category: String, val region: String,
+        val rating: Double, val ratingCount: Int, val photo: String, // photo=완성 썸네일 URL(빈값=없음)
+        val lat: Double, val lng: Double, val link: String,
+    )
 
-    /** 구글 지도 공유 링크에서 장소명·좌표 파싱(서버 위임, 리다이렉트 추적). 실패 시 null. 여행 위시리스트용. */
+    /** 구글 지도 공유 링크 → 장소명·주소·카테고리·지역·별점·사진·좌표(서버가 Places API 로 보강). 실패 시 null. 여행 위시리스트용. */
     suspend fun parseGooglePlace(url: String): GPlace? {
         if (!enabled() || url.isBlank()) return null
         return withContext(Dispatchers.IO) {
@@ -145,9 +149,17 @@ object NotifyApi {
                 conn.disconnect()
                 if (code !in 200..299) return@runCatching null
                 val o = JSONObject(text)
+                val photoRef = o.optString("photo")
+                val photoUrl = if (photoRef.isNotBlank())
+                    "$base/placephoto?ref=${java.net.URLEncoder.encode(photoRef, "UTF-8")}&w=400" else ""
                 GPlace(
                     name = o.optString("name"),
                     address = o.optString("address"),
+                    category = o.optString("category"),
+                    region = o.optString("region"),
+                    rating = if (o.isNull("rating")) 0.0 else o.optDouble("rating"),
+                    ratingCount = if (o.isNull("ratingCount")) 0 else o.optInt("ratingCount"),
+                    photo = photoUrl,
                     lat = if (o.isNull("lat")) 0.0 else o.optDouble("lat"),
                     lng = if (o.isNull("lng")) 0.0 else o.optDouble("lng"),
                     link = o.optString("link", url),

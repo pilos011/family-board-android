@@ -84,6 +84,8 @@ class InMemoryBoardRepository : BoardRepository {
                         "checkedAt" -> x.copy(checkedAt = (v as Number).toLong())
                         "usedBy" -> x.copy(usedBy = v as String)
                         "dateIso" -> x.copy(dateIso = v as String)
+                        "category" -> x.copy(category = v as String)
+                        "region" -> x.copy(region = v as String)
                         else -> x
                     }
                 }

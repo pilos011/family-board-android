@@ -390,7 +390,13 @@ private fun MainScaffold(vm: AppViewModel) {
     pendingShare?.let { sp ->
         if (sp.isTravel) {
             val body = if (sp.loading) "구글 지도에서 정보 가져오는 중…"
-            else listOf(sp.name, if (sp.address.isNotBlank()) "📍 ${sp.address}" else "").filter { it.isNotBlank() }.joinToString("\n")
+            else buildList {
+                add(sp.name)
+                val sub = listOf(sp.category, sp.region).filter { it.isNotBlank() }.joinToString(" · ")
+                if (sub.isNotBlank()) add(sub)
+                if (sp.naverScore > 0.0) add("⭐ ${sp.naverScore}" + if (sp.ratingCount > 0) " (리뷰 ${sp.ratingCount})" else "")
+                if (sp.address.isNotBlank()) add("📍 ${sp.address}")
+            }.joinToString("\n")
             AlertDialog(
                 onDismissRequest = { vm.clearPendingShare() },
                 title = { Text("여행 위시리스트에 저장") },

@@ -58,7 +58,8 @@ data class ListItem(
     val link: String = "",         // 장소 북마크 링크(네이버 플레이스 등). 맛집/가볼 곳 보드
     val rating: Long = 0,          // 장소 별점 0~5 (0=미방문). 맛집/가볼 곳 보드
     val address: String = "",      // 장소 전체 도로명 주소(네비 연동용). 맛집/가볼 곳 보드
-    val category: String = "",     // 네이버 종목(한식·카페 등). 맛집/가볼 곳 필터용
+    val category: String = "",     // 네이버 종목(한식·카페 등). 맛집/가볼 곳 필터용. 여행: 구글 카테고리(호텔·리조트 등)
+    val region: String = "",       // 여행 위시리스트: 나라+도시(예: "베트남 하노이"). 필터용
     val naverScore: Double = 0.0,  // 네이버 평점(정렬용). 맛집/가볼 곳
     val lat: Double = 0.0,         // 위도(거리 정렬용)
     val lng: Double = 0.0,         // 경도(거리 정렬용)
