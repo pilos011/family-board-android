@@ -27,6 +27,7 @@ interface BoardRepository {
     suspend fun pageByBoard(
         board: String, limit: Int, createdBy: String? = null,
         ascending: Boolean = false, afterCreatedAt: Long? = null,
+        serverOnly: Boolean = false, // true=캐시 무시 서버 강제(뒤에서 최신 갱신용)
     ): List<ListItem>
 
     /** id로 항목 1건 조회(보드/작성자 무관). 공유받은 항목 열기용. 없으면 null. */

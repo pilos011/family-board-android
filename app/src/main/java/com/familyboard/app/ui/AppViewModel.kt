@@ -610,13 +610,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else -> funCount
     }
 
-    /** 페이지 방식 1회성 조회. [afterCreatedAt] 이후부터 [limit]개(최신순/등록순). 내것은 본인 것만. */
-    suspend fun fetchFunPage(boardKey: String, ascending: Boolean, afterCreatedAt: Long?, limit: Int): List<ListItem> {
+    /** 페이지 방식 1회성 조회. [afterCreatedAt] 이후부터 [limit]개(최신순/등록순). 내것은 본인 것만.
+     *  [serverOnly]=true 면 캐시 무시 서버 강제(첫 페이지 백그라운드 최신 갱신용). */
+    suspend fun fetchFunPage(
+        boardKey: String, ascending: Boolean, afterCreatedAt: Long?, limit: Int, serverOnly: Boolean = false,
+    ): List<ListItem> {
         val isPrivate = boardKey == com.familyboard.app.data.model.FunBoard.PRIVATE
         val createdBy = if (isPrivate) currentMemberId.value else null
         if (isPrivate && createdBy.isNullOrBlank()) return emptyList()
-        return runCatching { board.pageByBoard(boardKey, limit, createdBy, ascending, afterCreatedAt) }.getOrDefault(emptyList())
+        return runCatching { board.pageByBoard(boardKey, limit, createdBy, ascending, afterCreatedAt, serverOnly) }.getOrDefault(emptyList())
     }
+
+    /** 재미진 곳 개수 재집계 트리거(백그라운드 최신 갱신에서 새 항목 감지 시 페이지 수 갱신). */
+    fun refreshFunCount() = bumpFunRefresh()
 
     /** 길찾기 기본 앱("항상" 선택). 빈 값=매번 선택창. */
     val navDefaultApp: StateFlow<String> =

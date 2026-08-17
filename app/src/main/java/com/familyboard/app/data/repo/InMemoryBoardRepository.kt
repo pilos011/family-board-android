@@ -37,7 +37,7 @@ class InMemoryBoardRepository : BoardRepository {
         itemsFlow.value.count { it.board == board && (createdBy == null || it.createdBy == createdBy) }
 
     override suspend fun pageByBoard(
-        board: String, limit: Int, createdBy: String?, ascending: Boolean, afterCreatedAt: Long?,
+        board: String, limit: Int, createdBy: String?, ascending: Boolean, afterCreatedAt: Long?, serverOnly: Boolean,
     ): List<ListItem> {
         var list = itemsFlow.value.filter { it.board == board && (createdBy == null || it.createdBy == createdBy) }
         list = if (ascending) list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }

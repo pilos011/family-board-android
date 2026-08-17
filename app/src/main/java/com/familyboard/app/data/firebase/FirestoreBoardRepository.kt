@@ -62,7 +62,7 @@ class FirestoreBoardRepository(
     }
 
     override suspend fun pageByBoard(
-        board: String, limit: Int, createdBy: String?, ascending: Boolean, afterCreatedAt: Long?,
+        board: String, limit: Int, createdBy: String?, ascending: Boolean, afterCreatedAt: Long?, serverOnly: Boolean,
     ): List<ListItem> {
         var q: com.google.firebase.firestore.Query = itemsCol.whereEqualTo("board", board)
         if (createdBy != null) q = q.whereEqualTo("createdBy", createdBy)
@@ -72,16 +72,18 @@ class FirestoreBoardRepository(
         // startAt(포함) + 호출측 id 중복제거 → 동일 createdAt 경계 항목이 누락되지 않음
         if (afterCreatedAt != null) q = q.startAt(afterCreatedAt)
         q = q.limit(limit.toLong())
-        // 캐시 우선(깊은 페이지 이동만): 이미 받아온 페이지(오프라인 지속성)는 서버 왕복 없이 즉시 반환 →
-        // "페이지 번호 누를 때" 스피너 최소화 + Firestore 읽기 절감. 캐시가 요청 개수만큼 없으면 서버로 채운다.
-        // 첫 페이지(afterCreatedAt==null, 최신)는 항상 서버 → 가족이 새로 올린 항목이 바로 보이게.
-        if (afterCreatedAt != null) {
+        // 캐시 우선(표시용): 이미 받아온 페이지(오프라인 지속성)는 서버 왕복 없이 즉시 반환 →
+        // 페이지 이동/재진입 스피너 최소화 + Firestore 읽기 절감. 첫 페이지도 캐시 즉시 표시하고,
+        // 화면이 별도로 서버 갱신(serverOnly=true)을 뒤에서 돌려 최신 항목을 병합한다.
+        if (!serverOnly) {
             val cached = runCatching { q.get(com.google.firebase.firestore.Source.CACHE).await() }.getOrNull()
             if (cached != null && cached.size() >= limit) {
                 return cached.documents.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() }
             }
         }
-        return q.get().await().documents.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() }
+        val source = if (serverOnly) com.google.firebase.firestore.Source.SERVER
+                     else com.google.firebase.firestore.Source.DEFAULT
+        return q.get(source).await().documents.mapNotNull { runCatching { it.toObject(ListItem::class.java) }.getOrNull() }
     }
 
     override suspend fun getItemById(id: String): ListItem? =

@@ -190,7 +190,20 @@ fun FunListScreen(
     LaunchedEffect(boardKey, oldestFirst) {
         loaded = emptyList(); pageIndex = 0; resumeDismissed = false
         entrySavedPage = vm.lastFunPage(boardKey, oldestFirst).first()
-        ensureLoaded(pageSize)
+        ensureLoaded(pageSize) // 캐시 우선 → 1페이지 즉시 표시(스피너 최소화)
+        // 뒤에서 서버로 최신 1페이지를 받아 새 항목만 병합(등록순은 새 항목이 1페이지에 안 오므로 생략).
+        if (!oldestFirst) {
+            val fresh = vm.fetchFunPage(boardKey, oldestFirst, null, pageSize, serverOnly = true)
+            if (fresh.isNotEmpty()) {
+                val added = loadMutex.withLock {
+                    val ids = loaded.mapTo(HashSet()) { it.id }
+                    val newOnes = fresh.filter { it.id !in ids }
+                    if (newOnes.isNotEmpty()) loaded = (fresh + loaded).distinctBy { it.id }.sortedByDescending { it.createdAt }
+                    newOnes.isNotEmpty()
+                }
+                if (added) vm.refreshFunCount() // 새 항목 생겼으면 총 페이지 수도 갱신
+            }
+        }
     }
     // 필터가 켜지면 전체를 한 번에 불러와(한 쿼리) 필터 결과로 정확히 페이징.
     LaunchedEffect(filtering, totalCount) {
