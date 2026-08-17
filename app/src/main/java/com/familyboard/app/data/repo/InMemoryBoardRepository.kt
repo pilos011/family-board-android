@@ -83,6 +83,7 @@ class InMemoryBoardRepository : BoardRepository {
                         "checked" -> x.copy(checked = v as Boolean)
                         "checkedAt" -> x.copy(checkedAt = (v as Number).toLong())
                         "usedBy" -> x.copy(usedBy = v as String)
+                        "dateIso" -> x.copy(dateIso = v as String)
                         else -> x
                     }
                 }

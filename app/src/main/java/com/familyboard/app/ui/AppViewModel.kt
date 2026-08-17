@@ -167,9 +167,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         board.items(com.familyboard.app.data.model.CouponBoard.BOARD)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(60_000), null)
 
-    /** 쿠폰 설명(캡션=text) 수정. 공유한 사람(createdBy)·관리자만 화면에서 호출. 짧은 제목 수준. */
-    fun setCouponCaption(id: String, text: String) = viewModelScope.launch {
-        runCatching { board.updateFields(id, mapOf("text" to text.trim())) }
+    /** 쿠폰 상세 수정: 제목(text)·유효기간(dateIso, yyyy-MM-dd, 빈값=없음)·메모(description).
+     *  공유한 사람(createdBy)·관리자만 화면에서 호출. */
+    fun updateCoupon(id: String, text: String, dateIso: String, memo: String) = viewModelScope.launch {
+        runCatching {
+            board.updateFields(id, mapOf("text" to text.trim(), "dateIso" to dateIso, "description" to memo.trim()))
+        }
     }
 
     /** 쿠폰 사용완료 토글: 미사용→사용완료(본인 기록). 이미 사용완료면 '누른 본인만' 취소 가능(남 것은 무동작). */

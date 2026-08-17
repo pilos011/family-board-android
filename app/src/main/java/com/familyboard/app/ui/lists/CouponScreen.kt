@@ -16,20 +16,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +42,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,10 +64,26 @@ import com.familyboard.app.data.Family
 import com.familyboard.app.data.model.CouponBoard
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
+
+// 유효기간 라벨: "D-3" / "오늘까지" / "만료" / null(없음)
+private fun expiryLabel(dateIso: String): String? {
+    if (dateIso.isBlank()) return null
+    val d = runCatching { LocalDate.parse(dateIso) }.getOrNull() ?: return null
+    val days = ChronoUnit.DAYS.between(LocalDate.now(), d)
+    return when {
+        days < 0 -> "만료"
+        days == 0L -> "오늘까지"
+        else -> "D-$days"
+    }
+}
 
 /**
- * 가족 쿠폰함: 재미진 곳/내 재미진 곳에서 '가족 쿠폰함으로 이동'으로 담긴 쿠폰(이미지/링크/텍스트) 목록.
- * 탭=열기(이미지 뷰어·링크 열기·텍스트 복사). '사용완료'=회색 흐림+탭 불가(누른 본인만 취소). 관리자(선일·은선) 삭제.
+ * 가족 쿠폰함(v1.0.140): 3열 그리드, 만료일 가까운 순 정렬, 카드 탭=상세(이미지 확대·링크 열기·메모 복사),
+ * 유효기간(달력)·메모 편집(작성자·관리자). 만료 다음날 자동삭제는 서버(notify)에서. 사용완료=회색+사용자.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,187 +92,261 @@ fun CouponScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     val me = currentMemberId.orEmpty()
     val isAdmin = CouponBoard.canDelete(currentMemberId)
     val context = LocalContext.current
-    var viewer by remember { mutableStateOf<String?>(null) }
-    var pendingDelete by remember { mutableStateOf<ListItem?>(null) }
-    var editing by remember { mutableStateOf<ListItem?>(null) }
+    var viewer by remember { mutableStateOf<String?>(null) }  // 이미지 확대
+    var detailId by remember { mutableStateOf<String?>(null) }
+    var editId by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
+
+    // 만료일 가까운 순(없으면 뒤로), 그 안에서 최신순.
+    val sorted = remember(items) {
+        (items ?: emptyList()).sortedWith(
+            compareBy<ListItem> { it.dateIso.ifBlank { "9999-99-99" } }.thenByDescending { it.createdAt },
+        )
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
             title = { Text(CouponBoard.TITLE) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") } },
         )
-        val list = items
         when {
-            list == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-            list.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+            items == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+            sorted.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                 Text(
                     "아직 쿠폰이 없어요.\n재미진 곳/내 재미진 곳에서\n'가족 쿠폰함으로 이동'으로 담아보세요.",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), textAlign = TextAlign.Center,
                 )
             }
-            else -> {
-                val sorted = remember(list) { list.sortedByDescending { it.createdAt } }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                ) {
-                    items(sorted, key = { it.id }) { item ->
-                        CouponCard(
-                            item = item, me = me, isAdmin = isAdmin,
-                            canEdit = (item.createdBy == me || isAdmin), // 설명은 공유한 사람·관리자가 수정
-                            onEdit = { editing = item },
-                            onOpen = {
-                                val url = item.photoUrls.firstOrNull().orEmpty()
-                                when {
-                                    // 링크 우선(웹/유튜브 쿠폰은 썸네일도 있으므로 이미지보다 링크 먼저 열기).
-                                    item.link.isNotBlank() -> runCatching {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link)))
-                                    }.onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
-                                    url.isNotBlank() -> viewer = url // 이미지 쿠폰: 원본 뷰어(코드 잘 보이게)
-                                    item.text.isNotBlank() -> {
-                                        val cm = context.getSystemService(ClipboardManager::class.java)
-                                        cm?.setPrimaryClip(ClipData.newPlainText("coupon", item.text))
-                                        Toast.makeText(context, "쿠폰 내용을 복사했어요", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            onToggleUsed = { vm.toggleCouponUsed(item) },
-                            onDelete = { pendingDelete = item },
-                        )
-                    }
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 10.dp),
+            ) {
+                items(sorted, key = { it.id }) { item ->
+                    CouponCard(item = item, me = me, onOpenDetail = { detailId = item.id }, onToggleUsed = { vm.toggleCouponUsed(item) })
                 }
             }
         }
     }
 
-    viewer?.let { ZoomOverlay(it) { viewer = null } } // FunListScreen 의 확대 뷰어 재사용
+    viewer?.let { ZoomOverlay(it) { viewer = null } }
 
-    pendingDelete?.let { it0 ->
+    // 상세: 이미지 확대·링크 열기·유효기간·메모(복사)·사용/편집/삭제
+    detailId?.let { id ->
+        val item = sorted.firstOrNull { it.id == id }
+        if (item == null) detailId = null
+        else CouponDetailDialog(
+            item = item, me = me, isAdmin = isAdmin,
+            onZoom = { viewer = it },
+            onOpenLink = {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link))) }
+                    .onFailure { Toast.makeText(context, "링크를 열 수 없어요", Toast.LENGTH_SHORT).show() }
+            },
+            onCopyText = { txt ->
+                context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("coupon", txt))
+                Toast.makeText(context, "복사했어요", Toast.LENGTH_SHORT).show()
+            },
+            onToggleUsed = { vm.toggleCouponUsed(item) },
+            onEdit = { editId = id; detailId = null },
+            onDelete = { pendingDelete = id; detailId = null },
+            onClose = { detailId = null },
+        )
+    }
+
+    // 편집: 제목·유효기간(달력)·메모
+    editId?.let { id ->
+        val item = sorted.firstOrNull { it.id == id }
+        if (item == null) editId = null
+        else CouponEditDialog(
+            item = item,
+            onSave = { title, dateIso, memo -> vm.updateCoupon(id, title, dateIso, memo); editId = null },
+            onDismiss = { editId = null },
+        )
+    }
+
+    pendingDelete?.let { id ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("쿠폰 삭제") },
             text = { Text("이 쿠폰을 삭제할까요?") },
-            confirmButton = {
-                TextButton(onClick = { vm.deleteItem(it0.id); pendingDelete = null }) {
-                    Text("삭제", color = Color(0xFFE03131))
-                }
-            },
+            confirmButton = { TextButton(onClick = { vm.deleteItem(id); pendingDelete = null }) { Text("삭제", color = Color(0xFFE03131)) } },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("취소") } },
-        )
-    }
-
-    editing?.let { it0 ->
-        var txt by remember(it0.id) { mutableStateOf(it0.text) }
-        AlertDialog(
-            onDismissRequest = { editing = null },
-            title = { Text("쿠폰 설명") },
-            text = {
-                OutlinedTextField(
-                    value = txt, onValueChange = { txt = it.take(60) }, // 짧은 제목 수준
-                    placeholder = { Text("간단한 설명 (예: 스타벅스 아메리카노 쿠폰)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = { TextButton(onClick = { vm.setCouponCaption(it0.id, txt); editing = null }) { Text("저장") } },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("취소") } },
         )
     }
 }
 
 @Composable
-private fun CouponCard(
-    item: ListItem, me: String, isAdmin: Boolean, canEdit: Boolean,
-    onOpen: () -> Unit, onToggleUsed: () -> Unit, onDelete: () -> Unit, onEdit: () -> Unit,
-) {
+private fun CouponCard(item: ListItem, me: String, onOpenDetail: () -> Unit, onToggleUsed: () -> Unit) {
     val used = item.checked
-    val canCancel = used && item.usedBy == me // 사용완료 누른 본인만 취소 가능
+    val canCancel = used && item.usedBy == me
     val url = item.photoUrls.firstOrNull().orEmpty()
+    val exp = expiryLabel(item.dateIso)
     Card(
-        modifier = Modifier.fillMaxWidth().height(210.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().height(150.dp),
+        shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(Modifier.fillMaxSize()) {
-            // 내용 영역(가변) — 사용완료면 탭 불가(열리지 않음)
-            Box(Modifier.fillMaxWidth().weight(1f).let { if (!used) it.clickable { onOpen() } else it }) {
+            Box(Modifier.fillMaxWidth().weight(1f).clickable { onOpenDetail() }) {
                 if (url.isNotBlank()) {
-                    AsyncImage(
-                        model = funThumbUrl(url), contentDescription = null,
-                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
-                    )
-                    // 이미지 쿠폰 설명(캡션) — 하단 반투명 밴드
-                    if (item.text.isNotBlank()) {
-                        Text(
-                            item.text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                                .background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 5.dp),
-                        )
-                    }
+                    AsyncImage(model = funThumbUrl(url), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else {
-                    Column(Modifier.fillMaxSize().padding(14.dp)) {
-                        Text(
-                            if (item.link.isNotBlank()) "🔗 링크 쿠폰" else "🎟️ 쿠폰",
-                            fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            item.text.ifBlank { item.link }, fontSize = 13.sp,
-                            maxLines = 6, overflow = TextOverflow.Ellipsis,
-                        )
+                    Column(Modifier.fillMaxSize().padding(8.dp)) {
+                        Text(if (item.link.isNotBlank()) "🔗 링크" else "🎟️ 쿠폰", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(3.dp))
+                        Text(item.text.ifBlank { item.link }, fontSize = 11.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                // 사용완료: 회색 흐림 + 사용한 사람(아이콘보다 먼저 그려 아이콘이 위로)
-                if (used) {
-                    Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)).padding(8.dp), Alignment.Center) {
-                        Text(
-                            if (item.usedBy.isNotBlank()) "사용완료 - ${Family.nameOf(item.usedBy)}" else "사용완료",
-                            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1,
-                        )
-                    }
-                }
-                // 이미지+링크 & 설명 없음: 좌상단 🔗 배지(탭하면 링크 열림 표시).
-                if (url.isNotBlank() && item.link.isNotBlank() && item.text.isBlank() && !used) {
+                // 유효기간 배지(좌상단)
+                if (exp != null) {
                     Text(
-                        "🔗", fontSize = 13.sp,
-                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
-                            .background(Color(0x66000000), CircleShape).padding(horizontal = 6.dp, vertical = 3.dp),
+                        exp, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
+                            .background(if (exp == "만료") Color(0xE0E03131) else Color(0xCC0CA678), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
                     )
                 }
-                // 우상단: 설명 편집(작성자·관리자, 미사용) + 삭제(관리자). 어두운 원 배경으로 가시성.
-                Row(Modifier.align(Alignment.TopEnd)) {
-                    if (canEdit && !used) {
-                        IconButton(onClick = onEdit) {
-                            Icon(
-                                Icons.Default.Edit, "설명 편집", tint = Color.White,
-                                modifier = Modifier.background(Color(0x66000000), CircleShape).padding(4.dp),
-                            )
-                        }
-                    }
-                    if (isAdmin) {
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                Icons.Default.Delete, "삭제", tint = Color.White,
-                                modifier = Modifier.background(Color(0x66000000), CircleShape).padding(4.dp),
-                            )
-                        }
+                // 제목 캡션(하단 밴드, 이미지 쿠폰에만)
+                if (url.isNotBlank() && item.text.isNotBlank()) {
+                    Text(
+                        item.text, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                }
+                // 사용완료 흐림 + 사용자
+                if (used) {
+                    Box(Modifier.fillMaxSize().background(Color(0xCCB0B0B0)).padding(4.dp), Alignment.Center) {
+                        Text(if (item.usedBy.isNotBlank()) "사용완료\n${Family.nameOf(item.usedBy)}" else "사용완료", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
                     }
                 }
             }
-            // 하단 버튼: 안 썼으면 "사용", 썼으면 "사용완료"(누른 본인만 다시 눌러 취소).
             val label = if (used) "사용완료" else "사용"
             val btnColor = if (used) Color(0xFF868E96) else Color(0xFF0CA678)
             Box(
-                Modifier.fillMaxWidth().background(btnColor)
-                    .let { if (!used || canCancel) it.clickable { onToggleUsed() } else it }
-                    .padding(vertical = 9.dp),
+                Modifier.fillMaxWidth().background(btnColor).let { if (!used || canCancel) it.clickable { onToggleUsed() } else it }.padding(vertical = 6.dp),
                 Alignment.Center,
-            ) {
-                Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            }
+            ) { Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         }
+    }
+}
+
+@Composable
+private fun CouponDetailDialog(
+    item: ListItem, me: String, isAdmin: Boolean,
+    onZoom: (String) -> Unit, onOpenLink: () -> Unit, onCopyText: (String) -> Unit,
+    onToggleUsed: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onClose: () -> Unit,
+) {
+    val used = item.checked
+    val canCancel = used && item.usedBy == me
+    val canEdit = item.createdBy == me || isAdmin
+    val url = item.photoUrls.firstOrNull().orEmpty()
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(item.text.ifBlank { "쿠폰" }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (url.isNotBlank()) {
+                    AsyncImage(
+                        model = funThumbUrl(url), contentDescription = null, contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).clickable { onZoom(url) },
+                    )
+                    Text("사진을 누르면 크게 보여요", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Spacer(Modifier.height(8.dp))
+                }
+                // 유효기간
+                val expFull = if (item.dateIso.isBlank()) "없음" else "${item.dateIso} (${expiryLabel(item.dateIso)})"
+                Text("유효기간: $expFull", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                // 링크(미사용일 때만 열기)
+                if (item.link.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    if (!used) TextButton(onClick = onOpenLink, contentPadding = PaddingValues(0.dp)) { Text("🔗 링크 열기") }
+                    else Text("🔗 링크 쿠폰(사용완료)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                }
+                // 텍스트 전용 쿠폰: 내용 복사
+                if (url.isBlank() && item.link.isBlank() && item.text.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    SelectionContainer { Text(item.text, fontSize = 13.sp) }
+                    TextButton(onClick = { onCopyText(item.text) }, contentPadding = PaddingValues(0.dp)) { Text("복사") }
+                }
+                // 메모
+                Spacer(Modifier.height(8.dp))
+                Text("메모", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                if (item.description.isNotBlank()) {
+                    SelectionContainer { Text(item.description, fontSize = 13.sp) } // 길게 눌러 복사 가능
+                } else {
+                    Text("없음", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                }
+                if (used) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("사용완료 - ${Family.nameOf(item.usedBy)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF868E96))
+                }
+            }
+        },
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                Row {
+                    if (!used || canCancel) TextButton(onClick = { onToggleUsed(); onClose() }) { Text(if (used) "사용 취소" else "사용완료") }
+                    if (canEdit) TextButton(onClick = onEdit) { Text("편집") }
+                    if (isAdmin) TextButton(onClick = onDelete) { Text("삭제", color = Color(0xFFE03131)) }
+                }
+                TextButton(onClick = onClose) { Text("닫기") }
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CouponEditDialog(item: ListItem, onSave: (String, String, String) -> Unit, onDismiss: () -> Unit) {
+    var title by remember(item.id) { mutableStateOf(item.text) }
+    var memo by remember(item.id) { mutableStateOf(item.description) }
+    var dateIso by remember(item.id) { mutableStateOf(item.dateIso) }
+    var showDate by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("쿠폰 편집") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = title, onValueChange = { title = it.take(60) }, singleLine = true,
+                    label = { Text("제목/짧은 설명") }, placeholder = { Text("예: 스타벅스 아메리카노 쿠폰") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("유효기간: ${dateIso.ifBlank { "없음" }}", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { showDate = true }) { Text("날짜 선택") }
+                    if (dateIso.isNotBlank()) TextButton(onClick = { dateIso = "" }) { Text("지우기") }
+                }
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = memo, onValueChange = { memo = it }, minLines = 3, maxLines = 8,
+                    label = { Text("메모") }, placeholder = { Text("혜택 조건·사용 가능 매장 등 (길게 붙여넣기 가능)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(title, dateIso, memo) }) { Text("저장") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
+
+    if (showDate) {
+        val initMillis = runCatching { LocalDate.parse(dateIso) }.getOrNull()
+            ?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+            ?: LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val state = rememberDatePickerState(initialSelectedDateMillis = initMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { dateIso = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }
+                    showDate = false
+                }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("취소") } },
+        ) { DatePicker(state = state) }
     }
 }
