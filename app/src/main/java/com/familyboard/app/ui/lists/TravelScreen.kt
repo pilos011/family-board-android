@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,11 +27,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -45,6 +49,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,8 +61,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +93,8 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     var catFilter by remember { mutableStateOf<String?>(null) }
     var regionFilter by remember { mutableStateOf<String?>(null) }
     var showFilter by remember { mutableStateOf(false) }
+    var searchInput by remember { mutableStateOf("") } // 입력창
+    var search by remember { mutableStateOf("") }       // 적용된 검색어(이름·주소·종목·지역·메모)
 
     val all = items ?: emptyList()
     val catCounts = remember(all) { all.groupingBy { it.category }.eachCount().filterKeys { it.isNotBlank() } }
@@ -94,10 +103,14 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
     LaunchedEffect(catCounts) { if (catFilter != null && !catCounts.containsKey(catFilter)) catFilter = null }
     LaunchedEffect(regionCounts) { if (regionFilter != null && !regionCounts.containsKey(regionFilter)) regionFilter = null }
 
-    // 필터 적용 → 안 가본 곳 먼저, 다녀온 곳 뒤. 그 안에서 최신순.
-    val sorted = remember(all, catFilter, regionFilter) {
-        all.filter { (catFilter == null || it.category == catFilter) && (regionFilter == null || it.region == regionFilter) }
-            .sortedWith(compareBy<ListItem> { if (it.checked) 1 else 0 }.thenByDescending { it.createdAt })
+    // 필터+검색 적용 → 안 가본 곳 먼저, 다녀온 곳 뒤. 그 안에서 최신순.
+    val q = search.trim()
+    val sorted = remember(all, catFilter, regionFilter, q) {
+        all.filter {
+            (catFilter == null || it.category == catFilter) && (regionFilter == null || it.region == regionFilter) &&
+                (q.isBlank() || it.text.contains(q, true) || it.address.contains(q, true) ||
+                    it.category.contains(q, true) || it.region.contains(q, true) || it.description.contains(q, true))
+        }.sortedWith(compareBy<ListItem> { if (it.checked) 1 else 0 }.thenByDescending { it.createdAt })
     }
 
     fun openMap(item: ListItem) {
@@ -111,11 +124,16 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
             .onFailure { Toast.makeText(context, "지도를 열 수 없어요", Toast.LENGTH_SHORT).show() }
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopAppBar(
-            title = { Text(TravelBoard.TITLE) },
-            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") } },
-        )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(TravelBoard.TITLE) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로") } },
+                windowInsets = WindowInsets(0, 0, 0, 0),
+            )
+        },
+    ) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         when {
             items == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
             all.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -125,6 +143,52 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
                 )
             }
             else -> Column(Modifier.fillMaxSize()) {
+                // 검색행: [입력창] + [검색] (AI 추천 없음). 저장한 여행지를 이름·주소·종목·지역·메모로 거른다.
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.weight(1f).height(46.dp).clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFFF1F3F5)).padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (searchInput.isEmpty()) {
+                            Text("이름·주소·종목·지역·메모 검색", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        BasicTextField(
+                            value = searchInput, onValueChange = { searchInput = it }, singleLine = true,
+                            textStyle = TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    val on = search.isNotBlank()
+                    Row(
+                        Modifier.clip(RoundedCornerShape(20.dp))
+                            .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+                            .clickable { search = searchInput.trim() }
+                            .height(46.dp).padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Search, "검색", tint = if (on) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("검색", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+                    }
+                }
+                if (search.isNotBlank()) {
+                    Row(
+                        Modifier.padding(start = 14.dp, top = 6.dp).clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clickable { search = ""; searchInput = "" }.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("검색: $search", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.Close, "검색 해제", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                    }
+                }
                 // 필터 바: [필터] 버튼 + 선택 요약 (가볼 곳과 동일 구조). 칩은 바텀시트에.
                 if (catCounts.isNotEmpty() || regionCounts.isNotEmpty()) {
                     Row(
@@ -162,6 +226,7 @@ fun TravelScreen(vm: AppViewModel, currentMemberId: String?, onBack: () -> Unit)
                     }
                 }
             }
+        }
         }
     }
 

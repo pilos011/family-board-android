@@ -136,12 +136,13 @@ private fun MainScaffold(vm: AppViewModel) {
     val pendingWidgetNav by vm.pendingWidgetNav.collectAsStateWithLifecycle()
     LaunchedEffect(pendingWidgetNav) {
         val board = pendingWidgetNav ?: return@LaunchedEffect
-        val route = when (board) {
-            Routes.CALENDAR -> Routes.CALENDAR
-            PlaceBoards.RESTAURANT, PlaceBoards.VISIT -> Routes.place(board)
-            else -> Routes.listDetail(board)
+        when (board) {
+            // 달력은 하단 탭 → 홈 기준(navigateShare). 맛집/가볼곳/장보기 등은 리스트 카드 →
+            // 뒤로가기 시 리스트 메인으로 가도록 [HOME, LISTS, 대상] 백스택.
+            Routes.CALENDAR -> nav.navigateShare(Routes.CALENDAR)
+            PlaceBoards.RESTAURANT, PlaceBoards.VISIT -> nav.navigateShareUnderLists(Routes.place(board))
+            else -> nav.navigateShareUnderLists(Routes.listDetail(board))
         }
-        nav.navigateShare(route)
         vm.clearWidgetNav()
     }
 
@@ -150,7 +151,7 @@ private fun MainScaffold(vm: AppViewModel) {
 
     // 공유받은 재미진 항목(알림 탭): 재미진 곳 화면으로 이동 → FunListScreen 이 그 항목을 열고 clear.
     val pendingSharedFun by vm.pendingSharedFun.collectAsStateWithLifecycle()
-    LaunchedEffect(pendingSharedFun) { if (pendingSharedFun != null) nav.navigateShare(Routes.FUN) }
+    LaunchedEffect(pendingSharedFun) { if (pendingSharedFun != null) nav.navigateShareUnderLists(Routes.FUN) }
 
     // 업데이트 요청 알림 탭: 홈으로 이동 → HomeScreen 이 업데이트 창 자동 표시.
     val pendingOpenUpdate by vm.pendingOpenUpdate.collectAsStateWithLifecycle()
@@ -402,7 +403,7 @@ private fun MainScaffold(vm: AppViewModel) {
                 title = { Text("여행 위시리스트에 저장") },
                 text = { Text(body) },
                 confirmButton = {
-                    TextButton(enabled = !sp.loading, onClick = { vm.saveTravel(); nav.navigateShare(Routes.TRAVEL) }) { Text("저장") }
+                    TextButton(enabled = !sp.loading, onClick = { vm.saveTravel(); nav.navigateShareUnderLists(Routes.TRAVEL) }) { Text("저장") }
                 },
                 dismissButton = { TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") } },
             )
@@ -413,11 +414,11 @@ private fun MainScaffold(vm: AppViewModel) {
                 title = { Text("어디에 담을까요?") },
                 text = { Text(body) },
                 confirmButton = {
-                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.BOARD); nav.navigateShare(Routes.FUN) }) { Text("재미진 곳") }
+                    TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.BOARD); nav.navigateShareUnderLists(Routes.FUN) }) { Text("재미진 곳") }
                 },
                 dismissButton = {
                     Row {
-                        TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.PRIVATE); nav.navigateShare(Routes.MYFUN) }) { Text("내 재미진 곳") }
+                        TextButton(enabled = !sp.loading, onClick = { vm.saveFun(FunBoard.PRIVATE); nav.navigateShareUnderLists(Routes.MYFUN) }) { Text("내 재미진 곳") }
                         TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
                     }
                 },
@@ -432,13 +433,13 @@ private fun MainScaffold(vm: AppViewModel) {
                 text = { Text(body) },
                 confirmButton = {
                     TextButton(enabled = !sp.loading, onClick = {
-                        vm.savePlace(PlaceBoards.RESTAURANT); nav.navigateShare(Routes.place(PlaceBoards.RESTAURANT))
+                        vm.savePlace(PlaceBoards.RESTAURANT); nav.navigateShareUnderLists(Routes.place(PlaceBoards.RESTAURANT))
                     }) { Text("맛집") }
                 },
                 dismissButton = {
                     Row {
                         TextButton(enabled = !sp.loading, onClick = {
-                            vm.savePlace(PlaceBoards.VISIT); nav.navigateShare(Routes.place(PlaceBoards.VISIT))
+                            vm.savePlace(PlaceBoards.VISIT); nav.navigateShareUnderLists(Routes.place(PlaceBoards.VISIT))
                         }) { Text("가볼 곳") }
                         TextButton(onClick = { vm.clearPendingShare() }) { Text("취소") }
                     }
@@ -456,7 +457,7 @@ private fun MainScaffold(vm: AppViewModel) {
             confirmButton = {
                 TextButton(enabled = !pd.uploading, onClick = {
                     vm.savePendingDoc { ok, err ->
-                        if (ok) nav.navigateShare(Routes.DOCS)
+                        if (ok) nav.navigateShareUnderLists(Routes.DOCS)
                         else Toast.makeText(context, err ?: "저장 실패", Toast.LENGTH_SHORT).show()
                     }
                 }) { Text("저장") }
@@ -475,6 +476,18 @@ private fun androidx.navigation.NavController.navigateShare(route: String) {
         popUpTo(graph.findStartDestination().id) { saveState = false }
         launchSingleTop = true
     }
+}
+
+/**
+ * 외부 앱 '공유'로 저장 후 이동(재미진 곳·내 재미진 곳·여행·맛집·가볼 곳·문서함). 이 대상들은 모두
+ * 리스트 탭의 카드라, 뒤로가기 시 홈이 아니라 **리스트 메인**으로 가도록 [HOME, LISTS, target] 백스택을 만든다.
+ */
+private fun androidx.navigation.NavController.navigateShareUnderLists(route: String) {
+    navigate(Routes.LISTS) {
+        popUpTo(graph.findStartDestination().id) { saveState = false }
+        launchSingleTop = true
+    }
+    navigate(route) { launchSingleTop = true }
 }
 
 private fun androidx.navigation.NavController.navigateTab(route: String) {

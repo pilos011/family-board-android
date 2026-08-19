@@ -963,6 +963,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             board.updateFields(item.id, mapOf("text" to title.trim(), "link" to link.trim(), "photoUrls" to photos))
         }
     }
+    /** 재미진 곳 좋아요 토글(멤버 id 를 likes 에 추가/제거). 비실시간이라 화면이 loaded 를 낙관적 갱신. */
+    fun toggleFunLike(item: ListItem, memberId: String) = viewModelScope.launch {
+        val newLikes = if (item.likes.contains(memberId)) item.likes - memberId else item.likes + memberId
+        runCatching { board.updateFields(item.id, mapOf("likes" to newLikes)) }
+    }
+
     /** 공유받은 이미지 → 서버 업로드(고화질) 후 저장 대기(재미진 곳). */
     fun handleSharedImage(uri: android.net.Uri) {
         pendingShare.value = SharedPlace(name = "이미지 올리는 중…", link = "", loading = true, isFun = true)

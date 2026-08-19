@@ -10,6 +10,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -42,6 +45,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -100,6 +104,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import com.familyboard.app.data.model.ListItem
 import com.familyboard.app.ui.AppViewModel
 
@@ -130,6 +135,7 @@ fun FunListScreen(
     var imageOn by remember { mutableStateOf(true) }
     var oldestFirst by remember { mutableStateOf(false) }
     var hideViewed by remember { mutableStateOf(false) }
+    var likesSort by remember { mutableStateOf(false) } // 좋아요 많은 순 정렬
 
     // 페이지 방식: 한 페이지 pageSize개. 최신순(기본)/등록순은 서버 정렬로 페이지 이동.
     val pageSize = 60
@@ -142,8 +148,8 @@ fun FunListScreen(
     var resumeDismissed by remember(boardKey) { mutableStateOf(false) }
     var entrySavedPage by remember(boardKey) { mutableStateOf(0) }
 
-    // 표시 필터(유튜브/웹/이미지/안 본)가 하나라도 걸려 있으면 '필터 모드'.
-    val filtering = !(youtubeOn && websiteOn && imageOn && !hideViewed)
+    // 표시 필터(유튜브/웹/이미지/안 본)가 걸렸거나 좋아요순 정렬이면 '필터 모드'(전체 로드 후 필터/정렬).
+    val filtering = !(youtubeOn && websiteOn && imageOn && !hideViewed) || likesSort
     fun matches(it: ListItem): Boolean {
         val yt = isYoutube(it.link)
         val img = it.link.isBlank() && it.photoUrls.isNotEmpty()
@@ -170,8 +176,9 @@ fun FunListScreen(
     }
 
     // 필터 모드면 '전체 로드분을 필터한 목록'으로, 아니면 서버 페이징 목록(loaded)으로 페이징.
-    val filtered = remember(loaded, filtering, youtubeOn, websiteOn, imageOn, hideViewed, currentMemberId) {
-        if (filtering) loaded.filter(::matches) else loaded
+    val filtered = remember(loaded, filtering, youtubeOn, websiteOn, imageOn, hideViewed, currentMemberId, likesSort) {
+        val base = if (filtering) loaded.filter(::matches) else loaded
+        if (likesSort) base.sortedWith(compareByDescending<ListItem> { it.likes.size }.thenByDescending { it.createdAt }) else base
     }
     // 페이지 수: 필터 모드는 '필터 결과' 기준(그래서 실제 보이는 만큼만), 비필터는 서버 전체 개수 기준.
     val totalPages = (if (filtering) (filtered.size + pageSize - 1) / pageSize
@@ -198,7 +205,9 @@ fun FunListScreen(
                 val added = loadMutex.withLock {
                     val ids = loaded.mapTo(HashSet()) { it.id }
                     val newOnes = fresh.filter { it.id !in ids }
-                    if (newOnes.isNotEmpty()) loaded = (fresh + loaded).distinctBy { it.id }.sortedByDescending { it.createdAt }
+                    // 새 항목만 추가. 기존 항목은 loaded(캐시·낙관적 편집본)를 유지 —
+                    // 서버본으로 덮으면 방금 편집한 제목이 아직 안 퍼졌을 때 되돌아가는 버그.
+                    if (newOnes.isNotEmpty()) loaded = (newOnes + loaded).sortedByDescending { it.createdAt }
                     newOnes.isNotEmpty()
                 }
                 if (added) vm.refreshFunCount() // 새 항목 생겼으면 총 페이지 수도 갱신
@@ -304,13 +313,15 @@ fun FunListScreen(
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 // 표시 필터를 바꾸면 현재 페이지가 비어 보일 수 있으니 1페이지로 리셋(등록순은 아래서 전체 리셋)
                 TogglePill("유튜브", youtubeOn) { youtubeOn = !youtubeOn; pageIndex = 0 }
                 TogglePill("웹사이트", websiteOn) { websiteOn = !websiteOn; pageIndex = 0 }
                 TogglePill("이미지", imageOn) { imageOn = !imageOn; pageIndex = 0 }
-                TogglePill("등록순", oldestFirst) { oldestFirst = !oldestFirst }
                 TogglePill("안 본", hideViewed) { hideViewed = !hideViewed; pageIndex = 0 }
+                // 좋아요 많은 순 정렬 토글(엄지 아이콘)
+                LikeSortPill(on = likesSort) { likesSort = !likesSort; pageIndex = 0 }
             }
             if (showResume) {
                 ResumeBanner(
@@ -400,7 +411,37 @@ fun FunListScreen(
         val transferMsg = if (toPrivate) "내 재미진 곳에 담았어요" else "재미진 곳에 담았어요"
         AlertDialog(
             onDismissRequest = { actionItem = null },
-            title = { Text(it0.text.ifBlank { "게시물" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(it0.text.ifBlank { "게시물" }, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    val me = currentMemberId
+                    val liked = me != null && it0.likes.contains(me)
+                    Spacer(Modifier.width(8.dp))
+                    // 우상단 좋아요 엄지: 누르면 토글. 즉시 반영(loaded·actionItem 낙관적 갱신).
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+                            .background(if (liked) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color(0xFFF1F3F5))
+                            .clickable(enabled = me != null) {
+                                if (me != null) {
+                                    vm.toggleFunLike(it0, me)
+                                    val updated = it0.copy(likes = if (liked) it0.likes - me else it0.likes + me)
+                                    loaded = loaded.map { if (it.id == it0.id) updated else it }
+                                    actionItem = updated
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Icon(Icons.Default.ThumbUp, "좋아요", modifier = Modifier.size(18.dp),
+                            tint = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        if (it0.likes.isNotEmpty()) {
+                            Spacer(Modifier.width(4.dp))
+                            Text("${it0.likes.size}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                color = if (liked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
+                    }
+                }
+            },
             text = { Text("이 게시물을 어떻게 할까요?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
@@ -549,17 +590,15 @@ private fun ResumeBanner(page: Int, onResume: () -> Unit, onDismiss: () -> Unit)
     }
 }
 
-/** 현재 페이지 주변 + 처음/끝 번호. -1 은 생략(…) 표시. */
+/** 현재 페이지 중심으로 연속 10개(끝에서 클램프). 생략(…) 없이 항상 최대 10개 번호 노출. */
 private fun pageWindow(cur: Int, total: Int): List<Int> {
-    if (total <= 7) return (1..total).toList()
-    val set = listOf(1, cur - 1, cur, cur + 1, total).filter { it in 1..total }.toSortedSet()
-    val out = mutableListOf<Int>()
-    var prev = 0
-    for (p in set) {
-        if (prev != 0 && p - prev > 1) out.add(-1)
-        out.add(p); prev = p
-    }
-    return out
+    val win = 10
+    if (total <= win) return (1..total).toList()
+    var start = cur - win / 2
+    if (start < 1) start = 1
+    var end = start + win - 1
+    if (end > total) { end = total; start = end - win + 1 }
+    return (start..end).toList()
 }
 
 /** 하단 페이지 이동 바: ‹ 이전 · 번호(현재 강조) · 다음 › */
@@ -570,32 +609,33 @@ private fun FunPageBar(
 ) {
     Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onPrev, enabled = page > 1) {
-                Icon(Icons.Default.ChevronLeft, "이전 페이지")
+            // 10개 번호가 한 줄에 들어가도록 화살표·번호 여백 최소화
+            IconButton(onClick = onPrev, enabled = page > 1, modifier = Modifier.size(34.dp)) {
+                Icon(Icons.Default.ChevronLeft, "이전 페이지", modifier = Modifier.size(22.dp))
             }
             pageWindow(page, totalPages).forEach { p ->
                 when (p) {
                     -1 -> Text(
                         "…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                        modifier = Modifier.padding(horizontal = 2.dp),
+                        modifier = Modifier.padding(horizontal = 1.dp),
                     )
                     page -> Box(
-                        Modifier.padding(horizontal = 2.dp).clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primary).padding(horizontal = 11.dp, vertical = 5.dp),
+                        Modifier.padding(horizontal = 1.dp).clip(RoundedCornerShape(7.dp))
+                            .background(MaterialTheme.colorScheme.primary).padding(horizontal = 7.dp, vertical = 5.dp),
                     ) { Text("$p", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
                     else -> Text(
                         "$p", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onGoto(p) }
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(7.dp)).clickable { onGoto(p) }
+                            .padding(horizontal = 5.dp, vertical = 5.dp),
                     )
                 }
             }
-            IconButton(onClick = onNext, enabled = page < totalPages) {
-                Icon(Icons.Default.ChevronRight, "다음 페이지")
+            IconButton(onClick = onNext, enabled = page < totalPages, modifier = Modifier.size(34.dp)) {
+                Icon(Icons.Default.ChevronRight, "다음 페이지", modifier = Modifier.size(22.dp))
             }
         }
     }
@@ -611,12 +651,29 @@ private fun StackViewer(urls: List<String>, onLongOpen: (String) -> Unit, onClos
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
             items(urls) { u ->
-                // 스크롤 중 오터치 방지: 탭이 아니라 롱클릭으로 확대. 표시는 화면폭 수준으로 디코드(스크롤 부드럽게)
+                // 훑어보기는 500px 썸네일(빠른 로딩·캐시)로 → 스크롤 부드럽게. 확대는 롱프레스 시 원본.
                 val ctx = LocalContext.current
                 AsyncImage(
-                    model = ImageRequest.Builder(ctx).data(u).size(1280).build(),
+                    model = ImageRequest.Builder(ctx).data(funThumbUrl(u)).size(800).build(),
                     contentDescription = null, contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth().pointerInput(u) { detectTapGestures(onLongPress = { onLongOpen(u) }) },
+                    // 롱프레스(600ms 정지 유지)만 확대. 조금이라도 움직이면 스크롤로 넘겨 오확대 방지.
+                    modifier = Modifier.fillMaxWidth().pointerInput(u) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val slop = viewConfiguration.touchSlop
+                            val held = withTimeoutOrNull(600L) {
+                                var still = true
+                                while (still) {
+                                    val e = awaitPointerEvent()
+                                    val c = e.changes.firstOrNull { it.id == down.id }
+                                    if (c == null || !c.pressed) still = false
+                                    else if ((c.position - down.position).getDistance() > slop) still = false
+                                }
+                                false // 움직이거나 손 뗌 = 롱프레스 아님(스크롤)
+                            }
+                            if (held == null) onLongOpen(u) // 600ms 정지 유지 = 확대
+                        }
+                    },
                 )
             }
             item { Spacer(Modifier.height(40.dp)) }
@@ -734,6 +791,20 @@ private fun TogglePill(label: String, on: Boolean, onToggle: () -> Unit) {
     )
 }
 
+/** 좋아요 많은 순 정렬 토글(엄지 아이콘 알약). */
+@Composable
+private fun LikeSortPill(on: Boolean, onToggle: () -> Unit) {
+    Icon(
+        Icons.Default.ThumbUp, "좋아요순",
+        tint = if (on) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+            .background(if (on) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+            .clickable { onToggle() }
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .size(18.dp),
+    )
+}
+
 @Composable
 private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
     Column(
@@ -766,9 +837,18 @@ private fun FunCell(item: ListItem, modifier: Modifier, viewed: Boolean, onClick
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(item.text.ifBlank { "제목 없음" }, fontSize = 11.sp, lineHeight = 13.sp,
-            maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
-            color = if (viewed) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface)
+        Row(verticalAlignment = Alignment.Top) {
+            Text(item.text.ifBlank { "제목 없음" }, fontSize = 11.sp, lineHeight = 13.sp,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+                color = if (viewed) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface)
+            if (item.likes.isNotEmpty()) {
+                Spacer(Modifier.width(3.dp))
+                Icon(Icons.Default.ThumbUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(11.dp).padding(top = 1.dp))
+                Text("${item.likes.size}", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 1.dp))
+            }
+        }
     }
 }
 

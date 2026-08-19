@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Navigation
@@ -143,6 +144,7 @@ fun PlaceListScreen(
     var catFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var regionFilter by remember(boardKey) { mutableStateOf<String?>(null) }
     var showFilter by remember { mutableStateOf(false) }
+    var search by remember(boardKey) { mutableStateOf("") } // 저장한 장소 내 검색(이름·주소·종목)
     // 발굴 추천: 결과 목록 / 로딩 / 직접 입력("카테고리, 지역")
     var recommends by remember { mutableStateOf<List<com.familyboard.app.notif.Recommendation>>(emptyList()) }
     var recommending by remember { mutableStateOf(false) }
@@ -173,10 +175,13 @@ fun PlaceListScreen(
     val catCounts = remember(items) { items.groupingBy { it.category.ifBlank { "기타" } }.eachCount() }
     val regionCounts = remember(items) { items.groupingBy { regionOf(it.address).ifBlank { "기타" } }.eachCount() }
 
-    val filtered = remember(items, catFilter, regionFilter) {
+    val q = search.trim()
+    val filtered = remember(items, catFilter, regionFilter, q) {
         items.filter {
             (catFilter == null || it.category.ifBlank { "기타" } == catFilter) &&
-                (regionFilter == null || regionOf(it.address).ifBlank { "기타" } == regionFilter)
+                (regionFilter == null || regionOf(it.address).ifBlank { "기타" } == regionFilter) &&
+                (q.isBlank() || it.text.contains(q, ignoreCase = true) ||
+                    it.address.contains(q, ignoreCase = true) || it.category.contains(q, ignoreCase = true))
         }
     }
     // 선택한 정렬 키를 탭 순서대로 우선순위 적용(혼합 정렬). 비면 네이버 평점순.
@@ -248,7 +253,7 @@ fun PlaceListScreen(
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            // AI 추천 입력행: [카테고리, 지역] 입력창 + 추천받기. 비어 있으면 필터값/현재 시군구로 진행.
+            // 입력행: [검색어/카테고리] 입력창 + [검색](저장 항목) + [추천받기](AI). 검색은 입력창 내용으로 저장 목록을 거른다.
             Row(
                 Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -275,6 +280,20 @@ fun PlaceListScreen(
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
+                Spacer(Modifier.size(8.dp))
+                // 저장한 장소 내 검색: 입력창 내용으로 목록을 거른다(빈값이면 해제).
+                Row(
+                    Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(if (search.isNotBlank()) MaterialTheme.colorScheme.primary else Color(0xFFF1F3F5))
+                        .clickable { search = recQuery.trim() }
+                        .height(46.dp).padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val on = search.isNotBlank()
+                    Icon(Icons.Default.Search, "검색", tint = if (on) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.size(5.dp))
+                    Text("검색", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
                 }
                 Spacer(Modifier.size(8.dp))
                 Row(
@@ -328,6 +347,19 @@ fun PlaceListScreen(
                     Icon(Icons.Default.AutoAwesome, "추천", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.size(5.dp))
                     Text(if (recommending) "추천 중…" else "추천받기", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            // 활성 검색 표시 + 해제(✕)
+            if (search.isNotBlank()) {
+                Row(
+                    Modifier.padding(start = 14.dp, top = 6.dp).clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable { search = "" }.padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("검색: $search", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.size(4.dp))
+                    Icon(Icons.Default.Close, "검색 해제", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                 }
             }
             // 필터 바: [필터] 버튼 + 현재 선택 요약(개수)
