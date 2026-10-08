@@ -2,6 +2,11 @@
 
 이 프로젝트의 모든 주요 변경 사항을 기록한다. 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따른다.
 
+## [1.0.155] - 2026-10-08
+
+### Changed
+- **주차 위젯을 Home Assistant 경유로 변경.** 예전엔 가족 폰마다 아파트 RTLS 서버(122.199.183.213)를 06~23시 30분마다 직접 조회해 폰 수만큼 요청이 늘었다. 이제 **HA가 대표로 06:00~22:30 매시 :00·:30에 1회 조회**(자동화)하고, 위젯은 **HA 센서(moning/geuraenjeo_jucaceung)만 읽는다**(매시 :02·:32). 탭 시 HA에 즉시 재조회 요청(`homeassistant.update_entity`, 폰당 1분 1회)하고 센서를 읽어 표시. RTLS 평문(HTTP) 예외 제거(HA는 HTTPS). 표시·레이아웃·신선도(35분)는 그대로.
+
 ## [1.0.154] - 2026-08-19
 
 ### Changed
