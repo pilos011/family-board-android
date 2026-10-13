@@ -59,6 +59,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 waitText = data["waitText"] ?: "",
                 image = data["image"] ?: "",
                 bg = data["bg"] ?: "",
+                closeButton = data["closeButton"] ?: "",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -91,7 +92,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
     // ─────────── 긴급 연락: 전체화면 알림 ───────────
     private fun showEmergency(
         sender: String, msg: String, wantLoc: Boolean,
-        headline: String = "", waitText: String = "", image: String = "", bg: String = "",
+        headline: String = "", waitText: String = "", image: String = "", bg: String = "", closeButton: String = "",
     ) {
         ensureEmergencyChannel()
         // 빠른 연락 요청은 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
@@ -106,6 +107,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
             putExtra(EmergencyActivity.EXTRA_WAIT_TEXT, waitText)
             putExtra(EmergencyActivity.EXTRA_IMAGE, image)
             putExtra(EmergencyActivity.EXTRA_BG, bg)
+            putExtra(EmergencyActivity.EXTRA_CLOSE_BUTTON, closeButton)
         }
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE

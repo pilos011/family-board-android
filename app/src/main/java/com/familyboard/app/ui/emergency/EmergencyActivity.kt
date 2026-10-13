@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
@@ -87,12 +88,14 @@ class EmergencyActivity : ComponentActivity() {
         const val EXTRA_WAIT_TEXT = "waitText"
         const val EXTRA_IMAGE = "image"
         const val EXTRA_BG = "bg"
+        const val EXTRA_CLOSE_BUTTON = "closeButton"
     }
 
     /** 화면 표시 상태(재수신 시 onNewIntent 로 갱신). */
     private data class EmUi(
         val sender: String = "", val message: String = "", val wantLoc: Boolean = false,
         val headline: String = "", val waitText: String = "", val image: String = "", val bg: String = "",
+        val closeButton: String = "",
     )
 
     private var testMode = false
@@ -141,6 +144,7 @@ class EmergencyActivity : ComponentActivity() {
                 waitText = s.waitText,
                 image = s.image,
                 bg = s.bg,
+                closeButton = s.closeButton,
                 onCall = { callSender() },
                 onShareLocation = { requestAndShareLocation() },
                 onClose = { finish() },
@@ -169,6 +173,7 @@ class EmergencyActivity : ComponentActivity() {
             waitText = intent.getStringExtra(EXTRA_WAIT_TEXT).orEmpty(),
             image = intent.getStringExtra(EXTRA_IMAGE).orEmpty(),
             bg = intent.getStringExtra(EXTRA_BG).orEmpty(),
+            closeButton = intent.getStringExtra(EXTRA_CLOSE_BUTTON).orEmpty(),
         )
     }
 
@@ -302,6 +307,7 @@ private fun WaitingContent(
     waitText: String = "",
     image: String = "",
     bg: String = "",
+    closeButton: String = "",
     onCall: () -> Unit,
     onShareLocation: () -> Unit,
     onClose: () -> Unit,
@@ -367,27 +373,40 @@ private fun WaitingContent(
             }
             Spacer(Modifier.height(30.dp))
 
-            Button(
-                onClick = onCall,
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = WarmAccent, contentColor = Color.White),
-            ) {
-                Icon(Icons.Default.Call, null); Spacer(Modifier.size(8.dp))
-                Text("바로 연락", fontSize = 19.sp, fontWeight = FontWeight.Bold)
-            }
-            if (showLocation) {
-                Spacer(Modifier.height(12.dp))
+            if (closeButton.isNotBlank()) {
+                // 식사 호출 등: [바로 연락] 대신 화면을 닫는 버튼 하나만(주황 큰 버튼)
                 Button(
-                    onClick = onShareLocation,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    onClick = onClose,
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = WarmInk.copy(alpha = 0.10f), contentColor = WarmInk,
-                    ),
+                    colors = ButtonDefaults.buttonColors(containerColor = WarmAccent, contentColor = Color.White),
                 ) {
-                    Icon(Icons.Default.LocationOn, null); Spacer(Modifier.size(8.dp))
-                    Text("내 위치 공유", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Check, null); Spacer(Modifier.size(8.dp))
+                    Text(closeButton, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = onCall,
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WarmAccent, contentColor = Color.White),
+                ) {
+                    Icon(Icons.Default.Call, null); Spacer(Modifier.size(8.dp))
+                    Text("바로 연락", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                }
+                if (showLocation) {
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = onShareLocation,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = WarmInk.copy(alpha = 0.10f), contentColor = WarmInk,
+                        ),
+                    ) {
+                        Icon(Icons.Default.LocationOn, null); Spacer(Modifier.size(8.dp))
+                        Text("내 위치 공유", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
