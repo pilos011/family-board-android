@@ -7,8 +7,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -51,6 +55,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 sender = data["sender"] ?: "",
                 msg = data["msg"] ?: (message.notification?.body ?: ""),
                 wantLoc = data["wantLoc"] == "1",
+                sound = data["sound"] ?: "",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -81,8 +86,10 @@ class FamilyMessagingService : FirebaseMessagingService() {
     }
 
     // ─────────── 긴급 연락: 전체화면 알림 ───────────
-    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean) {
+    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean, sound: String = "") {
         ensureEmergencyChannel()
+        // 식사 호출 등: sound=beep 이면 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
+        if (sound == "beep") playAlarmBeep()
         val full = Intent(this, EmergencyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
@@ -110,6 +117,28 @@ class FamilyMessagingService : FirebaseMessagingService() {
         // 사용 중에도 강제 전체화면: 오버레이(다른 앱 위에 표시) 권한이 있으면 백그라운드에서도
         // 이 직접 실행이 성공(BAL 예외). 권한이 없으면 실패→위 FSI 알림(잠금/화면꺼짐에서 전체화면)이 폴백.
         runCatching { startActivity(full) }
+    }
+
+    /**
+     * 알람 스트림으로 '삑' 한 번. 무음/진동 모드는 벨·알림 스트림만 끄고 알람은 살아있어 들린다.
+     * 알람 볼륨이 0이면 잠깐 올렸다가 재생 후 원복(방해금지에서 SecurityException 날 수 있어 runCatching).
+     */
+    private fun playAlarmBeep() {
+        runCatching {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val cur = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            val raised = cur == 0
+            if (raised) runCatching {
+                val half = (am.getStreamMaxVolume(AudioManager.STREAM_ALARM) / 2).coerceAtLeast(1)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, half, 0)
+            }
+            val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 600) // 0.6초 단발 삑
+            Handler(Looper.getMainLooper()).postDelayed({
+                runCatching { tg.release() }
+                if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 원복
+            }, 900)
+        }
     }
 
     // ─────────── 위치 공유 수신 ───────────
