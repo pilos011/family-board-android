@@ -7,12 +7,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
-import android.media.ToneGenerator
+import android.media.AudioTrack
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -131,12 +131,28 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 val half = (am.getStreamMaxVolume(AudioManager.STREAM_ALARM) / 2).coerceAtLeast(1)
                 am.setStreamVolume(AudioManager.STREAM_ALARM, half, 0)
             }
-            val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
-            tg.startTone(ToneGenerator.TONE_PROP_BEEP, 600) // 0.6초 단발 삑
-            Handler(Looper.getMainLooper()).postDelayed({
-                runCatching { tg.release() }
-                if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 원복
-            }, 900)
+            // ToneGenerator 는 톤 길이가 고정(~100ms)이라, AudioTrack 로 1kHz 사인파를 1초 생성해 재생.
+            Thread {
+                runCatching {
+                    val sr = 44100; val durMs = 1000; val n = sr * durMs / 1000
+                    val buf = ShortArray(n)
+                    val freq = 1000.0
+                    for (i in 0 until n) buf[i] = (Math.sin(2.0 * Math.PI * freq * i / sr) * 0.6 * Short.MAX_VALUE).toInt().toShort()
+                    val fade = sr / 200 // 5ms 페이드 인/아웃(딱 소리 방지)
+                    for (i in 0 until fade) { buf[i] = (buf[i] * i / fade).toShort(); buf[n - 1 - i] = (buf[n - 1 - i] * i / fade).toShort() }
+                    val attrs = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                    val fmt = AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sr)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
+                    val track = AudioTrack(attrs, fmt, n * 2, AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE)
+                    track.write(buf, 0, n); track.play()
+                    Thread.sleep((durMs + 200).toLong())
+                    runCatching { track.stop(); track.release() }
+                }
+                if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 재생 후 원복
+            }.start()
         }
     }
 
