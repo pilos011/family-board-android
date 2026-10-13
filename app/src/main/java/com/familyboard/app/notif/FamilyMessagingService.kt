@@ -11,6 +11,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.ActivityCompat
@@ -60,6 +61,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 image = data["image"] ?: "",
                 bg = data["bg"] ?: "",
                 closeButton = data["closeButton"] ?: "",
+                sound = data["sound"] ?: "",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -93,10 +95,12 @@ class FamilyMessagingService : FirebaseMessagingService() {
     private fun showEmergency(
         sender: String, msg: String, wantLoc: Boolean,
         headline: String = "", waitText: String = "", image: String = "", bg: String = "", closeButton: String = "",
+        sound: String = "",
     ) {
         ensureEmergencyChannel()
-        // 빠른 연락 요청은 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
-        playAlarmBeep()
+        // 빠른 연락 요청은 무음/진동 모드라도 소리 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
+        // sound == "desk_bell"(식사 호출)이면 '삑' 대신 번들 데스크벨 음원을 1회 재생, 그 외엔 기존 '삑'.
+        if (sound == "desk_bell") playAlarmSound(R.raw.meal_bell_once) else playAlarmBeep()
         val full = Intent(this, EmergencyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
@@ -168,6 +172,40 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 }
                 if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 재생 후 원복
             }.start()
+        }
+    }
+
+    /**
+     * 알람 스트림으로 번들 음원(예: 식사 호출 데스크벨)을 1회 재생. '삑'과 동일하게 무음/진동에서도 들린다.
+     * 알람 볼륨이 0이면 잠깐 올렸다가 재생 후 원복, 재생이 끝나면 MediaPlayer 를 release.
+     */
+    private fun playAlarmSound(resId: Int) {
+        runCatching {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val cur = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            val raised = cur == 0
+            if (raised) runCatching {
+                val half = (am.getStreamMaxVolume(AudioManager.STREAM_ALARM) / 2).coerceAtLeast(1)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, half, 0)
+            }
+            val mp = MediaPlayer()
+            mp.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+            )
+            val restore = { if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) }; Unit }
+            mp.setOnCompletionListener { runCatching { it.release() }; restore() }
+            mp.setOnErrorListener { p, _, _ -> runCatching { p.release() }; restore(); true }
+            val afd = resources.openRawResourceFd(resId)
+            if (afd != null) {
+                afd.use { mp.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
+                mp.prepare()
+                mp.setVolume(0.5f, 0.5f) // 데스크벨 음량 원래 대비 50%로 낮춤
+                mp.start()
+            } else {
+                runCatching { mp.release() }; restore()
+            }
         }
     }
 
