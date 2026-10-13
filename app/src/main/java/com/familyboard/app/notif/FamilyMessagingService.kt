@@ -134,7 +134,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
             // ToneGenerator 는 톤 길이가 고정(~100ms)이라, AudioTrack 로 1kHz 사인파를 1초 생성해 재생.
             Thread {
                 runCatching {
-                    val sr = 44100; val durMs = 1000; val n = sr * durMs / 1000
+                    val sr = 44100; val durMs = 500; val n = sr * durMs / 1000
                     val buf = ShortArray(n)
                     val freq = 1000.0
                     for (i in 0 until n) buf[i] = (Math.sin(2.0 * Math.PI * freq * i / sr) * 0.6 * Short.MAX_VALUE).toInt().toShort()
@@ -148,7 +148,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
                     val track = AudioTrack(attrs, fmt, n * 2, AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE)
                     track.write(buf, 0, n); track.play()
-                    Thread.sleep((durMs + 200).toLong())
+                    Thread.sleep((durMs + 300).toLong()) // 재생 완료 여유(~800ms)
                     runCatching { track.stop(); track.release() }
                 }
                 if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 재생 후 원복
