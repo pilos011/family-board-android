@@ -55,6 +55,10 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 sender = data["sender"] ?: "",
                 msg = data["msg"] ?: (message.notification?.body ?: ""),
                 wantLoc = data["wantLoc"] == "1",
+                headline = data["headline"] ?: "",
+                waitText = data["waitText"] ?: "",
+                image = data["image"] ?: "",
+                bg = data["bg"] ?: "",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -85,7 +89,10 @@ class FamilyMessagingService : FirebaseMessagingService() {
     }
 
     // ─────────── 긴급 연락: 전체화면 알림 ───────────
-    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean) {
+    private fun showEmergency(
+        sender: String, msg: String, wantLoc: Boolean,
+        headline: String = "", waitText: String = "", image: String = "", bg: String = "",
+    ) {
         ensureEmergencyChannel()
         // 빠른 연락 요청은 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
         playAlarmBeep()
@@ -94,15 +101,21 @@ class FamilyMessagingService : FirebaseMessagingService() {
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
             putExtra(EmergencyActivity.EXTRA_MESSAGE, msg)
             putExtra(EmergencyActivity.EXTRA_WANT_LOC, wantLoc)
+            // 식사 호출 등: 선택 커스터마이즈 값(없으면 기본 화면). type 은 그대로 emergency.
+            putExtra(EmergencyActivity.EXTRA_HEADLINE, headline)
+            putExtra(EmergencyActivity.EXTRA_WAIT_TEXT, waitText)
+            putExtra(EmergencyActivity.EXTRA_IMAGE, image)
+            putExtra(EmergencyActivity.EXTRA_BG, bg)
         }
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
         val pi = PendingIntent.getActivity(this, 7001, full, flags)
 
         val name = Family.nameOf(sender)
+        val title = if (headline.isNotBlank()) headline else "⏳ ${name}님의 빠른 연락 요청"
         val notif = NotificationCompat.Builder(this, CH_EMERGENCY)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("⏳ ${name}님의 빠른 연락 요청")
+            .setContentTitle(title)
             .setContentText(msg)
             .setStyle(NotificationCompat.BigTextStyle().bigText(msg))
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -134,7 +147,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
             // ToneGenerator 는 톤 길이가 고정(~100ms)이라, AudioTrack 로 1kHz 사인파를 1초 생성해 재생.
             Thread {
                 runCatching {
-                    val sr = 44100; val durMs = 500; val n = sr * durMs / 1000
+                    val sr = 44100; val durMs = 300; val n = sr * durMs / 1000
                     val buf = ShortArray(n)
                     val freq = 1000.0
                     for (i in 0 until n) buf[i] = (Math.sin(2.0 * Math.PI * freq * i / sr) * 0.6 * Short.MAX_VALUE).toInt().toShort()

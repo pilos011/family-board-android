@@ -26,6 +26,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,7 +82,18 @@ class EmergencyActivity : ComponentActivity() {
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_WANT_LOC = "wantLoc"
         const val EXTRA_TEST = "test"
+        // 식사 호출 등 선택 커스터마이즈(없으면 기본 화면)
+        const val EXTRA_HEADLINE = "headline"
+        const val EXTRA_WAIT_TEXT = "waitText"
+        const val EXTRA_IMAGE = "image"
+        const val EXTRA_BG = "bg"
     }
+
+    /** 화면 표시 상태(재수신 시 onNewIntent 로 갱신). */
+    private data class EmUi(
+        val sender: String = "", val message: String = "", val wantLoc: Boolean = false,
+        val headline: String = "", val waitText: String = "", val image: String = "", val bg: String = "",
+    )
 
     private var testMode = false
 
@@ -99,7 +111,7 @@ class EmergencyActivity : ComponentActivity() {
 
     private var senderId: String = ""
     // 화면에 표시할 현재 긴급 내용(재수신 시 onNewIntent 로 갱신)
-    private var ui by mutableStateOf(Triple("", "", false))
+    private var ui by mutableStateOf(EmUi())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,11 +132,15 @@ class EmergencyActivity : ComponentActivity() {
         vibrateAlarm()
 
         setContent {
-            val (sender, message, wantLoc) = ui
+            val s = ui
             WaitingContent(
-                senderName = Family.nameOf(sender),
-                message = message,
-                showLocation = wantLoc,
+                senderName = Family.nameOf(s.sender),
+                message = s.message,
+                showLocation = s.wantLoc,
+                headline = s.headline,
+                waitText = s.waitText,
+                image = s.image,
+                bg = s.bg,
                 onCall = { callSender() },
                 onShareLocation = { requestAndShareLocation() },
                 onClose = { finish() },
@@ -147,7 +163,13 @@ class EmergencyActivity : ComponentActivity() {
         val wantLoc = intent.getBooleanExtra(EXTRA_WANT_LOC, false)
         testMode = intent.getBooleanExtra(EXTRA_TEST, false)
         androidx.core.app.NotificationManagerCompat.from(this).cancel(9001)
-        ui = Triple(senderId, message, wantLoc)
+        ui = EmUi(
+            sender = senderId, message = message, wantLoc = wantLoc,
+            headline = intent.getStringExtra(EXTRA_HEADLINE).orEmpty(),
+            waitText = intent.getStringExtra(EXTRA_WAIT_TEXT).orEmpty(),
+            image = intent.getStringExtra(EXTRA_IMAGE).orEmpty(),
+            bg = intent.getStringExtra(EXTRA_BG).orEmpty(),
+        )
     }
 
     private fun callSender() {
@@ -276,14 +298,19 @@ private fun WaitingContent(
     senderName: String,
     message: String,
     showLocation: Boolean,
+    headline: String = "",
+    waitText: String = "",
+    image: String = "",
+    bg: String = "",
     onCall: () -> Unit,
     onShareLocation: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val whiteBg = bg == "white"
+    val bgModifier = if (whiteBg) Modifier.background(Color.White)
+        else Modifier.background(Brush.verticalGradient(listOf(WarmBg1, WarmBg2)))
     Box(
-        Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(listOf(WarmBg1, WarmBg2)))
-            .padding(20.dp),
+        Modifier.fillMaxSize().then(bgModifier).padding(20.dp),
     ) {
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd)) {
             Icon(Icons.Default.Close, "닫기", tint = WarmInk.copy(alpha = 0.55f))
@@ -294,26 +321,42 @@ private fun WaitingContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
         ) {
-            Image(
-                painter = painterResource(com.familyboard.app.R.drawable.call_wait),
-                contentDescription = null,
-                modifier = Modifier.size(180.dp),
-                contentScale = ContentScale.Fit,
-            )
+            if (image == "chiikawa") {
+                // 가로로 긴 그림 → 폭 꽉 채우고 높이 약 170dp
+                Image(
+                    painter = painterResource(com.familyboard.app.R.drawable.call_wait_chiikawa),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().height(170.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Image(
+                    painter = painterResource(com.familyboard.app.R.drawable.call_wait),
+                    contentDescription = null,
+                    modifier = Modifier.size(180.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            }
             Spacer(Modifier.height(6.dp))
-            Text("빠른 연락 요청", color = WarmInk, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Text(headline.ifBlank { "빠른 연락 요청" }, color = WarmInk, fontSize = 28.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(10.dp))
             Text(
                 buildAnnotatedString {
                     withStyle(SpanStyle(color = WarmAccent, fontWeight = FontWeight.Black, fontSize = 26.sp)) { append(senderName) }
-                    append("님이 애타게 기다리고 있어요")
+                    append(waitText.ifBlank { "님이 애타게 기다리고 있어요" })
                 },
                 color = WarmInk, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(24.dp))
-            Box(
+            // 메시지 상자: 흰 배경에선 흰 70% 상자가 안 보이므로 연한 회색+테두리로 구분
+            val boxMod = if (whiteBg)
+                Modifier.fillMaxWidth()
+                    .background(Color(0xFFF5F5F5), RoundedCornerShape(20.dp))
+                    .border(1.dp, WarmInk.copy(alpha = 0.18f), RoundedCornerShape(20.dp))
+            else
                 Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
-                    .padding(22.dp),
+            Box(
+                boxMod.padding(22.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
