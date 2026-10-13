@@ -14,6 +14,9 @@ import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -102,8 +105,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
         val isDeskBell = sound == "desk_bell"
         ensureEmergencyChannel()
         // 빠른 연락 요청은 무음/진동 모드라도 소리 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
-        // sound == "desk_bell"(식사 호출)이면 '삑' 대신 번들 데스크벨 음원을 1회 재생, 그 외엔 기존 '삑'.
-        if (isDeskBell) playAlarmSound(R.raw.meal_bell_once) else playAlarmBeep()
+        // 식사 호출(desk_bell)은 전체화면을 안 띄우므로 진동도 서비스에서 울린다. 데스크벨은 알림 게시 뒤에 재생(아래).
+        if (isDeskBell) vibrateEmergency() else playAlarmBeep()
         val full = Intent(this, EmergencyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
@@ -123,7 +126,9 @@ class FamilyMessagingService : FirebaseMessagingService() {
 
         val name = Family.nameOf(sender)
         val title = if (headline.isNotBlank()) headline else "⏳ ${name}님의 빠른 연락 요청"
-        // 식사 호출(desk_bell)은 소리·진동 없는 채널 + setSilent → 알림음·진동 없음(데스크벨 소리만). FSI 는 그대로.
+        // 식사 호출(desk_bell): 전체화면(FSI)·강제 액티비티 실행 없이 일반 알림만 — 진동+데스크벨은 서비스에서 재생.
+        //   setSilent(true)로 기본 알림음은 끄고(소리는 데스크벨), 탭하면 식사 화면을 연다(전체화면 자동표시 안 함).
+        // 그 외 빠른 연락: 기존대로 FSI + 사용 중 강제 전체화면.
         val notif = NotificationCompat.Builder(this, if (isDeskBell) CH_EMERGENCY_SILENT else CH_EMERGENCY)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
@@ -133,14 +138,18 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
             .setContentIntent(pi)
-            .setFullScreenIntent(pi, true)
-            .apply { if (isDeskBell) { setSilent(true); setVibrate(longArrayOf(0L)) } }
+            .apply {
+                if (isDeskBell) setSilent(true) // 기본 알림음 끔(데스크벨만), 진동은 서비스에서
+                else setFullScreenIntent(pi, true)
+            }
             .build()
 
         if (canNotify()) NotificationManagerCompat.from(this).notify(9001, notif)
-        // 사용 중에도 강제 전체화면: 오버레이(다른 앱 위에 표시) 권한이 있으면 백그라운드에서도
-        // 이 직접 실행이 성공(BAL 예외). 권한이 없으면 실패→위 FSI 알림(잠금/화면꺼짐에서 전체화면)이 폴백.
-        runCatching { startActivity(full) }
+        // 그 외 빠른 연락만 사용 중에도 강제 전체화면(오버레이 권한 있으면 백그라운드에서도 성공, 없으면 FSI 폴백).
+        // 식사 호출은 전체화면을 띄우지 않는다(진동+벨만).
+        if (!isDeskBell) runCatching { startActivity(full) }
+        // 식사 호출 데스크벨은 알림·진동을 띄운 뒤 마지막에 재생(완료까지 블로킹 → 프로세스 종료로 잘리지 않게).
+        if (isDeskBell) playAlarmSound(R.raw.meal_bell_once)
     }
 
     /**
@@ -184,6 +193,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
     /**
      * 알람 스트림으로 번들 음원(예: 식사 호출 데스크벨)을 1회 재생. '삑'과 동일하게 무음/진동에서도 들린다.
      * 알람 볼륨이 0이면 잠깐 올렸다가 재생 후 원복, 재생이 끝나면 MediaPlayer 를 release.
+     * ⚠️ 전체화면 액티비티를 안 띄우는 식사 호출에선 FCM 처리 종료 후 프로세스가 내려가며 재생이 잘릴 수 있어,
+     * 호출 스레드를 재생 완료까지(최대 ~4초) 잡아 둔다(onMessageReceived 백그라운드 스레드라 블로킹 가능).
      */
     private fun playAlarmSound(resId: Int) {
         runCatching {
@@ -194,23 +205,57 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 val half = (am.getStreamMaxVolume(AudioManager.STREAM_ALARM) / 2).coerceAtLeast(1)
                 am.setStreamVolume(AudioManager.STREAM_ALARM, half, 0)
             }
+            val done = java.util.concurrent.CountDownLatch(1)
             val mp = MediaPlayer()
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
             )
-            val restore = { if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) }; Unit }
-            mp.setOnCompletionListener { runCatching { it.release() }; restore() }
-            mp.setOnErrorListener { p, _, _ -> runCatching { p.release() }; restore(); true }
+            mp.setOnCompletionListener { done.countDown() }
+            mp.setOnErrorListener { _, _, _ -> done.countDown(); true }
             val afd = resources.openRawResourceFd(resId)
+            var durMs = 2000
             if (afd != null) {
                 afd.use { mp.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
                 mp.prepare()
+                durMs = mp.duration.coerceIn(300, 4000)
                 mp.setVolume(0.5f, 0.5f) // 데스크벨 음량 원래 대비 50%로 낮춤
                 mp.start()
+                // 재생 완료(또는 길이+500ms, 최대 4.5초)까지 대기 → 프로세스가 내려가도 소리가 끝까지 난다.
+                runCatching { done.await((durMs + 500).toLong(), java.util.concurrent.TimeUnit.MILLISECONDS) }
+            }
+            runCatching { mp.stop() }
+            runCatching { mp.release() }
+            if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 재생 후 원복
+        }
+    }
+
+    /**
+     * 식사 호출 등 전체화면을 안 띄우는 경우, 서비스에서 직접 진동.
+     * ⚠️ 백그라운드 서비스의 진동은 속성 없는 vibrate()면 무음/백그라운드에서 무시된다 →
+     * USAGE_ALARM AudioAttributes 를 붙여 무음·방해금지·백그라운드에서도 울리게 한다('삑'과 동일 취지).
+     */
+    private fun vibrateEmergency() {
+        // 더 세게: 최대 진폭(255)·긴 펄스 4회. timings 와 amplitudes 길이 일치(off=0, on=255).
+        val timings = longArrayOf(0, 800, 250, 800, 250, 800, 250, 800)
+        val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255, 0, 255)
+        val alarmAttrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        runCatching {
+            val vib: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
             } else {
-                runCatching { mp.release() }; restore()
+                @Suppress("DEPRECATION") getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // 진폭 지원 기기면 최대 진폭 파형, 아니면 on/off 타이밍 파형으로 폴백.
+                val effect = if (vib.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, amplitudes, -1)
+                    else VibrationEffect.createWaveform(timings, -1)
+                vib.vibrate(effect, alarmAttrs)
+            } else {
+                @Suppress("DEPRECATION") vib.vibrate(timings, -1, alarmAttrs)
             }
         }
     }
