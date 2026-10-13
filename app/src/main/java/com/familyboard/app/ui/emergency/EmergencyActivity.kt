@@ -89,13 +89,14 @@ class EmergencyActivity : ComponentActivity() {
         const val EXTRA_IMAGE = "image"
         const val EXTRA_BG = "bg"
         const val EXTRA_CLOSE_BUTTON = "closeButton"
+        const val EXTRA_SOUND = "sound"
     }
 
     /** 화면 표시 상태(재수신 시 onNewIntent 로 갱신). */
     private data class EmUi(
         val sender: String = "", val message: String = "", val wantLoc: Boolean = false,
         val headline: String = "", val waitText: String = "", val image: String = "", val bg: String = "",
-        val closeButton: String = "",
+        val closeButton: String = "", val sound: String = "",
     )
 
     private var testMode = false
@@ -132,7 +133,8 @@ class EmergencyActivity : ComponentActivity() {
         }
 
         applyIntent(intent)
-        vibrateAlarm()
+        // 식사 호출(desk_bell)은 데스크벨 소리만 — 진동 없음. 그 외는 기존대로 진동.
+        if (ui.sound != "desk_bell") vibrateAlarm()
 
         setContent {
             val s = ui
@@ -157,7 +159,7 @@ class EmergencyActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         applyIntent(intent)
-        vibrateAlarm()
+        if (ui.sound != "desk_bell") vibrateAlarm()
     }
 
     /** 인텐트에서 발신자/메시지/위치요청을 읽어 상태 갱신 + 상태바 긴급 알림 정리 */
@@ -174,6 +176,7 @@ class EmergencyActivity : ComponentActivity() {
             image = intent.getStringExtra(EXTRA_IMAGE).orEmpty(),
             bg = intent.getStringExtra(EXTRA_BG).orEmpty(),
             closeButton = intent.getStringExtra(EXTRA_CLOSE_BUTTON).orEmpty(),
+            sound = intent.getStringExtra(EXTRA_SOUND).orEmpty(),
         )
     }
 
