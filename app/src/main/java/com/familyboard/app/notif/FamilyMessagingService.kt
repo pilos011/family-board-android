@@ -7,6 +7,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.ActivityCompat
@@ -51,6 +55,11 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 sender = data["sender"] ?: "",
                 msg = data["msg"] ?: (message.notification?.body ?: ""),
                 wantLoc = data["wantLoc"] == "1",
+                headline = data["headline"] ?: "",
+                waitText = data["waitText"] ?: "",
+                image = data["image"] ?: "",
+                bg = data["bg"] ?: "",
+                closeButton = data["closeButton"] ?: "",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -81,22 +90,34 @@ class FamilyMessagingService : FirebaseMessagingService() {
     }
 
     // ─────────── 긴급 연락: 전체화면 알림 ───────────
-    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean) {
+    private fun showEmergency(
+        sender: String, msg: String, wantLoc: Boolean,
+        headline: String = "", waitText: String = "", image: String = "", bg: String = "", closeButton: String = "",
+    ) {
         ensureEmergencyChannel()
+        // 빠른 연락 요청은 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
+        playAlarmBeep()
         val full = Intent(this, EmergencyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
             putExtra(EmergencyActivity.EXTRA_MESSAGE, msg)
             putExtra(EmergencyActivity.EXTRA_WANT_LOC, wantLoc)
+            // 식사 호출 등: 선택 커스터마이즈 값(없으면 기본 화면). type 은 그대로 emergency.
+            putExtra(EmergencyActivity.EXTRA_HEADLINE, headline)
+            putExtra(EmergencyActivity.EXTRA_WAIT_TEXT, waitText)
+            putExtra(EmergencyActivity.EXTRA_IMAGE, image)
+            putExtra(EmergencyActivity.EXTRA_BG, bg)
+            putExtra(EmergencyActivity.EXTRA_CLOSE_BUTTON, closeButton)
         }
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
         val pi = PendingIntent.getActivity(this, 7001, full, flags)
 
         val name = Family.nameOf(sender)
+        val title = if (headline.isNotBlank()) headline else "⏳ ${name}님의 빠른 연락 요청"
         val notif = NotificationCompat.Builder(this, CH_EMERGENCY)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("⏳ ${name}님의 빠른 연락 요청")
+            .setContentTitle(title)
             .setContentText(msg)
             .setStyle(NotificationCompat.BigTextStyle().bigText(msg))
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -110,6 +131,44 @@ class FamilyMessagingService : FirebaseMessagingService() {
         // 사용 중에도 강제 전체화면: 오버레이(다른 앱 위에 표시) 권한이 있으면 백그라운드에서도
         // 이 직접 실행이 성공(BAL 예외). 권한이 없으면 실패→위 FSI 알림(잠금/화면꺼짐에서 전체화면)이 폴백.
         runCatching { startActivity(full) }
+    }
+
+    /**
+     * 알람 스트림으로 '삑' 한 번. 무음/진동 모드는 벨·알림 스트림만 끄고 알람은 살아있어 들린다.
+     * 알람 볼륨이 0이면 잠깐 올렸다가 재생 후 원복(방해금지에서 SecurityException 날 수 있어 runCatching).
+     */
+    private fun playAlarmBeep() {
+        runCatching {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val cur = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            val raised = cur == 0
+            if (raised) runCatching {
+                val half = (am.getStreamMaxVolume(AudioManager.STREAM_ALARM) / 2).coerceAtLeast(1)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, half, 0)
+            }
+            // ToneGenerator 는 톤 길이가 고정(~100ms)이라, AudioTrack 로 1kHz 사인파를 1초 생성해 재생.
+            Thread {
+                runCatching {
+                    val sr = 44100; val durMs = 300; val n = sr * durMs / 1000
+                    val buf = ShortArray(n)
+                    val freq = 1000.0
+                    for (i in 0 until n) buf[i] = (Math.sin(2.0 * Math.PI * freq * i / sr) * 0.6 * Short.MAX_VALUE).toInt().toShort()
+                    val fade = sr / 200 // 5ms 페이드 인/아웃(딱 소리 방지)
+                    for (i in 0 until fade) { buf[i] = (buf[i] * i / fade).toShort(); buf[n - 1 - i] = (buf[n - 1 - i] * i / fade).toShort() }
+                    val attrs = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                    val fmt = AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sr)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
+                    val track = AudioTrack(attrs, fmt, n * 2, AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE)
+                    track.write(buf, 0, n); track.play()
+                    Thread.sleep((durMs + 300).toLong()) // 재생 완료 여유(~800ms)
+                    runCatching { track.stop(); track.release() }
+                }
+                if (raised) runCatching { am.setStreamVolume(AudioManager.STREAM_ALARM, cur, 0) } // 재생 후 원복
+            }.start()
+        }
     }
 
     // ─────────── 위치 공유 수신 ───────────

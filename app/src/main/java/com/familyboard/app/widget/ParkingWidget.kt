@@ -9,18 +9,22 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
+import com.familyboard.app.BuildConfig
 import com.familyboard.app.R
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Calendar
 
 /**
- * 주차 위치 1x1 위젯 (아파트 RTLS 태그 조회).
- * - 탭 → 그 순간 현재 주차 층을 조회해 "B2 / B4"(위=모닝, 아래=그랜저)로 표시.
- * - **자동 갱신**: 06~23시 30분마다 백그라운드로 조회(무음) → 페이지를 넘겨 볼 때 대체로 최신.
+ * 주차 위치 1x1 위젯 — 아파트 RTLS 서버는 **Home Assistant 가 대표로 조회**하고 위젯은 HA 센서만 읽음(v1.0.155).
+ * (예전엔 가족 폰마다 RTLS 서버를 30분마다 직접 조회 → 폰 수만큼 요청이 늘어남.)
+ * - HA: 자동화 '주차위치 업데이트'가 06:00~22:30 매시 :00·:30 에 RTLS 1회 조회 → sensor.moning_jucaceung / geuraenjeo_jucaceung.
+ * - **자동 갱신**: 06~22시 매시 :02·:32 에 HA 센서를 읽음(무음, RTLS 호출 없음).
  *   (안드로이드는 '위젯이 보이는 순간'을 알려주지 않아 주기 갱신으로 대체.)
- * - 최근 [WINDOW_MS] 내 조회값이 있으면 층 표시, 없으면(야간 등) "주차/확인"(탭 유도).
- * - 데이터 없으면(시리얼 행 없음/층 빈값) "출차". RTLS 는 세대(104동 3406호)라 한 요청에 두 차량이 옴.
+ * - 탭 → HA 에 즉시 재조회를 요청(homeassistant.update_entity, 폰당 [TAP_REFRESH_GAP_MS] 에 1번) 후 센서를 읽어
+ *   "B2 / B4"(위=모닝, 아래=그랜저)로 표시. HA 센서 값 '출차' 면 "출차".
  */
 class ParkingWidget : AppWidgetProvider() {
 
@@ -42,19 +46,20 @@ class ParkingWidget : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent) // APPWIDGET_UPDATE → onUpdate / onEnabled / onDisabled
         when (intent.action) {
-            ACTION_REFRESH -> fetchAsync(context, true)                       // 탭: 진행표시 O
-            ACTION_TICK -> { scheduleNextTick(context); if (inWindow()) fetchAsync(context, false) } // 자동: 무음
+            ACTION_REFRESH -> fetchAsync(context, true)                       // 탭: 진행표시 O + HA 재조회 요청
+            ACTION_TICK -> { scheduleNextTick(context); if (inWindow()) fetchAsync(context, false) } // 자동: 무음, HA 읽기만
             ACTION_REVERT -> render(context)                                  // 신선도 만료 재렌더(→ '확인')
         }
     }
 
-    /** 조회 → 저장 → 렌더. showProgress=true(탭)면 '조회 중/실패'를 보여주고, 자동 갱신은 무음. */
+    /** 조회 → 저장 → 렌더. showProgress=true(탭)면 '조회 중/실패'를 보여주고 HA 에 재조회도 요청, 자동 갱신은 무음·읽기만. */
     private fun fetchAsync(ctx: Context, showProgress: Boolean) {
         if (widgetIds(ctx).isEmpty()) return
         if (showProgress) applyRows(ctx, "조회", "중…")
         val pending = goAsync()
         Thread {
             try {
+                if (showProgress) requestHaRefresh(ctx)
                 val res = fetch()
                 if (res != null) {
                     ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -73,23 +78,25 @@ class ParkingWidget : AppWidgetProvider() {
         private const val KEY_M = "floor_morning"
         private const val KEY_G = "floor_grandeur"
         private const val KEY_TS = "fetched_at"
+        private const val KEY_REFRESH_TS = "ha_refresh_at"
         private const val REQ_TAP = 7501
         private const val REQ_REVERT = 7502
         private const val REQ_TICK = 7503
         private const val WINDOW_MS = 35 * 60 * 1000L   // 이 시간 내 조회값이면 층 표시(30분 자동갱신보다 약간 길게)
-        private const val TICK_MS = 30 * 60 * 1000L     // 자동 갱신 주기 30분(HA 15분 inexact에 배칭돼 추가 부담 미미)
-        private const val HOUR_START = 6                 // 자동 갱신 시간대 06~23시
-        private const val HOUR_END = 23
+        private const val TICK_MINUTE = 2                // 자동 갱신 = 매시 :02·:32 (HA 가 :00·:30 에 조회한 직후)
+        private const val HOUR_START = 6                 // 자동 갱신 시간대 06~22시 (HA 조회 06:00~22:30 과 맞춤)
+        private const val HOUR_END = 22
+        private const val TAP_REFRESH_GAP_MS = 60 * 1000L // 탭 연타해도 HA 재조회 요청은 폰당 1분에 1번
 
         private const val ACTION_REFRESH = "com.familyboard.app.widget.PARKING_REFRESH"
         private const val ACTION_REVERT = "com.familyboard.app.widget.PARKING_REVERT"
         private const val ACTION_TICK = "com.familyboard.app.widget.PARKING_TICK"
 
-        // 104동 3406호. 한 번 요청하면 두 차량이 함께 응답에 담김.
-        private const val API_URL =
-            "http://122.199.183.213/rtlsTag/serial/action.do?method=serial.Login&dongId=104&hoId=3406&serialId=A006524"
-        private const val SERIAL_MORNING = "A006524"   // 차량1 모닝
-        private const val SERIAL_GRANDEUR = "A033882"  // 차량2 그랜저
+        // HA rest 센서(configuration.yaml rest:, 104동 3406호 RTLS 를 차량 시리얼로 파싱). 값 = 층(B2 등) 또는 '출차'.
+        private const val ENTITY_MORNING = "sensor.moning_jucaceung"      // 모닝 주차층 (시리얼 A006524)
+        private const val ENTITY_GRANDEUR = "sensor.geuraenjeo_jucaceung" // 그랜저 주차층 (시리얼 A033882)
+        private val haBase get() = BuildConfig.HA_BASE_URL.trimEnd('/')
+        private val haToken get() = BuildConfig.HA_TOKEN
 
         private fun inWindow(): Boolean = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) in HOUR_START..HOUR_END
 
@@ -106,24 +113,48 @@ class ParkingWidget : AppWidgetProvider() {
             applyRows(ctx, v(p.getString(KEY_M, null)), v(p.getString(KEY_G, null)))
         }
 
-        private fun fetch(): Pair<String, String>? = try {
-            val con = (URL(API_URL).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 6000; readTimeout = 6000; requestMethod = "GET"
-                setRequestProperty("User-Agent", "Mozilla/5.0")
-            }
-            val html = con.inputStream.bufferedReader().use { it.readText() }
+        /** HA 센서 두 개를 읽어 (모닝, 그랜저) 층 반환. '출차' 는 ""(→ render 가 "출차"). HA 연결 실패·센서 unavailable 이면 null(마지막 값 유지). */
+        private fun fetch(): Pair<String, String>? {
+            if (haBase.isBlank() || haToken.isBlank()) return null
+            val m = haFloor(ENTITY_MORNING) ?: return null
+            val g = haFloor(ENTITY_GRANDEUR) ?: return null
+            return m to g
+        }
+
+        private fun haFloor(entity: String): String? = try {
+            val con = haConnection("/api/states/$entity", "GET", readMs = 6000)
+            val body = con.inputStream.bufferedReader().use { it.readText() }
             con.disconnect()
-            (floorFor(html, SERIAL_MORNING) ?: "") to (floorFor(html, SERIAL_GRANDEUR) ?: "")
+            when (val s = JSONObject(body).optString("state").trim()) {
+                "", "unknown", "unavailable" -> null
+                "출차" -> ""
+                else -> s
+            }
         } catch (e: Exception) { null }
 
-        /** 해당 시리얼의 tr 행에서 carFloorNameArea 층 반환. 없거나 비면 null(=출차). */
-        private fun floorFor(html: String, serial: String): String? {
-            val idx = html.indexOf("'$serial'")
-            if (idx < 0) return null
-            val after = html.substring(idx)
-            val m = Regex("carFloorNameArea\">\\s*([^<]*?)\\s*</div>").find(after) ?: return null
-            return m.groupValues[1].trim().ifBlank { null }
+        /** 탭: HA 에 RTLS 즉시 재조회 요청(두 센서가 한 요청을 공유 → 1회 조회). 폰당 [TAP_REFRESH_GAP_MS] 에 1번만, 실패해도 읽기는 진행. */
+        private fun requestHaRefresh(ctx: Context) {
+            if (haBase.isBlank() || haToken.isBlank()) return
+            val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val now = System.currentTimeMillis()
+            if (now - p.getLong(KEY_REFRESH_TS, 0L) in 0L until TAP_REFRESH_GAP_MS) return
+            p.edit().putLong(KEY_REFRESH_TS, now).apply()
+            runCatching {
+                val con = haConnection("/api/services/homeassistant/update_entity", "POST", readMs = 12000)
+                val body = JSONObject().put("entity_id", JSONArray().put(ENTITY_MORNING).put(ENTITY_GRANDEUR))
+                con.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                con.responseCode // 서비스 호출은 RTLS 조회가 끝난 뒤 응답
+                con.disconnect()
+            }
         }
+
+        private fun haConnection(path: String, method: String, readMs: Int): HttpURLConnection =
+            (URL("$haBase$path").openConnection() as HttpURLConnection).apply {
+                requestMethod = method
+                connectTimeout = 6000; readTimeout = readMs
+                setRequestProperty("Authorization", "Bearer $haToken")
+                if (method == "POST") { doOutput = true; setRequestProperty("Content-Type", "application/json") }
+            }
 
         private fun applyRows(ctx: Context, line1: String, line2: String) {
             val rv = RemoteViews(ctx.packageName, R.layout.widget_parking)
@@ -166,15 +197,24 @@ class ParkingWidget : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        /** 다음 자동 갱신 예약: +30분, 창(06~23시) 밖이면 다음 06:00. Doze 친화 inexact. */
+        /** 다음 자동 갱신 예약: 다음 :02 또는 :32(HA 조회 직후), 창(06~22시) 밖이면 다음 06:02. Doze 친화 inexact. */
         fun scheduleNextTick(ctx: Context) {
             if (widgetIds(ctx).isEmpty()) return
             val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val cal = Calendar.getInstance().apply { timeInMillis = System.currentTimeMillis() + TICK_MS }
+            val cal = Calendar.getInstance().apply {
+                add(Calendar.MINUTE, 1) // 최소 1분 뒤
+                val m = get(Calendar.MINUTE)
+                when {
+                    m <= TICK_MINUTE -> set(Calendar.MINUTE, TICK_MINUTE)
+                    m <= TICK_MINUTE + 30 -> set(Calendar.MINUTE, TICK_MINUTE + 30)
+                    else -> { add(Calendar.HOUR_OF_DAY, 1); set(Calendar.MINUTE, TICK_MINUTE) }
+                }
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
             val h = cal.get(Calendar.HOUR_OF_DAY)
             if (h !in HOUR_START..HOUR_END) {
                 if (h > HOUR_END) cal.add(Calendar.DAY_OF_MONTH, 1) // 밤이면 다음날 아침
-                cal.set(Calendar.HOUR_OF_DAY, HOUR_START); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.HOUR_OF_DAY, HOUR_START); cal.set(Calendar.MINUTE, TICK_MINUTE)
             }
             am.set(AlarmManager.RTC, cal.timeInMillis, tickPending(ctx))
         }
