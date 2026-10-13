@@ -55,7 +55,6 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 sender = data["sender"] ?: "",
                 msg = data["msg"] ?: (message.notification?.body ?: ""),
                 wantLoc = data["wantLoc"] == "1",
-                sound = data["sound"] ?: "",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -86,10 +85,10 @@ class FamilyMessagingService : FirebaseMessagingService() {
     }
 
     // ─────────── 긴급 연락: 전체화면 알림 ───────────
-    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean, sound: String = "") {
+    private fun showEmergency(sender: String, msg: String, wantLoc: Boolean) {
         ensureEmergencyChannel()
-        // 식사 호출 등: sound=beep 이면 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
-        if (sound == "beep") playAlarmBeep()
+        // 빠른 연락 요청은 무음/진동 모드라도 '삑' 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
+        playAlarmBeep()
         val full = Intent(this, EmergencyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
