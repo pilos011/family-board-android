@@ -46,22 +46,20 @@ com.familyboard.app/
 ```
 
 ## 4. 빌드 / 설치
+빌드(Git Bash):
 ```bash
-cd "D:/Personal/family-board-android"
-./gradlew.bat assembleDebug
+cd "D:/AI-Projects/Personal/family-board-android"
+cmd //c "gradlew.bat assembleDebug"   # EXIT=1 떠도 무시, 로그의 BUILD SUCCESSFUL 신뢰
 ```
 APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-설치(Git Bash 경로 함정 회피 — push 후 pm install):
-```bash
-export MSYS_NO_PATHCONV=1
-export MSYS2_ARG_CONV_EXCL="*"
-ADB="/d/Personal/Dev-Project/Android/SDK/platform-tools/adb.exe"
-APK="D:/Personal/family-board-android/app/build/outputs/apk/debug/app-debug.apk"
-"$ADB" push "$APK" /data/local/tmp/app.apk
-"$ADB" shell pm install -r /data/local/tmp/app.apk
-"$ADB" shell rm /data/local/tmp/app.apk
+설치 — **PowerShell에서 `adb install -r` 직접**(정상 동작):
+```powershell
+$adb = "D:\Personal\Dev-Project\Android\SDK\platform-tools\adb.exe"
+& $adb -s <serial> install -r "D:\AI-Projects\Personal\family-board-android\app\build\outputs\apk\debug\app-debug.apk"
 ```
+- ⚠️ `push` + `pm install`은 쓰지 말 것(멈추는 사례 있었음). 그 방식은 **Git Bash에서 adb 를 직접 돌릴 때** 경로 변환 함정을 피하려던 옛 방법일 뿐 — PowerShell로 `adb install -r`를 쓰면 함정이 없다.
+- ⚠️ 설치가 "Success" 없이 멈추면 폰 개발자옵션 "USB로 앱 확인"(Verify apps over USB)을 끌 것. offline/unauthorized면 `adb kill-server; adb start-server` 후 USB디버깅 재승인.
 
 ## 5. 미완료 / 활성화 필요 (중요)
 
