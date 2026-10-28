@@ -22,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -70,6 +72,8 @@ fun EmergencySendScreen(
     var targets by remember { mutableStateOf(emptyList<String>()) }
     var message by remember { mutableStateOf("") }
     var wantLoc by remember { mutableStateOf(false) }
+    var strongVib by remember { mutableStateOf(false) } // 기본 꺼짐
+    var alarmSound by remember { mutableStateOf(false) } // 기본 꺼짐
     val candidates = remember(currentMemberId) { Family.members.filter { it.id != currentMemberId } }
 
     Scaffold(
@@ -141,10 +145,40 @@ fun EmergencySendScreen(
                 }
             }
 
+            // 알림 세기 옵션(기본 꺼짐) — 받는 사람 폰에서 강한 진동 / 무음에서도 울리는 소리
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { strongVib = !strongVib }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = strongVib, onCheckedChange = { strongVib = it })
+                Icon(Icons.Default.Vibration, null, tint = EmergencyRed, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Column {
+                    Text("강한 진동", fontWeight = FontWeight.Medium)
+                    Text("받는 사람 폰이 강하게 진동해요",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { alarmSound = !alarmSound }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = alarmSound, onCheckedChange = { alarmSound = it })
+                Icon(Icons.Default.VolumeUp, null, tint = EmergencyRed, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Column {
+                    Text("소리", fontWeight = FontWeight.Medium)
+                    Text("무음·방해금지에서도 알림음이 울려요",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                }
+            }
+
             Spacer(Modifier.height(28.dp))
             Button(
                 onClick = {
-                    vm.sendEmergency(targets, buildBody(message, wantLoc), wantLoc)
+                    vm.sendEmergency(targets, buildBody(message, wantLoc), wantLoc, strongVib, alarmSound)
                     Toast.makeText(context, "빠른 연락 요청을 보냈어요", Toast.LENGTH_SHORT).show()
                     onBack()
                 },

@@ -90,13 +90,14 @@ class EmergencyActivity : ComponentActivity() {
         const val EXTRA_BG = "bg"
         const val EXTRA_CLOSE_BUTTON = "closeButton"
         const val EXTRA_SOUND = "sound"
+        const val EXTRA_STRONG_VIB = "strongVib" // 빠른 연락 요청 '진동' 옵션(강한 진동)
     }
 
     /** 화면 표시 상태(재수신 시 onNewIntent 로 갱신). */
     private data class EmUi(
         val sender: String = "", val message: String = "", val wantLoc: Boolean = false,
         val headline: String = "", val waitText: String = "", val image: String = "", val bg: String = "",
-        val closeButton: String = "", val sound: String = "",
+        val closeButton: String = "", val sound: String = "", val strongVib: Boolean = false,
     )
 
     private var testMode = false
@@ -133,8 +134,8 @@ class EmergencyActivity : ComponentActivity() {
         }
 
         applyIntent(intent)
-        // 식사 호출(desk_bell)은 데스크벨 소리만 — 진동 없음. 그 외는 기존대로 진동.
-        if (ui.sound != "desk_bell") vibrateAlarm()
+        // 빠른 연락 요청 '진동' 옵션이 켜졌을 때만 강하게 진동(기본 꺼짐). 식사 호출(desk_bell)은 서비스에서 처리.
+        if (ui.strongVib) vibrateAlarm()
 
         setContent {
             val s = ui
@@ -159,7 +160,7 @@ class EmergencyActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         applyIntent(intent)
-        if (ui.sound != "desk_bell") vibrateAlarm()
+        if (ui.strongVib) vibrateAlarm()
     }
 
     /** 인텐트에서 발신자/메시지/위치요청을 읽어 상태 갱신 + 상태바 긴급 알림 정리 */
@@ -177,6 +178,7 @@ class EmergencyActivity : ComponentActivity() {
             bg = intent.getStringExtra(EXTRA_BG).orEmpty(),
             closeButton = intent.getStringExtra(EXTRA_CLOSE_BUTTON).orEmpty(),
             sound = intent.getStringExtra(EXTRA_SOUND).orEmpty(),
+            strongVib = intent.getBooleanExtra(EXTRA_STRONG_VIB, false),
         )
     }
 
@@ -248,20 +250,25 @@ class EmergencyActivity : ComponentActivity() {
         if (ok) NotificationManagerCompat.from(this).notify(8100, n)
     }
 
+    /** 강한 진동: 최대 진폭(255)·800ms×2(길어서 4→2회로 줄임). USAGE_ALARM 로 무음·방해금지에서도 울림. */
     private fun vibrateAlarm() {
-        val pattern = longArrayOf(0, 600, 300, 600, 300, 600)
+        val timings = longArrayOf(0, 800, 250, 800)
+        val amplitudes = intArrayOf(0, 255, 0, 255)
+        val alarmAttrs = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                vm.defaultVibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            val vib: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
             } else {
-                @Suppress("DEPRECATION")
-                val v = getSystemService(VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    v.vibrate(VibrationEffect.createWaveform(pattern, -1))
-                } else {
-                    @Suppress("DEPRECATION") v.vibrate(pattern, -1)
-                }
+                @Suppress("DEPRECATION") getSystemService(VIBRATOR_SERVICE) as Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = if (vib.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, amplitudes, -1)
+                    else VibrationEffect.createWaveform(timings, -1)
+                vib.vibrate(effect, alarmAttrs)
+            } else {
+                @Suppress("DEPRECATION") vib.vibrate(timings, -1, alarmAttrs)
             }
         }
     }

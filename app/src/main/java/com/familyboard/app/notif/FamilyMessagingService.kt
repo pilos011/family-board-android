@@ -67,6 +67,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 bg = data["bg"] ?: "",
                 closeButton = data["closeButton"] ?: "",
                 sound = data["sound"] ?: "",
+                strongVib = data["strongVib"] == "1",
+                alarmSound = data["alarmSound"] == "1",
             )
             "location" -> showLocation(
                 sender = data["sender"] ?: "",
@@ -100,13 +102,13 @@ class FamilyMessagingService : FirebaseMessagingService() {
     private fun showEmergency(
         sender: String, msg: String, wantLoc: Boolean,
         headline: String = "", waitText: String = "", image: String = "", bg: String = "", closeButton: String = "",
-        sound: String = "",
+        sound: String = "", strongVib: Boolean = false, alarmSound: Boolean = false,
     ) {
         val isDeskBell = sound == "desk_bell"
         ensureEmergencyChannel()
-        // 빠른 연락 요청은 무음/진동 모드라도 소리 한 번(알람 스트림). 메시지당 1회, 서비스에서 재생.
-        // 식사 호출(desk_bell)은 전체화면을 안 띄우므로 진동도 서비스에서 울린다. 데스크벨은 알림 게시 뒤에 재생(아래).
-        if (isDeskBell) vibrateEmergency() else playAlarmBeep()
+        // 소리·진동은 전용 무음 채널 + 옵션으로만 제어(기본 꺼짐). 식사 호출(desk_bell)은 전체화면 없이 진동+데스크벨.
+        // 식사 호출 진동은 화면이 없어 서비스에서 울린다(아래 일반 emergency 진동은 EmergencyActivity 가 strongVib 로).
+        if (isDeskBell) vibrateEmergency()
         val full = Intent(this, EmergencyActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra(EmergencyActivity.EXTRA_SENDER, sender)
@@ -118,7 +120,8 @@ class FamilyMessagingService : FirebaseMessagingService() {
             putExtra(EmergencyActivity.EXTRA_IMAGE, image)
             putExtra(EmergencyActivity.EXTRA_BG, bg)
             putExtra(EmergencyActivity.EXTRA_CLOSE_BUTTON, closeButton)
-            putExtra(EmergencyActivity.EXTRA_SOUND, sound) // desk_bell 이면 액티비티 진동 skip
+            putExtra(EmergencyActivity.EXTRA_SOUND, sound)
+            putExtra(EmergencyActivity.EXTRA_STRONG_VIB, strongVib) // '진동' 옵션 → 액티비티가 강한 진동
         }
         var flags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
@@ -126,10 +129,9 @@ class FamilyMessagingService : FirebaseMessagingService() {
 
         val name = Family.nameOf(sender)
         val title = if (headline.isNotBlank()) headline else "⏳ ${name}님의 빠른 연락 요청"
-        // 식사 호출(desk_bell): 전체화면(FSI)·강제 액티비티 실행 없이 일반 알림만 — 진동+데스크벨은 서비스에서 재생.
-        //   setSilent(true)로 기본 알림음은 끄고(소리는 데스크벨), 탭하면 식사 화면을 연다(전체화면 자동표시 안 함).
-        // 그 외 빠른 연락: 기존대로 FSI + 사용 중 강제 전체화면.
-        val notif = NotificationCompat.Builder(this, if (isDeskBell) CH_EMERGENCY_SILENT else CH_EMERGENCY)
+        // 소리·진동 없는 전용 채널 + setSilent → 기본 알림음·진동 없음(소리/진동은 아래 옵션으로만).
+        // 식사 호출은 전체화면 안 함, 그 외 빠른 연락은 FSI + 사용 중 강제 전체화면(전체화면 자체는 옵션과 무관하게 항상).
+        val notif = NotificationCompat.Builder(this, CH_EMERGENCY_SILENT)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(msg)
@@ -138,18 +140,16 @@ class FamilyMessagingService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
             .setContentIntent(pi)
-            .apply {
-                if (isDeskBell) setSilent(true) // 기본 알림음 끔(데스크벨만), 진동은 서비스에서
-                else setFullScreenIntent(pi, true)
-            }
+            .setSilent(true)
+            .apply { if (!isDeskBell) setFullScreenIntent(pi, true) }
             .build()
 
         if (canNotify()) NotificationManagerCompat.from(this).notify(9001, notif)
-        // 그 외 빠른 연락만 사용 중에도 강제 전체화면(오버레이 권한 있으면 백그라운드에서도 성공, 없으면 FSI 폴백).
-        // 식사 호출은 전체화면을 띄우지 않는다(진동+벨만).
+        // 전체화면: 식사 호출 아님만(오버레이 권한 있으면 사용 중에도 성공, 없으면 FSI 폴백).
         if (!isDeskBell) runCatching { startActivity(full) }
-        // 식사 호출 데스크벨은 알림·진동을 띄운 뒤 마지막에 재생(완료까지 블로킹 → 프로세스 종료로 잘리지 않게).
-        if (isDeskBell) playAlarmSound(R.raw.meal_bell_once)
+        // 소리(마지막, 블로킹): 식사 호출=데스크벨 50%, 일반 빠른 연락='소리' 옵션 시 emergency_alert(100%). 무음에서도 알람 스트림.
+        if (isDeskBell) playAlarmSound(R.raw.meal_bell_once, 0.5f)
+        else if (alarmSound) playAlarmSound(R.raw.emergency_alert)
     }
 
     /**
@@ -196,7 +196,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
      * ⚠️ 전체화면 액티비티를 안 띄우는 식사 호출에선 FCM 처리 종료 후 프로세스가 내려가며 재생이 잘릴 수 있어,
      * 호출 스레드를 재생 완료까지(최대 ~4초) 잡아 둔다(onMessageReceived 백그라운드 스레드라 블로킹 가능).
      */
-    private fun playAlarmSound(resId: Int) {
+    private fun playAlarmSound(resId: Int, volume: Float = 1.0f) {
         runCatching {
             val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             val cur = am.getStreamVolume(AudioManager.STREAM_ALARM)
@@ -220,7 +220,7 @@ class FamilyMessagingService : FirebaseMessagingService() {
                 afd.use { mp.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
                 mp.prepare()
                 durMs = mp.duration.coerceIn(300, 4000)
-                mp.setVolume(0.5f, 0.5f) // 데스크벨 음량 원래 대비 50%로 낮춤
+                mp.setVolume(volume, volume) // 데스크벨=0.5, 빠른 연락 알림음=1.0
                 mp.start()
                 // 재생 완료(또는 길이+500ms, 최대 4.5초)까지 대기 → 프로세스가 내려가도 소리가 끝까지 난다.
                 runCatching { done.await((durMs + 500).toLong(), java.util.concurrent.TimeUnit.MILLISECONDS) }

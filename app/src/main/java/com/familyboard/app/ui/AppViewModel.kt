@@ -1427,7 +1427,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteItem(id: String) = viewModelScope.launch { runCatching { board.deleteItem(id) }; bumpFunRefresh() }
 
     /** 긴급 연락 발송: 대상에게 전체화면 긴급 알림. wantLocation 이면 위치공유 요청 버튼 노출. */
-    fun sendEmergency(targetIds: List<String>, message: String, wantLocation: Boolean) = viewModelScope.launch {
+    fun sendEmergency(
+        targetIds: List<String>, message: String, wantLocation: Boolean,
+        strongVib: Boolean = false, alarmSound: Boolean = false,
+    ) = viewModelScope.launch {
         val actor = currentMemberId.value.orEmpty()
         val targets = targetIds.filter { it != actor }.distinct()
         if (targets.isEmpty()) return@launch
@@ -1436,6 +1439,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "sender" to actor,
             "msg" to message,
             "wantLoc" to if (wantLocation) "1" else "0",
+            "strongVib" to if (strongVib) "1" else "0", // '진동' 옵션: 강한 진동
+            "alarmSound" to if (alarmSound) "1" else "0", // '소리' 옵션: 무음에서도 알람음(emergency_alert)
         )
         runCatching {
             NotifyApi.notifyData(actor, targets, "빠른 연락 요청", "${Family.nameOf(actor)}님의 빠른 연락 요청", data)

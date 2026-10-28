@@ -29,7 +29,11 @@ import java.util.Calendar
 class ParkingWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
-        render(context)
+        // 기회성 조회: 시스템/런처가 위젯을 다시 그릴 때(홈 복귀·재부팅·리사이즈 등) 최근 조회가 오래됐으면 HA 를 1회 읽는다.
+        // 추가 권한·새 알람 없음(어차피 불리는 콜백에 얹음), 쓰로틀로 과조회 방지, 컴포넌트 토글 안 해 루프 아님.
+        val last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_TS, 0L)
+        if (last <= 0L || System.currentTimeMillis() - last >= MIN_AUTO_GAP_MS) fetchAsync(context, false)
+        else render(context)
         scheduleNextTick(context) // 재부팅/앱 업데이트 후 자동 갱신 재예약
     }
 
@@ -87,6 +91,7 @@ class ParkingWidget : AppWidgetProvider() {
         private const val HOUR_START = 6                 // 자동 갱신 시간대 06~22시 (HA 조회 06:00~22:30 과 맞춤)
         private const val HOUR_END = 22
         private const val TAP_REFRESH_GAP_MS = 60 * 1000L // 탭 연타해도 HA 재조회 요청은 폰당 1분에 1번
+        private const val MIN_AUTO_GAP_MS = 2 * 60 * 1000L // onUpdate 기회성 조회 쓰로틀(최근 2분 내 조회면 skip)
 
         private const val ACTION_REFRESH = "com.familyboard.app.widget.PARKING_REFRESH"
         private const val ACTION_REVERT = "com.familyboard.app.widget.PARKING_REVERT"
