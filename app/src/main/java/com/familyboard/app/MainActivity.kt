@@ -19,9 +19,18 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
+import androidx.core.content.PackageManagerCompat
+import androidx.core.content.UnusedAppRestrictionsConstants
 import com.familyboard.app.ui.AppRoot
 import com.familyboard.app.ui.AppViewModel
+import com.familyboard.app.ui.PermItem
+import com.familyboard.app.ui.PermissionGateScreen
 import com.familyboard.app.ui.theme.FamilyBoardTheme
 
 class MainActivity : ComponentActivity() {
@@ -48,21 +57,62 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(newBase.createConfigurationContext(config))
     }
 
-    // 시작 시 필요한 권한을 순차로 요청 (알림 → 배터리 최적화 예외 → 전체화면 알림)
-    private var permStep = 0
+    // 권한 게이트: 필수 권한(알림·배터리·전체화면·오버레이)이 다 허용돼야 앱 내용이 열린다.
+    // 위치·앨범·앱설치는 선택(게이트 제외). 게이트 항목은 Compose state 로 두어 승인 시 즉시 반영.
+    private var permsReady by mutableStateOf(false)
+    private var autoRevokeOn by mutableStateOf(false)     // '미사용 앱 권한 자동제거'가 켜져 있나
+    private var autoRevokeChecked = false                 // 한 번 '꺼짐' 확인되면 재조회 중단(F5)
+    private var mandatoryState by mutableStateOf(emptyList<PermItem>())
+    private var optionalState by mutableStateOf(emptyList<PermItem>())
+    private var pendingEntryIntent: Intent? = null        // 게이트 중 들어온 공유/위젯 인텐트 보류(F3)
+    private val permFlags get() = getSharedPreferences("perm_flags", Context.MODE_PRIVATE)
 
+    // 첫 실행 1회: 알림(필수)+위치(선택)를 함께 프라이밍(F4). 이후엔 게이트 버튼으로.
+    private val startupPrimeLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            // 실제로 다이얼로그가 뜬(응답된) 권한만 '물어봄' 표시 — 이후 영구거부 판별의 기준(F1/추가리뷰 #2).
+            permFlags.edit().apply {
+                if (result.containsKey(Manifest.permission.POST_NOTIFICATIONS)) putBoolean("asked_notif", true)
+                if (result.containsKey(Manifest.permission.ACCESS_FINE_LOCATION)) putBoolean("asked_loc", true)
+            }.apply()
+            if (needBgLoc()) runCatching { bgLocLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }
+            afterPerm()
+        }
     private val notifLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { nextPermStep() }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { afterPerm() }
     private val fineLocLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { nextPermStep() }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            if (needBgLoc()) runCatching { bgLocLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }
+            afterPerm()
+        }
     private val bgLocLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { nextPermStep() }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { afterPerm() }
     private val batteryLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterPerm() }
     private val fullScreenLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterPerm() }
     private val overlayLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { nextPermStep() }
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterPerm() }
+    private val autoRevokeLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterPerm() }
+    private val appSettingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { afterPerm() }
+
+    /** 권한 요청/설정에서 돌아온 뒤 재검사 → 게이트 통과 처리. 전진 전용: 한 번 통과하면 사용 중 재게이트 안 함(#4).
+     *  게이트가 안 보일 땐(통과 상태) 숨은 목록을 재구축하거나 자동제거를 재조회하지 않는다(#3). */
+    private fun afterPerm() {
+        if (permsReady) return
+        permsReady = allMandatoryGranted()
+        rebuildPermItems()
+        refreshAutoRevokeStatus()
+        if (permsReady) drainPendingEntryIntent()
+    }
+
+    /** 게이트 카드 목록을 현재 권한 상태로 다시 만든다(상태 갱신 → 자동 재구성, F6). */
+    private fun rebuildPermItems() {
+        mandatoryState = mandatoryItems()
+        optionalState = optionalItems()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -70,15 +120,17 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
-        if (needNotif() || needFineLoc() || needBgLoc() || needBattery() || needFullScreen() || needOverlay()) {
-            permStep = 0
-            nextPermStep()
-        }
-        handleShareIntent(intent)
-        handleWidgetIntent(intent)
+        permsReady = allMandatoryGranted()
+        if (!permsReady) { rebuildPermItems(); refreshAutoRevokeStatus() } // 게이트 보일 때만 준비(#3)
+        primeStartupPermissions()      // 첫 실행 1회 알림+위치 프라이밍
+        processEntryIntent(intent)     // 게이트 중이면 보류, 아니면 바로 처리
         setContent {
             FamilyBoardTheme(darkTheme = false) {
-                AppRoot()
+                if (permsReady) {
+                    AppRoot()
+                } else {
+                    PermissionGateScreen(required = mandatoryState, optional = optionalState)
+                }
             }
         }
     }
@@ -86,8 +138,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleShareIntent(intent)
-        handleWidgetIntent(intent)
+        processEntryIntent(intent)
     }
 
     /** 위젯 상단 탭 → 보드 이동 / 재미진 항목 공유 알림 탭 → 그 항목 열기. AppNav·FunListScreen 이 관찰. */
@@ -147,53 +198,125 @@ class MainActivity : ComponentActivity() {
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
         else @Suppress("DEPRECATION") intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)) ?: emptyList()
 
-    /** 다음 미허용 권한을 하나씩 요청. 각 요청이 끝나면 콜백에서 다시 호출된다. */
-    private fun nextPermStep() {
-        when (permStep++) {
-            0 -> if (needNotif()) {
-                notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else nextPermStep()
+    // 설정 화면(배터리·전체화면·오버레이·자동제거·앱설정)에서 돌아오면 재검사 → 게이트/앱 전환.
+    override fun onResume() {
+        super.onResume()
+        afterPerm()
+    }
 
-            1 -> if (needFineLoc()) {
-                fineLocLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-            } else nextPermStep()
+    /** 필수 4종(알림·배터리·전체화면·오버레이)이 모두 허용됐나. 위치·앨범·앱설치는 게이트 제외(선택). */
+    private fun allMandatoryGranted(): Boolean =
+        !needNotif() && !needBattery() && !needFullScreen() && !needOverlay()
 
-            2 -> if (needBgLoc()) {
-                runCatching { bgLocLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) }
-                    .onFailure { nextPermStep() }
-            } else nextPermStep()
-
-            3 -> if (needBattery()) {
-                runCatching {
-                    batteryLauncher.launch(
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                            .setData(Uri.parse("package:$packageName"))
-                    )
-                }.onFailure { nextPermStep() }
-            } else nextPermStep()
-
-            4 -> if (needFullScreen()) {
-                runCatching {
-                    fullScreenLauncher.launch(
-                        Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
-                            .setData(Uri.parse("package:$packageName"))
-                    )
-                }.onFailure { nextPermStep() }
-            } else nextPermStep()
-
-            // 빠른 연락을 '사용 중에도 전체화면'으로 띄우려면 오버레이(다른 앱 위에 표시) 권한 필요
-            // — 백그라운드 액티비티 실행 제한(Android 10+)의 예외가 되어 EmergencyActivity 강제 실행 가능.
-            5 -> if (needOverlay()) {
-                runCatching {
-                    overlayLauncher.launch(
-                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
-                            .setData(Uri.parse("package:$packageName"))
-                    )
-                }.onFailure { nextPermStep() }
-            } else nextPermStep()
-
-            else -> { /* 완료 */ }
+    /** 첫 실행 1회: 알림(필수)+위치(선택)를 함께 요청. 이후엔 게이트 버튼으로(F4). */
+    private fun primeStartupPermissions() {
+        if (permFlags.getBoolean("startup_primed", false)) return
+        val perms = buildList {
+            if (needNotif()) add(Manifest.permission.POST_NOTIFICATIONS)
+            if (needFineLoc()) add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+        if (perms.isEmpty()) { permFlags.edit().putBoolean("startup_primed", true).apply(); return }
+        // launch 성공(다이얼로그 표시)했을 때만 '프라이밍 완료' 기록 — 실패하면 다음 실행에 재시도. asked_* 는 콜백에서.
+        val launched = runCatching { startupPrimeLauncher.launch(perms.toTypedArray()) }.isSuccess
+        if (launched) permFlags.edit().putBoolean("startup_primed", true).apply()
+    }
+
+    /** 게이트 중(필수 미승인)이면 공유/위젯 인텐트를 보류했다가, 통과 후 처리(F3). */
+    private fun processEntryIntent(i: Intent?) {
+        if (i == null) return
+        if (permsReady) { handleShareIntent(i); handleWidgetIntent(i) } else pendingEntryIntent = i
+    }
+    private fun drainPendingEntryIntent() {
+        val i = pendingEntryIntent ?: return
+        pendingEntryIntent = null
+        handleShareIntent(i); handleWidgetIntent(i)
+    }
+
+    /** '미사용 앱 권한 자동제거'가 켜져 있는지 비동기 조회 → 켜져 있을 때만 안내 카드. 꺼짐 확인되면 재조회 중단(F5). */
+    private fun refreshAutoRevokeStatus() {
+        if (autoRevokeChecked && !autoRevokeOn) return
+        runCatching {
+            val future = PackageManagerCompat.getUnusedAppRestrictionsStatus(this)
+            future.addListener({
+                val on = runCatching {
+                    when (future.get()) {
+                        UnusedAppRestrictionsConstants.API_30_BACKPORT,
+                        UnusedAppRestrictionsConstants.API_30,
+                        UnusedAppRestrictionsConstants.API_31 -> true
+                        else -> false // DISABLED(사용자가 끔)·ERROR·FEATURE_NOT_AVAILABLE
+                    }
+                }.getOrDefault(false)
+                runOnUiThread { autoRevokeOn = on; autoRevokeChecked = true; rebuildPermItems() }
+            }, ContextCompat.getMainExecutor(this))
+        }
+    }
+
+    /** 앱 상세 설정으로 이동(런타임 권한 영구거부 시 유일한 승인 경로, F1). */
+    private fun openAppSettings() {
+        runCatching {
+            appSettingsLauncher.launch(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.parse("package:$packageName"))
+            )
+        }
+    }
+
+    /** 런타임 권한 버튼: 한 번 거부면 재요청(다이얼로그), 영구거부면 앱 설정으로(F1). */
+    private fun requestRuntime(perm: String, launcher: androidx.activity.result.ActivityResultLauncher<String>, askedKey: String) {
+        when {
+            ActivityCompat.shouldShowRequestPermissionRationale(this, perm) -> launcher.launch(perm)
+            permFlags.getBoolean(askedKey, false) -> openAppSettings() // 영구거부(다시 묻지 않음)
+            else -> { permFlags.edit().putBoolean(askedKey, true).apply(); launcher.launch(perm) }
+        }
+    }
+
+    // ─────────── 게이트 버튼이 호출하는 권한 요청들 ───────────
+    private fun launchNotif() { if (needNotif()) requestRuntime(Manifest.permission.POST_NOTIFICATIONS, notifLauncher, "asked_notif") }
+    private fun launchBattery() {
+        runCatching {
+            batteryLauncher.launch(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(Uri.parse("package:$packageName"))
+            )
+        }
+    }
+    private fun launchFullScreen() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        runCatching {
+            fullScreenLauncher.launch(
+                Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).setData(Uri.parse("package:$packageName"))
+            )
+        }
+    }
+    private fun launchOverlay() {
+        runCatching {
+            overlayLauncher.launch(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).setData(Uri.parse("package:$packageName"))
+            )
+        }
+    }
+    private fun launchLocation() { if (needFineLoc()) requestRuntime(Manifest.permission.ACCESS_FINE_LOCATION, fineLocLauncher, "asked_loc") }
+    private fun launchAutoRevoke() {
+        runCatching { autoRevokeLauncher.launch(IntentCompat.createManageUnusedAppRestrictionsIntent(this, packageName)) }
+    }
+
+    /** 게이트 필수 항목(모두 허용해야 앱이 열림). granted 는 매 재구성마다 라이브로 계산. */
+    private fun mandatoryItems(): List<PermItem> = listOf(
+        PermItem("알림 표시", "일정·빠른 연락 등 모든 알림을 받으려면 필요해요.", !needNotif(), ::launchNotif),
+        PermItem("배터리 최적화 예외", "앱이 백그라운드에서 꺼지지 않고 알림을 놓치지 않게 해요.", !needBattery(), ::launchBattery),
+        PermItem("전체 화면 알림", "빠른 연락 요청이 올 때 화면을 꽉 채워 알려요.", !needFullScreen(), ::launchFullScreen),
+        PermItem("다른 앱 위에 표시", "사용 중에도 빠른 연락 요청을 전체 화면으로 띄워요.", !needOverlay(), ::launchOverlay),
+    )
+
+    /** 선택 항목(게이트에 영향 없음): 위치 + (켜져 있으면) 미사용 권한 자동제거 끄기 안내. */
+    private fun optionalItems(): List<PermItem> {
+        val list = mutableListOf(
+            PermItem("위치", "빠른 연락 때 내 위치 공유·주변 맛집 찾기에만 써요. 원치 않으면 안 켜도 돼요.", !needFineLoc(), ::launchLocation),
+        )
+        if (autoRevokeOn) list += PermItem(
+            "미사용 시 권한 자동삭제 끄기",
+            "오래 안 쓰면 안드로이드가 권한을 지워요. 설정에서 이걸 꺼 두면 계속 유지돼요(직접 꺼 주세요).",
+            false, ::launchAutoRevoke,
+        )
+        return list
     }
 
     private fun needNotif(): Boolean =
